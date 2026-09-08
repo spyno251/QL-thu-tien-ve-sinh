@@ -611,7 +611,7 @@ export default function GarbageFeeApp() {
                 />
               </Field>
               {loginError && <p className="text-sm font-medium text-destructive">{loginError}</p>}
-              <Button className="w-full" size="lg">
+              <Button type="submit" className="w-full" size="lg">
                 <Lock className="size-4" />
                 Vào app
               </Button>
@@ -655,7 +655,7 @@ export default function GarbageFeeApp() {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant={syncStatus === 'local' ? 'destructive' : 'secondary'}>{syncText}</Badge>
-            <Button variant="outline" onClick={() => setCurrentUser(null)}>
+            <Button type="button" variant="outline" onClick={() => setCurrentUser(null)}>
               <LogOut className="size-4" />
               Đăng xuất
             </Button>
@@ -794,11 +794,16 @@ export default function GarbageFeeApp() {
                         </TableCell>
                         <TableCell>
                           {payment ? (
-                            <Button variant="outline" size="sm" onClick={() => cancelPayment(payment.id)}>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => cancelPayment(payment.id)}
+                            >
                               Hủy
                             </Button>
                           ) : (
-                            <Button size="sm" onClick={() => recordPayment(apartment)}>
+                            <Button type="button" size="sm" onClick={() => recordPayment(apartment)}>
                               Thu
                             </Button>
                           )}
@@ -1049,7 +1054,7 @@ function AdminAreas(props: {
             value={props.newRegion.defaultFee}
             onChange={(event) => props.setNewRegion({ ...props.newRegion, defaultFee: event.target.value })}
           />
-          <Button>
+          <Button type="submit">
             <Plus className="size-4" />
             Thêm
           </Button>
@@ -1095,7 +1100,7 @@ function AdminAreas(props: {
             value={props.newBlock.name}
             onChange={(event) => props.setNewBlock({ ...props.newBlock, name: event.target.value })}
           />
-          <Button>
+          <Button type="submit">
             <Plus className="size-4" />
             Thêm
           </Button>
@@ -1164,7 +1169,7 @@ function AdminAreas(props: {
               }
             />
           </div>
-          <Button>
+          <Button type="submit">
             <Plus className="size-4" />
             Thêm căn hộ
           </Button>
@@ -1250,7 +1255,7 @@ function AdminUsers(props: {
           <NativeSelectOption value="staff">Nhân viên</NativeSelectOption>
           <NativeSelectOption value="admin">Admin</NativeSelectOption>
         </NativeSelect>
-        <Button>
+        <Button type="submit">
           <Plus className="size-4" />
           Thêm
         </Button>
