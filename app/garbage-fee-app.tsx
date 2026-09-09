@@ -994,7 +994,7 @@ export default function GarbageFeeApp() {
               />
             </div>
             <div>
-              <h1 className="text-lg font-semibold">Thu tiền rác</h1>
+              <h1 className="text-lg font-semibold">Thu tiền vệ sinh</h1>
               <p className="text-sm text-muted-foreground">
                 {currentUser.name} ·{' '}
                 {currentUser.role === 'admin' ? 'Admin' : 'Nhân viên'}
@@ -1052,11 +1052,31 @@ export default function GarbageFeeApp() {
         </section>
 
         <Tabs defaultValue="collect" className="mt-5">
-          <TabsList className="h-auto flex-wrap justify-start">
-            <TabsTrigger value="collect">Thu tháng</TabsTrigger>
-            <TabsTrigger value="stats">Thống kê</TabsTrigger>
-            <TabsTrigger value="areas">Khu vực</TabsTrigger>
-            <TabsTrigger value="users">Nhân viên</TabsTrigger>
+          <TabsList className="h-11 w-full max-w-none gap-1 bg-primary/10 p-1 sm:h-10 sm:w-fit sm:max-w-full">
+            <TabsTrigger
+              value="collect"
+              className="min-h-9 flex-1 px-2 py-1.5 text-sm font-semibold text-foreground/75 data-active:bg-primary data-active:text-primary-foreground data-active:shadow-sm sm:px-3 sm:text-base"
+            >
+              Thu tháng
+            </TabsTrigger>
+            <TabsTrigger
+              value="stats"
+              className="min-h-9 flex-1 px-2 py-1.5 text-sm font-semibold text-foreground/75 data-active:bg-primary data-active:text-primary-foreground data-active:shadow-sm sm:px-3 sm:text-base"
+            >
+              Thống kê
+            </TabsTrigger>
+            <TabsTrigger
+              value="areas"
+              className="min-h-9 flex-1 px-2 py-1.5 text-sm font-semibold text-foreground/75 data-active:bg-primary data-active:text-primary-foreground data-active:shadow-sm sm:px-3 sm:text-base"
+            >
+              Khu vực
+            </TabsTrigger>
+            <TabsTrigger
+              value="users"
+              className="min-h-9 flex-1 px-2 py-1.5 text-sm font-semibold text-foreground/75 data-active:bg-primary data-active:text-primary-foreground data-active:shadow-sm sm:px-3 sm:text-base"
+            >
+              Nhân viên
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="collect" className="mt-4">
