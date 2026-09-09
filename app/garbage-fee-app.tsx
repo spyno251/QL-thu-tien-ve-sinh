@@ -788,7 +788,11 @@ export default function GarbageFeeApp() {
         <section className="mx-auto grid min-h-[calc(100vh-4rem)] max-w-6xl items-center gap-8 lg:grid-cols-[1.05fr_0.95fr]">
           <div className="space-y-7">
             <div className="inline-flex items-center gap-2 rounded-full border bg-white/80 px-3 py-1 text-sm font-medium text-muted-foreground shadow-sm">
-              <ReceiptText className="size-4 text-primary" />
+              <img
+                src="/app-icon.png"
+                alt=""
+                className="size-5 object-contain"
+              />
               Quản lý thu tiền rác
             </div>
             <div className="space-y-4">
@@ -963,8 +967,12 @@ export default function GarbageFeeApp() {
       <header className="sticky top-0 z-20 border-b bg-background/95 px-4 py-3 backdrop-blur">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="grid size-10 place-items-center rounded-lg bg-primary text-primary-foreground">
-              <ReceiptText className="size-5" />
+            <div className="grid size-10 place-items-center overflow-hidden rounded-lg bg-primary/10">
+              <img
+                src="/app-icon.png"
+                alt=""
+                className="size-10 object-contain"
+              />
             </div>
             <div>
               <h1 className="text-lg font-semibold">Thu tiền rác</h1>

@@ -15,6 +15,10 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: 'Quan ly thu tien rac',
   description: 'Quan ly khu vuc, day nha, can ho va lich su thu tien rac.',
+  icons: {
+    icon: '/app-icon.png',
+    apple: '/app-icon.png',
+  },
 };
 
 export default function RootLayout({
