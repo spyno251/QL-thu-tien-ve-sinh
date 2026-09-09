@@ -36,5 +36,6 @@ next-env.d.ts
 site-archive*.tar.gz
 /dist/
 /.wrangler/
+/.tmp-auth-test/
 /outputs/
 /work/

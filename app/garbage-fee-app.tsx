@@ -8,9 +8,12 @@ import {
   KeyRound,
   Lock,
   LogOut,
+  Mail,
   Plus,
   ReceiptText,
+  RotateCcw,
   Search,
+  ShieldCheck,
   Trash2,
   UserRound,
   UsersRound,
@@ -36,9 +39,10 @@ type Role = 'admin' | 'staff';
 type User = {
   id: string;
   phone: string;
-  password: string;
+  email: string;
   name: string;
   role: Role;
+  mustChangePassword: boolean;
 };
 
 type Region = {
@@ -101,23 +105,26 @@ const initialState: AppState = {
     {
       id: 'u-admin',
       phone: '0909000001',
-      password: 'admin123',
+      email: 'admin@thutienrac.local',
       name: 'Quản trị',
       role: 'admin',
+      mustChangePassword: false,
     },
     {
       id: 'u-lan',
       phone: '0909000002',
-      password: '123456',
+      email: 'lan@thutienrac.local',
       name: 'Nhân viên Lan',
       role: 'staff',
+      mustChangePassword: true,
     },
     {
       id: 'u-minh',
       phone: '0909000003',
-      password: '123456',
+      email: 'minh@thutienrac.local',
       name: 'Nhân viên Minh',
       role: 'staff',
+      mustChangePassword: true,
     },
   ],
   regions: [
@@ -175,6 +182,11 @@ export default function GarbageFeeApp() {
   const [loginPhone, setLoginPhone] = useState('0909000001');
   const [loginPassword, setLoginPassword] = useState('admin123');
   const [loginError, setLoginError] = useState('');
+  const [authLoading, setAuthLoading] = useState(true);
+  const [forgotMode, setForgotMode] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotMessage, setForgotMessage] = useState('');
+  const [showChangePassword, setShowChangePassword] = useState(false);
   const [syncStatus, setSyncStatus] = useState<'loading' | 'synced' | 'saving' | 'local'>(
     'loading',
   );
@@ -194,26 +206,36 @@ export default function GarbageFeeApp() {
   const [newUser, setNewUser] = useState({
     name: '',
     phone: '',
-    password: '123456',
+    email: '',
     role: 'staff' as Role,
   });
 
+  const loadState = async () => {
+    const response = await fetch('/api/data');
+    if (!response.ok) throw new Error('Unable to load shared data');
+    const data = (await response.json()) as AppState;
+    setState(data);
+    setSyncStatus('synced');
+    if (data.regions[0]) setNewBlock((item) => ({ ...item, regionId: data.regions[0].id }));
+    if (data.blocks[0]) setNewApartment((item) => ({ ...item, blockId: data.blocks[0].id }));
+  };
+
   useEffect(() => {
     let active = true;
-    fetch('/api/data')
-      .then((response) => {
-        if (!response.ok) throw new Error('No shared database');
-        return response.json() as Promise<AppState>;
+    fetch('/api/auth')
+      .then(async (response) => {
+        if (!response.ok) return null;
+        const payload = (await response.json()) as { user: User };
+        return payload.user;
       })
-      .then((data) => {
-        if (!active) return;
-        setState(data);
-        setSyncStatus('synced');
-        if (data.regions[0]) setNewBlock((item) => ({ ...item, regionId: data.regions[0].id }));
-        if (data.blocks[0]) setNewApartment((item) => ({ ...item, blockId: data.blocks[0].id }));
+      .then(async (user) => {
+        if (!active || !user) return;
+        setCurrentUser(user);
+        await loadState();
       })
-      .catch(() => {
-        if (active) setSyncStatus('local');
+      .catch(() => setSyncStatus('local'))
+      .finally(() => {
+        if (active) setAuthLoading(false);
       });
     return () => {
       active = false;
@@ -230,6 +252,11 @@ export default function GarbageFeeApp() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ state: nextState }),
       });
+      if (response.status === 401) {
+        setCurrentUser(null);
+        setLoginError('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+        throw new Error('Session expired');
+      }
       if (!response.ok) throw new Error('Unable to save');
       const payload = (await response.json()) as { state?: AppState };
       if (payload.state) setState(payload.state);
@@ -269,17 +296,25 @@ export default function GarbageFeeApp() {
     .filter((item) => item.collectorId === currentUser?.id)
     .reduce((sum, item) => sum + item.amount, 0);
 
-  const handleLogin = (event: FormEvent<HTMLFormElement>) => {
+  const handleLogin = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const user = state.users.find(
-      (item) => item.phone === loginPhone.trim() && item.password === loginPassword,
-    );
-    if (!user) {
-      setLoginError('Số điện thoại hoặc mật khẩu chưa đúng.');
-      return;
+    setAuthLoading(true);
+    try {
+      const response = await fetch('/api/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'login', phone: loginPhone, password: loginPassword }),
+      });
+      const payload = (await response.json()) as { user?: User; error?: string };
+      if (!response.ok || !payload.user) throw new Error(payload.error ?? 'Đăng nhập thất bại.');
+      setCurrentUser(payload.user);
+      setLoginError('');
+      await loadState();
+    } catch (error) {
+      setLoginError(error instanceof Error ? error.message : 'Không thể đăng nhập.');
+    } finally {
+      setAuthLoading(false);
     }
-    setLoginError('');
-    setCurrentUser(user);
   };
 
   const recordPayment = (apartment: Apartment) => {
@@ -522,7 +557,7 @@ export default function GarbageFeeApp() {
 
   const addUser = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!newUser.name.trim() || !newUser.phone.trim() || !newUser.password) return;
+    if (!newUser.name.trim() || !newUser.phone.trim() || !newUser.email.trim()) return;
     void commit({
       ...state,
       users: [
@@ -531,12 +566,13 @@ export default function GarbageFeeApp() {
           id: uid('user'),
           name: newUser.name.trim(),
           phone: newUser.phone.trim(),
-          password: newUser.password,
+          email: newUser.email.trim().toLowerCase(),
           role: newUser.role,
+          mustChangePassword: true,
         },
       ],
     });
-    setNewUser({ name: '', phone: '', password: '123456', role: 'staff' });
+    setNewUser({ name: '', phone: '', email: '', role: 'staff' });
   };
 
   const updateUser = (id: string, patch: Partial<User>) => {
@@ -554,6 +590,63 @@ export default function GarbageFeeApp() {
       payments: state.payments.filter((item) => item.collectorId !== id),
     });
   };
+
+  const handleForgotPassword = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setLoginError('');
+    const response = await fetch('/api/auth', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'forgot-password', phone: loginPhone, email: forgotEmail }),
+    });
+    if (!response.ok) {
+      setLoginError('Chưa thể xử lý yêu cầu. Vui lòng thử lại.');
+      return;
+    }
+    setForgotMessage(
+      'Nếu số điện thoại và email khớp, mật khẩu đã được đưa về 123456. Hãy đăng nhập và đổi mật khẩu mới.',
+    );
+  };
+
+  const handleLogout = async () => {
+    await fetch('/api/auth', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'logout' }),
+    });
+    setCurrentUser(null);
+    setShowChangePassword(false);
+  };
+
+  const resetUserPassword = async (userId: string) => {
+    if (!window.confirm('Đặt mật khẩu nhân viên này về 123456?')) return;
+    const response = await fetch('/api/auth', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'admin-reset', userId }),
+    });
+    if (!response.ok) return;
+    setState((current) => ({
+      ...current,
+      users: current.users.map((user) =>
+        user.id === userId ? { ...user, mustChangePassword: true } : user,
+      ),
+    }));
+  };
+
+  if (currentUser && (currentUser.mustChangePassword || showChangePassword)) {
+    return (
+      <PasswordChangeScreen
+        user={currentUser}
+        required={currentUser.mustChangePassword}
+        onCancel={() => setShowChangePassword(false)}
+        onChanged={(user) => {
+          setCurrentUser(user);
+          setShowChangePassword(false);
+        }}
+      />
+    );
+  }
 
   if (!currentUser) {
     return (
@@ -581,48 +674,76 @@ export default function GarbageFeeApp() {
             </div>
           </div>
 
-          <form
-            onSubmit={handleLogin}
-            className="rounded-lg border bg-white p-5 shadow-[0_24px_80px_rgba(15,23,42,0.12)]"
-          >
+          <div className="rounded-lg border bg-white p-5 shadow-[0_24px_80px_rgba(15,23,42,0.12)]">
             <div className="mb-5 flex items-center justify-between gap-4">
               <div>
-                <h2 className="text-xl font-semibold">Đăng nhập</h2>
+                <h2 className="text-xl font-semibold">{forgotMode ? 'Quên mật khẩu' : 'Đăng nhập'}</h2>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Dùng số điện thoại làm ID đăng nhập.
+                  {forgotMode
+                    ? 'Nhập đúng số điện thoại và email đã đăng ký.'
+                    : 'Dùng số điện thoại làm ID đăng nhập.'}
                 </p>
               </div>
-              <KeyRound className="size-9 rounded-lg bg-primary/10 p-2 text-primary" />
+              {forgotMode ? (
+                <Mail className="size-9 rounded-lg bg-primary/10 p-2 text-primary" />
+              ) : (
+                <KeyRound className="size-9 rounded-lg bg-primary/10 p-2 text-primary" />
+              )}
             </div>
 
-            <div className="space-y-4">
-              <Field label="Số điện thoại">
-                <Input
-                  value={loginPhone}
-                  inputMode="tel"
-                  onChange={(event) => setLoginPhone(event.target.value)}
-                />
-              </Field>
-              <Field label="Mật khẩu">
-                <Input
-                  type="password"
-                  value={loginPassword}
-                  onChange={(event) => setLoginPassword(event.target.value)}
-                />
-              </Field>
-              {loginError && <p className="text-sm font-medium text-destructive">{loginError}</p>}
-              <Button type="submit" className="w-full" size="lg">
-                <Lock className="size-4" />
-                Vào app
-              </Button>
-            </div>
+            {forgotMode ? (
+              <form onSubmit={handleForgotPassword} className="space-y-4">
+                <Field label="Số điện thoại">
+                  <Input value={loginPhone} inputMode="tel" onChange={(event) => setLoginPhone(event.target.value)} required />
+                </Field>
+                <Field label="Email">
+                  <Input type="email" value={forgotEmail} onChange={(event) => setForgotEmail(event.target.value)} required />
+                </Field>
+                {forgotMessage && <p className="rounded-lg bg-primary/10 p-3 text-sm text-primary">{forgotMessage}</p>}
+                {loginError && <p className="text-sm font-medium text-destructive">{loginError}</p>}
+                <Button type="submit" className="w-full" size="lg">
+                  <RotateCcw className="size-4" />
+                  Đặt lại mật khẩu
+                </Button>
+                <Button type="button" variant="ghost" className="w-full" onClick={() => {
+                  setForgotMode(false);
+                  setForgotMessage('');
+                  setLoginError('');
+                }}>
+                  Quay lại đăng nhập
+                </Button>
+              </form>
+            ) : (
+              <form onSubmit={handleLogin} className="space-y-4">
+                <Field label="Số điện thoại">
+                  <Input value={loginPhone} inputMode="tel" onChange={(event) => setLoginPhone(event.target.value)} required />
+                </Field>
+                <Field label="Mật khẩu">
+                  <Input type="password" value={loginPassword} onChange={(event) => setLoginPassword(event.target.value)} required />
+                </Field>
+                {loginError && <p className="text-sm font-medium text-destructive">{loginError}</p>}
+                <Button type="submit" className="w-full" size="lg" disabled={authLoading}>
+                  <Lock className="size-4" />
+                  {authLoading ? 'Đang kiểm tra...' : 'Vào app'}
+                </Button>
+                <Button type="button" variant="link" className="w-full" onClick={() => {
+                  setForgotMode(true);
+                  setForgotMessage('');
+                  setLoginError('');
+                }}>
+                  Quên mật khẩu?
+                </Button>
+              </form>
+            )}
 
-            <div className="mt-5 rounded-lg bg-muted p-3 text-sm text-muted-foreground">
-              <p className="font-medium text-foreground">Tài khoản thử</p>
-              <p>Admin: 0909000001 / admin123</p>
-              <p>Nhân viên: 0909000002 / 123456</p>
-            </div>
-          </form>
+            {!forgotMode && (
+              <div className="mt-5 rounded-lg bg-muted p-3 text-sm text-muted-foreground">
+                <p className="font-medium text-foreground">Tài khoản thử</p>
+                <p>Admin: 0909000001 / admin123</p>
+                <p>Nhân viên: 0909000002 / 123456</p>
+              </div>
+            )}
+          </div>
         </section>
       </main>
     );
@@ -655,7 +776,11 @@ export default function GarbageFeeApp() {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant={syncStatus === 'local' ? 'destructive' : 'secondary'}>{syncText}</Badge>
-            <Button type="button" variant="outline" onClick={() => setCurrentUser(null)}>
+            <Button type="button" variant="outline" onClick={() => setShowChangePassword(true)}>
+              <KeyRound className="size-4" />
+              Đổi mật khẩu
+            </Button>
+            <Button type="button" variant="outline" onClick={() => void handleLogout()}>
               <LogOut className="size-4" />
               Đăng xuất
             </Button>
@@ -793,7 +918,7 @@ export default function GarbageFeeApp() {
                           )}
                         </TableCell>
                         <TableCell>
-                          {payment ? (
+                          {payment && (isAdmin || payment.collectorId === currentUser.id) ? (
                             <Button
                               type="button"
                               variant="outline"
@@ -802,10 +927,12 @@ export default function GarbageFeeApp() {
                             >
                               Hủy
                             </Button>
-                          ) : (
+                          ) : !payment ? (
                             <Button type="button" size="sm" onClick={() => recordPayment(apartment)}>
                               Thu
                             </Button>
+                          ) : (
+                            <span className="text-sm text-muted-foreground">Đã ghi nhận</span>
                           )}
                         </TableCell>
                       </TableRow>
@@ -862,6 +989,7 @@ export default function GarbageFeeApp() {
                 addUser={addUser}
                 updateUser={updateUser}
                 deleteUser={deleteUser}
+                resetUserPassword={resetUserPassword}
               />
             ) : (
               <Restricted />
@@ -884,6 +1012,82 @@ function getFee(
   const block = lookups.blocks.get(apartment.blockId);
   const region = block ? lookups.regions.get(block.regionId) : null;
   return region?.defaultFee ?? 0;
+}
+
+function PasswordChangeScreen({
+  user,
+  required,
+  onCancel,
+  onChanged,
+}: {
+  user: User;
+  required: boolean;
+  onCancel: () => void;
+  onChanged: (user: User) => void;
+}) {
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (newPassword !== confirmPassword) {
+      setError('Hai lần nhập mật khẩu mới chưa khớp.');
+      return;
+    }
+    setSaving(true);
+    const response = await fetch('/api/auth', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'change-password', currentPassword, newPassword }),
+    });
+    const payload = (await response.json()) as { user?: User; error?: string };
+    setSaving(false);
+    if (!response.ok || !payload.user) {
+      setError(payload.error ?? 'Chưa thể đổi mật khẩu.');
+      return;
+    }
+    onChanged(payload.user);
+  };
+
+  return (
+    <main className="grid min-h-screen place-items-center bg-[radial-gradient(circle_at_top_left,#d9f0ef_0,#f4f7f4_31%,#f8fafc_68%)] px-4 py-8 text-foreground">
+      <section className="w-full max-w-md rounded-lg border bg-white p-5 shadow-[0_24px_80px_rgba(15,23,42,0.12)]">
+        <div className="mb-5 flex items-center gap-3">
+          <ShieldCheck className="size-10 rounded-lg bg-primary/10 p-2 text-primary" />
+          <div>
+            <h1 className="text-xl font-semibold">{required ? 'Tạo mật khẩu mới' : 'Đổi mật khẩu'}</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {required ? 'Bạn cần đổi mật khẩu trước khi vào ứng dụng.' : user.name}
+            </p>
+          </div>
+        </div>
+        <form onSubmit={submit} className="space-y-4">
+          <Field label="Mật khẩu hiện tại">
+            <Input type="password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} required />
+          </Field>
+          <Field label="Mật khẩu mới">
+            <Input type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} minLength={6} required />
+          </Field>
+          <Field label="Nhập lại mật khẩu mới">
+            <Input type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} minLength={6} required />
+          </Field>
+          {error && <p className="text-sm font-medium text-destructive">{error}</p>}
+          <Button type="submit" className="w-full" size="lg" disabled={saving}>
+            <ShieldCheck className="size-4" />
+            {saving ? 'Đang lưu...' : 'Lưu mật khẩu mới'}
+          </Button>
+          {!required && (
+            <Button type="button" variant="ghost" className="w-full" onClick={onCancel}>
+              Quay lại
+            </Button>
+          )}
+        </form>
+      </section>
+    </main>
+  );
 }
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
@@ -1221,16 +1425,17 @@ function AdminAreas(props: {
 function AdminUsers(props: {
   users: User[];
   currentUserId: string;
-  newUser: { name: string; phone: string; password: string; role: Role };
-  setNewUser: (value: { name: string; phone: string; password: string; role: Role }) => void;
+  newUser: { name: string; phone: string; email: string; role: Role };
+  setNewUser: (value: { name: string; phone: string; email: string; role: Role }) => void;
   addUser: (event: FormEvent<HTMLFormElement>) => void;
   updateUser: (id: string, patch: Partial<User>) => void;
   deleteUser: (id: string) => void;
+  resetUserPassword: (id: string) => void;
 }) {
   return (
     <section className="rounded-lg border bg-card p-4">
       <h2 className="mb-3 text-base font-semibold">Tài khoản truy cập</h2>
-      <form onSubmit={props.addUser} className="mb-4 grid gap-2 lg:grid-cols-[1fr_150px_150px_130px_auto]">
+      <form onSubmit={props.addUser} className="mb-4 grid gap-2 lg:grid-cols-[1fr_150px_1fr_130px_auto]">
         <Input
           placeholder="Tên nhân viên"
           value={props.newUser.name}
@@ -1243,9 +1448,11 @@ function AdminUsers(props: {
           onChange={(event) => props.setNewUser({ ...props.newUser, phone: event.target.value })}
         />
         <Input
-          placeholder="Mật khẩu"
-          value={props.newUser.password}
-          onChange={(event) => props.setNewUser({ ...props.newUser, password: event.target.value })}
+          type="email"
+          placeholder="Email khôi phục"
+          value={props.newUser.email}
+          onChange={(event) => props.setNewUser({ ...props.newUser, email: event.target.value })}
+          required
         />
         <NativeSelect
           className="w-full"
@@ -1261,14 +1468,19 @@ function AdminUsers(props: {
         </Button>
       </form>
 
+      <div className="mb-4 rounded-lg bg-muted p-3 text-sm text-muted-foreground">
+        Tài khoản mới có mật khẩu mặc định <span className="font-semibold text-foreground">123456</span> và phải đổi mật khẩu khi đăng nhập lần đầu.
+      </div>
+
       <Table>
         <TableHeader>
           <TableRow>
             <TableHead>Tên</TableHead>
             <TableHead>ID điện thoại</TableHead>
-            <TableHead>Mật khẩu</TableHead>
+            <TableHead>Email</TableHead>
             <TableHead>Vai trò</TableHead>
-            <TableHead></TableHead>
+            <TableHead>Trạng thái</TableHead>
+            <TableHead>Thao tác</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -1289,8 +1501,10 @@ function AdminUsers(props: {
               </TableCell>
               <TableCell>
                 <Input
-                  value={user.password}
-                  onChange={(event) => props.updateUser(user.id, { password: event.target.value })}
+                  type="email"
+                  value={user.email}
+                  placeholder="Chưa có email"
+                  onChange={(event) => props.updateUser(user.id, { email: event.target.value })}
                 />
               </TableCell>
               <TableCell>
@@ -1304,11 +1518,30 @@ function AdminUsers(props: {
                 </NativeSelect>
               </TableCell>
               <TableCell>
-                <IconButton
-                  label="Xóa tài khoản"
-                  disabled={user.id === props.currentUserId}
-                  onClick={() => props.deleteUser(user.id)}
-                />
+                <Badge variant={user.mustChangePassword ? 'outline' : 'secondary'}>
+                  {user.mustChangePassword ? 'Chờ đổi mật khẩu' : 'Đã kích hoạt'}
+                </Badge>
+              </TableCell>
+              <TableCell>
+                <div className="flex items-center gap-2">
+                  {user.role === 'staff' && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      aria-label="Đặt lại mật khẩu"
+                      title="Đặt lại mật khẩu về 123456"
+                      onClick={() => props.resetUserPassword(user.id)}
+                    >
+                      <RotateCcw className="size-4" />
+                    </Button>
+                  )}
+                  <IconButton
+                    label="Xóa tài khoản"
+                    disabled={user.id === props.currentUserId}
+                    onClick={() => props.deleteUser(user.id)}
+                  />
+                </div>
               </TableCell>
             </TableRow>
           ))}

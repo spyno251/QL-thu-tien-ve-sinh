@@ -8,6 +8,20 @@
       "when": 1788878714394,
       "tag": "0000_famous_mephisto",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1788912647905,
+      "tag": "0001_magenta_mattie_franklin",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1788912707177,
+      "tag": "0002_far_gambit",
+      "breakpoints": true
     }
   ]
 }

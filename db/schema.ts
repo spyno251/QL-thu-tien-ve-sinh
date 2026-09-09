@@ -1,12 +1,28 @@
-import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { index, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 
 export const users = sqliteTable('users', {
   id: text('id').primaryKey(),
   phone: text('phone').notNull().unique(),
   password: text('password').notNull(),
+  email: text('email').notNull().default(''),
   name: text('name').notNull(),
   role: text('role').notNull(),
+  mustChangePassword: integer('must_change_password', { mode: 'boolean' })
+    .notNull()
+    .default(false),
 });
+
+export const sessions = sqliteTable(
+  'sessions',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    expiresAt: text('expires_at').notNull(),
+  },
+  (table) => [index('idx_sessions_user_id').on(table.userId)],
+);
 
 export const regions = sqliteTable('regions', {
   id: text('id').primaryKey(),
