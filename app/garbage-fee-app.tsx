@@ -264,15 +264,25 @@ export default function GarbageFeeApp() {
   const [draftAmounts, setDraftAmounts] = useState<Record<string, string>>({});
   const [newRegion, setNewRegion] = useState({
     name: '',
-    defaultFee: '50.000',
+    defaultFee: '300.000',
   });
   const [newBlock, setNewBlock] = useState({ regionId: 'r-a', name: '' });
   const [newApartment, setNewApartment] = useState({
     blockId: 'b-a1',
     code: '',
     owner: '',
-    monthlyFee: '50.000',
+    monthlyFee: '300.000',
   });
+  const [quickSetup, setQuickSetup] = useState({
+    prefix: 'Galaxy',
+    regionStart: '1',
+    regionEnd: '8',
+    blockName: 'Dãy 1',
+    apartmentStart: '1',
+    apartmentEnd: '40',
+    defaultFee: '300.000',
+  });
+  const [quickSetupMessage, setQuickSetupMessage] = useState('');
   const [newUser, setNewUser] = useState({
     name: '',
     phone: '',
@@ -592,8 +602,80 @@ export default function GarbageFeeApp() {
       name: newRegion.name.trim(),
       defaultFee: parseAmount(newRegion.defaultFee, 50000),
     };
-    setNewRegion({ name: '', defaultFee: '50.000' });
+    setNewRegion({ name: '', defaultFee: '300.000' });
     void commit({ ...state, regions: [...state.regions, item] });
+  };
+
+  const addQuickSetup = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const regionStart = Number.parseInt(quickSetup.regionStart, 10);
+    const regionEnd = Number.parseInt(quickSetup.regionEnd, 10);
+    const apartmentStart = Number.parseInt(quickSetup.apartmentStart, 10);
+    const apartmentEnd = Number.parseInt(quickSetup.apartmentEnd, 10);
+    const prefix = quickSetup.prefix.trim();
+    const blockName = quickSetup.blockName.trim() || 'Dãy 1';
+    const defaultFee = parseAmount(quickSetup.defaultFee, 300000);
+
+    if (
+      !prefix ||
+      !Number.isInteger(regionStart) ||
+      !Number.isInteger(regionEnd) ||
+      !Number.isInteger(apartmentStart) ||
+      !Number.isInteger(apartmentEnd) ||
+      regionStart < 1 ||
+      regionEnd < regionStart ||
+      apartmentStart < 0 ||
+      apartmentEnd < apartmentStart
+    ) {
+      setQuickSetupMessage('Vui lòng kiểm tra lại các khoảng số đã nhập.');
+      return;
+    }
+
+    const regionCount = regionEnd - regionStart + 1;
+    const apartmentCount = apartmentEnd - apartmentStart + 1;
+    if (regionCount * apartmentCount > 1000) {
+      setQuickSetupMessage('Tối đa 1.000 căn mỗi lần thêm nhanh.');
+      return;
+    }
+
+    const existingNames = new Set(
+      state.regions.map((region) => region.name.trim().toLowerCase()),
+    );
+    const regions = [...state.regions];
+    const blocks = [...state.blocks];
+    const apartments = [...state.apartments];
+    let addedRegions = 0;
+    let addedApartments = 0;
+    const padWidth = Math.max(2, String(apartmentEnd).length);
+
+    for (let regionNumber = regionStart; regionNumber <= regionEnd; regionNumber += 1) {
+      const regionName = `${prefix} ${regionNumber}`;
+      if (existingNames.has(regionName.toLowerCase())) continue;
+      const regionId = uid('region');
+      const blockId = uid('block');
+      regions.push({ id: regionId, name: regionName, defaultFee });
+      blocks.push({ id: blockId, regionId, name: blockName });
+      addedRegions += 1;
+      for (let apartmentNumber = apartmentStart; apartmentNumber <= apartmentEnd; apartmentNumber += 1) {
+        apartments.push({
+          id: uid('apt'),
+          blockId,
+          code: String(apartmentNumber).padStart(padWidth, '0'),
+          owner: '',
+          monthlyFee: defaultFee,
+        });
+        addedApartments += 1;
+      }
+    }
+
+    if (!addedRegions) {
+      setQuickSetupMessage('Các khu trong khoảng này đã tồn tại.');
+      return;
+    }
+    await commit({ ...state, regions, blocks, apartments });
+    setQuickSetupMessage(
+      `Đã thêm ${addedRegions} khu và ${addedApartments} căn hộ với giá ${formatNumber(defaultFee)} đ/căn/tháng.`,
+    );
   };
 
   const deleteRegion = (id: string) => {
@@ -1303,6 +1385,10 @@ export default function GarbageFeeApp() {
                 addApartment={addApartment}
                 updateApartment={updateApartment}
                 deleteApartment={deleteApartment}
+                quickSetup={quickSetup}
+                setQuickSetup={setQuickSetup}
+                addQuickSetup={addQuickSetup}
+                quickSetupMessage={quickSetupMessage}
               />
             ) : (
               <Restricted />
@@ -1890,6 +1976,26 @@ function AdminAreas(props: {
   addApartment: (event: FormEvent<HTMLFormElement>) => void;
   updateApartment: (id: string, patch: Partial<Apartment>) => void;
   deleteApartment: (id: string) => void;
+  quickSetup: {
+    prefix: string;
+    regionStart: string;
+    regionEnd: string;
+    blockName: string;
+    apartmentStart: string;
+    apartmentEnd: string;
+    defaultFee: string;
+  };
+  setQuickSetup: (value: {
+    prefix: string;
+    regionStart: string;
+    regionEnd: string;
+    blockName: string;
+    apartmentStart: string;
+    apartmentEnd: string;
+    defaultFee: string;
+  }) => void;
+  addQuickSetup: (event: FormEvent<HTMLFormElement>) => Promise<void>;
+  quickSetupMessage: string;
 }) {
   const { state } = props;
   const regionName = (id: string) =>
@@ -1899,6 +2005,104 @@ function AdminAreas(props: {
 
   return (
     <section className="grid gap-3 xl:grid-cols-3">
+      <div className="rounded-lg border border-primary/25 bg-primary/5 p-2.5 sm:p-4 xl:col-span-3">
+        <div className="mb-3">
+          <h2 className="text-base font-semibold">Thêm nhanh khu và căn hộ</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Ví dụ: Galaxy 1 đến Galaxy 8, mỗi khu có Dãy 1 và căn 01 đến 40. Tên chủ hộ có thể bổ sung sau.
+          </p>
+        </div>
+        <form onSubmit={props.addQuickSetup} className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          <Field label="Tên khu / tiền tố">
+            <Input
+              value={props.quickSetup.prefix}
+              onChange={(event) =>
+                props.setQuickSetup({ ...props.quickSetup, prefix: event.target.value })
+              }
+              placeholder="Galaxy"
+              required
+            />
+          </Field>
+          <Field label="Khu từ - đến">
+            <div className="grid grid-cols-2 gap-2">
+              <Input
+                inputMode="numeric"
+                aria-label="Khu bắt đầu"
+                value={props.quickSetup.regionStart}
+                onChange={(event) =>
+                  props.setQuickSetup({ ...props.quickSetup, regionStart: event.target.value })
+                }
+                placeholder="1"
+              />
+              <Input
+                inputMode="numeric"
+                aria-label="Khu kết thúc"
+                value={props.quickSetup.regionEnd}
+                onChange={(event) =>
+                  props.setQuickSetup({ ...props.quickSetup, regionEnd: event.target.value })
+                }
+                placeholder="8"
+              />
+            </div>
+          </Field>
+          <Field label="Tên dãy chung">
+            <Input
+              value={props.quickSetup.blockName}
+              onChange={(event) =>
+                props.setQuickSetup({ ...props.quickSetup, blockName: event.target.value })
+              }
+              placeholder="Dãy 1"
+            />
+          </Field>
+          <Field label="Giá mặc định / căn">
+            <Input
+              inputMode="numeric"
+              value={props.quickSetup.defaultFee}
+              onChange={(event) =>
+                props.setQuickSetup({
+                  ...props.quickSetup,
+                  defaultFee: formatAmountInput(event.target.value),
+                })
+              }
+              placeholder="300.000"
+            />
+          </Field>
+          <Field label="Căn từ - đến">
+            <div className="grid grid-cols-2 gap-2">
+              <Input
+                inputMode="numeric"
+                aria-label="Căn bắt đầu"
+                value={props.quickSetup.apartmentStart}
+                onChange={(event) =>
+                  props.setQuickSetup({ ...props.quickSetup, apartmentStart: event.target.value })
+                }
+                placeholder="1"
+              />
+              <Input
+                inputMode="numeric"
+                aria-label="Căn kết thúc"
+                value={props.quickSetup.apartmentEnd}
+                onChange={(event) =>
+                  props.setQuickSetup({ ...props.quickSetup, apartmentEnd: event.target.value })
+                }
+                placeholder="40"
+              />
+            </div>
+          </Field>
+          <div className="flex items-end sm:col-span-2 lg:col-span-3">
+            <Button type="submit" className="w-full sm:w-auto">
+              <Plus className="size-4" />
+              Tạo hàng loạt
+            </Button>
+          </div>
+        </form>
+        {props.quickSetupMessage && (
+          <p className="mt-3 rounded-md bg-background/80 p-2 text-sm text-primary">
+            {props.quickSetupMessage}
+          </p>
+        )}
+      </div>
+
       <div className="rounded-lg border bg-card p-2.5 sm:p-4">
         <h2 className="mb-2 text-base font-semibold">Khu vực</h2>
         <form
