@@ -77,6 +77,7 @@ type Payment = {
   month: string;
   paidAt: string;
   amount: number;
+  note: string;
 };
 
 type AppSettings = {
@@ -191,6 +192,7 @@ const initialState: AppState = {
       month: monthNow,
       paidAt: new Date().toISOString(),
       amount: 50000,
+      note: '',
     },
   ],
   settings: {
@@ -268,6 +270,7 @@ export default function GarbageFeeApp() {
   const [selectedBlock, setSelectedBlock] = useState('all');
   const [query, setQuery] = useState('');
   const [draftAmounts, setDraftAmounts] = useState<Record<string, string>>({});
+  const [draftPaymentNotes, setDraftPaymentNotes] = useState<Record<string, string>>({});
   const [newRegion, setNewRegion] = useState({
     name: '',
     defaultFee: '300.000',
@@ -277,7 +280,6 @@ export default function GarbageFeeApp() {
     blockId: 'b-a1',
     code: '',
     owner: '',
-    note: '',
     monthlyFee: '300.000',
   });
   const [quickSetup, setQuickSetup] = useState({
@@ -467,11 +469,16 @@ export default function GarbageFeeApp() {
           month: selectedMonth,
           paidAt: new Date().toISOString(),
           amount,
+          note: draftPaymentNotes[apartment.id]?.trim() ?? '',
         },
         ...nextPayments,
       ],
     };
     void commit(nextState);
+    setDraftPaymentNotes((current) => {
+      const { [apartment.id]: _removed, ...remaining } = current;
+      return remaining;
+    });
   };
 
   const cancelPayment = (paymentId: string) => {
@@ -573,6 +580,7 @@ export default function GarbageFeeApp() {
           month: selectedMonth,
           paidAt: new Date().toISOString(),
           amount,
+          note: '',
         };
         await commit({ ...state, payments: [payment, ...state.payments] });
         return {
@@ -770,7 +778,7 @@ export default function GarbageFeeApp() {
           blockId: newApartment.blockId,
           code: newApartment.code.trim(),
           owner: newApartment.owner.trim(),
-          note: newApartment.note.trim(),
+          note: '',
           monthlyFee,
         },
       ],
@@ -779,7 +787,6 @@ export default function GarbageFeeApp() {
       ...newApartment,
       code: '',
       owner: '',
-      note: '',
       monthlyFee: formatNumber(
         getBlockDefaultFee(newApartment.blockId, state.regions, state.blocks),
       ),
@@ -1261,6 +1268,7 @@ export default function GarbageFeeApp() {
                     <TableHead>Số tiền</TableHead>
                     <TableHead>Trạng thái</TableHead>
                     <TableHead>Người thu</TableHead>
+                    <TableHead>Ghi chú</TableHead>
                     <TableHead>Thao tác</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -1308,6 +1316,25 @@ export default function GarbageFeeApp() {
                                   [apartment.id]: formatAmountInput(
                                     event.target.value,
                                   ),
+                                })
+                              }
+                            />
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {payment ? (
+                            <span className="text-sm text-muted-foreground">
+                              {payment.note || '-'}
+                            </span>
+                          ) : (
+                            <Input
+                              className="w-44"
+                              placeholder="Ví dụ: khách hẹn lại"
+                              value={draftPaymentNotes[apartment.id] ?? ''}
+                              onChange={(event) =>
+                                setDraftPaymentNotes({
+                                  ...draftPaymentNotes,
+                                  [apartment.id]: event.target.value,
                                 })
                               }
                             />
@@ -1978,7 +2005,7 @@ function StatsView({
                       </TableCell>
                       <TableCell>{formatDate(payment.paidAt)}</TableCell>
                       <TableCell>{money.format(payment.amount)}</TableCell>
-                      <TableCell>{apartment?.note || '-'}</TableCell>
+                      <TableCell>{payment.note || '-'}</TableCell>
                     </TableRow>
                   );
                 })}
@@ -1999,6 +2026,7 @@ function StatsView({
             <TableRow>
               <TableHead>Căn hộ</TableHead>
               <TableHead>Người thu</TableHead>
+              <TableHead>Ghi chú</TableHead>
               <TableHead>Ngày thu</TableHead>
               <TableHead>Số tiền</TableHead>
             </TableRow>
@@ -2017,6 +2045,7 @@ function StatsView({
                   <TableCell>
                     {collector?.name ?? payment.collectorId}
                   </TableCell>
+                  <TableCell>{payment.note || '-'}</TableCell>
                   <TableCell>{formatDate(payment.paidAt)}</TableCell>
                   <TableCell>{money.format(payment.amount)}</TableCell>
                 </TableRow>
@@ -2045,14 +2074,12 @@ function AdminAreas(props: {
     blockId: string;
     code: string;
     owner: string;
-    note: string;
     monthlyFee: string;
   };
   setNewApartment: (value: {
     blockId: string;
     code: string;
     owner: string;
-    note: string;
     monthlyFee: string;
   }) => void;
   addApartment: (event: FormEvent<HTMLFormElement>) => void;
@@ -2399,17 +2426,6 @@ function AdminAreas(props: {
               Thêm
             </Button>
           </div>
-          <Input
-            className="h-9"
-            placeholder="Ghi chú (không bắt buộc)"
-            value={props.newApartment.note}
-            onChange={(event) =>
-              props.setNewApartment({
-                ...props.newApartment,
-                note: event.target.value,
-              })
-            }
-          />
         </form>
         <div className="max-h-[420px] space-y-1.5 overflow-auto pr-1">
           {state.apartments.map((apartment) => (
@@ -2470,16 +2486,6 @@ function AdminAreas(props: {
               <IconButton
                 label="Xóa căn hộ"
                 onClick={() => props.deleteApartment(apartment.id)}
-              />
-              <Input
-                className="h-8 sm:col-span-5"
-                placeholder="Ghi chú"
-                value={apartment.note}
-                onChange={(event) =>
-                  props.updateApartment(apartment.id, {
-                    note: event.target.value,
-                  })
-                }
               />
             </div>
           ))}

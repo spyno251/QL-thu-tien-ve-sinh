@@ -30,6 +30,7 @@ type Payment = {
   month: string;
   paidAt: string;
   amount: number;
+  note: string;
 };
 type AppSettings = {
   appName: string;
@@ -151,7 +152,7 @@ async function readState(): Promise<AppState> {
       .order('code'),
     db
       .from('payments')
-      .select('id, apartment_id, collector_id, month, paid_at, amount')
+      .select('id, apartment_id, collector_id, month, paid_at, amount, note')
       .order('paid_at', { ascending: false }),
     db.from('app_settings').select('app_name, subtitle, logo_url, theme').eq('id', 'default').maybeSingle(),
   ]);
@@ -197,6 +198,7 @@ async function readState(): Promise<AppState> {
       month: item.month,
       paidAt: item.paid_at,
       amount: item.amount,
+      note: item.note,
     })),
     settings: {
       appName: settingsResult.data?.app_name ?? 'Thu tiền vệ sinh',
@@ -304,6 +306,7 @@ async function saveState(state: AppState) {
               month: item.month,
               paid_at: item.paidAt,
               amount: item.amount,
+              note: item.note,
             })),
           )
       ).error,
