@@ -1533,6 +1533,7 @@ function MonthYearSelect({
     <div className="grid grid-cols-2 gap-1.5">
       <NativeSelect
         aria-label="Tháng"
+        className="w-full"
         value={selectedMonth}
         onChange={(event) => update(event.target.value, selectedYear)}
       >
@@ -1540,13 +1541,14 @@ function MonthYearSelect({
           const month = String(index + 1).padStart(2, '0');
           return (
             <NativeSelectOption key={month} value={month}>
-              Tháng {month}
+              {month}
             </NativeSelectOption>
           );
         })}
       </NativeSelect>
       <NativeSelect
         aria-label="Năm"
+        className="w-full"
         value={selectedYear}
         onChange={(event) => update(selectedMonth, event.target.value)}
       >

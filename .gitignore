@@ -40,3 +40,6 @@ site-archive*.tar.gz
 /.tmp-auth-test/
 /outputs/
 /work/
+
+.vercel
+.env*
