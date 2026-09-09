@@ -66,6 +66,7 @@ type Apartment = {
   blockId: string;
   code: string;
   owner: string;
+  note: string;
   monthlyFee: number | null;
 };
 
@@ -154,6 +155,7 @@ const initialState: AppState = {
       blockId: 'b-a1',
       code: 'A1-101',
       owner: 'Cô Hoa',
+      note: '',
       monthlyFee: null,
     },
     {
@@ -161,6 +163,7 @@ const initialState: AppState = {
       blockId: 'b-a1',
       code: 'A1-102',
       owner: 'Anh Nam',
+      note: '',
       monthlyFee: null,
     },
     {
@@ -168,6 +171,7 @@ const initialState: AppState = {
       blockId: 'b-a2',
       code: 'A2-201',
       owner: 'Chị Mai',
+      note: '',
       monthlyFee: 70000,
     },
     {
@@ -175,6 +179,7 @@ const initialState: AppState = {
       blockId: 'b-b1',
       code: 'B1-101',
       owner: 'Chú Bình',
+      note: '',
       monthlyFee: null,
     },
   ],
@@ -272,6 +277,7 @@ export default function GarbageFeeApp() {
     blockId: 'b-a1',
     code: '',
     owner: '',
+    note: '',
     monthlyFee: '300.000',
   });
   const [quickSetup, setQuickSetup] = useState({
@@ -671,6 +677,7 @@ export default function GarbageFeeApp() {
           blockId,
           code: `${suffix2} ${String(apartmentNumber).padStart(padWidth, '0')}`,
           owner: '',
+          note: '',
           monthlyFee: defaultFee,
         });
         addedApartments += 1;
@@ -763,6 +770,7 @@ export default function GarbageFeeApp() {
           blockId: newApartment.blockId,
           code: newApartment.code.trim(),
           owner: newApartment.owner.trim(),
+          note: newApartment.note.trim(),
           monthlyFee,
         },
       ],
@@ -771,6 +779,7 @@ export default function GarbageFeeApp() {
       ...newApartment,
       code: '',
       owner: '',
+      note: '',
       monthlyFee: formatNumber(
         getBlockDefaultFee(newApartment.blockId, state.regions, state.blocks),
       ),
@@ -1852,6 +1861,9 @@ function StatsView({
     users: Map<string, User>;
   };
 }) {
+  const [selectedCollectorId, setSelectedCollectorId] = useState<string | null>(
+    null,
+  );
   const payments = state.payments.filter((item) => item.month === month);
   const byUser = state.users.map((user) => {
     const userPayments = payments.filter(
@@ -1863,6 +1875,10 @@ function StatsView({
       total: userPayments.reduce((sum, item) => sum + item.amount, 0),
     };
   });
+  const selectedUser = state.users.find((user) => user.id === selectedCollectorId);
+  const selectedPayments = payments.filter(
+    (payment) => payment.collectorId === selectedCollectorId,
+  );
 
   return (
     <section className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
@@ -1900,6 +1916,7 @@ function StatsView({
               <TableHead>Nhân viên</TableHead>
               <TableHead>Số căn</TableHead>
               <TableHead>Tổng tiền</TableHead>
+              <TableHead>Chi tiết</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -1908,11 +1925,72 @@ function StatsView({
                 <TableCell>{user.name}</TableCell>
                 <TableCell>{formatNumber(count)}</TableCell>
                 <TableCell>{money.format(total)}</TableCell>
+                <TableCell>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setSelectedCollectorId(user.id)}
+                  >
+                    Chi tiết
+                  </Button>
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
       </div>
+
+      {selectedUser && (
+        <div className="rounded-lg border bg-card p-4 lg:col-span-2">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-base font-semibold">
+              Chi tiết thu: {selectedUser.name}
+            </h2>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setSelectedCollectorId(null)}
+            >
+              Đóng
+            </Button>
+          </div>
+          {selectedPayments.length ? (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Căn hộ</TableHead>
+                  <TableHead>Ngày thu</TableHead>
+                  <TableHead>Số tiền</TableHead>
+                  <TableHead>Ghi chú</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {selectedPayments.map((payment) => {
+                  const apartment = state.apartments.find(
+                    (item) => item.id === payment.apartmentId,
+                  );
+                  return (
+                    <TableRow key={payment.id}>
+                      <TableCell>
+                        {apartment?.code ?? payment.apartmentId}
+                      </TableCell>
+                      <TableCell>{formatDate(payment.paidAt)}</TableCell>
+                      <TableCell>{money.format(payment.amount)}</TableCell>
+                      <TableCell>{apartment?.note || '-'}</TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Nhân viên này chưa thu căn nào trong kỳ đã chọn.
+            </p>
+          )}
+        </div>
+      )}
 
       <div className="rounded-lg border bg-card p-4 lg:col-span-2">
         <h2 className="mb-3 text-base font-semibold">Lịch sử thu gần đây</h2>
@@ -1967,12 +2045,14 @@ function AdminAreas(props: {
     blockId: string;
     code: string;
     owner: string;
+    note: string;
     monthlyFee: string;
   };
   setNewApartment: (value: {
     blockId: string;
     code: string;
     owner: string;
+    note: string;
     monthlyFee: string;
   }) => void;
   addApartment: (event: FormEvent<HTMLFormElement>) => void;
@@ -2319,6 +2399,17 @@ function AdminAreas(props: {
               Thêm
             </Button>
           </div>
+          <Input
+            className="h-9"
+            placeholder="Ghi chú (không bắt buộc)"
+            value={props.newApartment.note}
+            onChange={(event) =>
+              props.setNewApartment({
+                ...props.newApartment,
+                note: event.target.value,
+              })
+            }
+          />
         </form>
         <div className="max-h-[420px] space-y-1.5 overflow-auto pr-1">
           {state.apartments.map((apartment) => (
@@ -2379,6 +2470,16 @@ function AdminAreas(props: {
               <IconButton
                 label="Xóa căn hộ"
                 onClick={() => props.deleteApartment(apartment.id)}
+              />
+              <Input
+                className="h-8 sm:col-span-5"
+                placeholder="Ghi chú"
+                value={apartment.note}
+                onChange={(event) =>
+                  props.updateApartment(apartment.id, {
+                    note: event.target.value,
+                  })
+                }
               />
             </div>
           ))}

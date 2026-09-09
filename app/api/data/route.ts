@@ -20,6 +20,7 @@ type Apartment = {
   blockId: string;
   code: string;
   owner: string;
+  note: string;
   monthlyFee: number | null;
 };
 type Payment = {
@@ -146,7 +147,7 @@ async function readState(): Promise<AppState> {
     db.from('blocks').select('id, region_id, name').order('name'),
     db
       .from('apartments')
-      .select('id, block_id, code, owner, monthly_fee')
+      .select('id, block_id, code, owner, note, monthly_fee')
       .order('code'),
     db
       .from('payments')
@@ -186,6 +187,7 @@ async function readState(): Promise<AppState> {
       blockId: item.block_id,
       code: item.code,
       owner: item.owner,
+      note: item.note,
       monthlyFee: item.monthly_fee,
     })),
     payments: (paymentsResult.data ?? []).map((item) => ({
@@ -283,6 +285,7 @@ async function saveState(state: AppState) {
               block_id: item.blockId,
               code: item.code,
               owner: item.owner,
+              note: item.note,
               monthly_fee: item.monthlyFee,
             })),
           )
