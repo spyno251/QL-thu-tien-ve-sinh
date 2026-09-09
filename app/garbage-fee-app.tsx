@@ -16,7 +16,6 @@ import {
   ShieldCheck,
   Trash2,
   UserRound,
-  UsersRound,
   type LucideIcon,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -926,42 +925,12 @@ export default function GarbageFeeApp() {
     return (
       <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,#d9f0ef_0,#f4f7f4_31%,#f8fafc_68%)] px-4 py-8 text-foreground">
         <section className="mx-auto grid min-h-[calc(100vh-4rem)] max-w-6xl items-center gap-8 lg:grid-cols-[1.05fr_0.95fr]">
-          <div className="space-y-7">
-            <div className="inline-flex items-center gap-2 rounded-full border bg-white/80 px-3 py-1 text-sm font-medium text-muted-foreground shadow-sm">
-              <img
-                src="/app-icon.png"
-                alt=""
-                className="size-5 object-contain"
-              />
-              Quản lý thu tiền vệ sinh
-            </div>
-            <div className="space-y-4">
-              <h1 className="max-w-2xl text-4xl font-semibold leading-tight text-slate-950 sm:text-5xl">
-                Theo dõi từng căn hộ đã thu, ai thu, thu ngày nào.
-              </h1>
-              <p className="max-w-xl text-base leading-7 text-slate-600">
-                Admin tạo tài khoản bằng số điện thoại và mật khẩu. Nhân viên
-                dùng chung dữ liệu, mỗi lần thu đều ghi lại căn hộ, tháng, ngày,
-                số tiền và người thu.
-              </p>
-            </div>
-            <div className="grid max-w-2xl gap-3 sm:grid-cols-3">
-              <Metric
-                label="Căn hộ"
-                value={formatNumber(state.apartments.length)}
-                icon={Building2}
-              />
-              <Metric
-                label="Đã thu tháng này"
-                value={formatNumber(paidApartmentIds.size)}
-                icon={ReceiptText}
-              />
-              <Metric
-                label="Nhân viên"
-                value={formatNumber(state.users.length - 1)}
-                icon={UsersRound}
-              />
-            </div>
+          <div className="hidden items-center justify-center lg:flex">
+            <img
+              src="/app-icon.png"
+              alt="Thu tiền vệ sinh"
+              className="size-40 object-contain"
+            />
           </div>
 
           <div className="rounded-lg border bg-white p-5 shadow-[0_24px_80px_rgba(15,23,42,0.12)]">
@@ -1322,25 +1291,6 @@ export default function GarbageFeeApp() {
                           )}
                         </TableCell>
                         <TableCell>
-                          {payment ? (
-                            <span className="text-sm text-muted-foreground">
-                              {payment.note || '-'}
-                            </span>
-                          ) : (
-                            <Input
-                              className="w-44"
-                              placeholder="Ví dụ: khách hẹn lại"
-                              value={draftPaymentNotes[apartment.id] ?? ''}
-                              onChange={(event) =>
-                                setDraftPaymentNotes({
-                                  ...draftPaymentNotes,
-                                  [apartment.id]: event.target.value,
-                                })
-                              }
-                            />
-                          )}
-                        </TableCell>
-                        <TableCell>
                           <Badge variant={payment ? 'default' : 'outline'}>
                             {payment ? 'Đã thu' : 'Chưa thu'}
                           </Badge>
@@ -1357,6 +1307,25 @@ export default function GarbageFeeApp() {
                             </div>
                           ) : (
                             <span className="text-muted-foreground">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {payment ? (
+                            <span className="text-sm text-muted-foreground">
+                              {payment.note || '-'}
+                            </span>
+                          ) : (
+                            <Input
+                              className="w-44"
+                              placeholder="Ví dụ: khách hẹn lại"
+                              value={draftPaymentNotes[apartment.id] ?? ''}
+                              onChange={(event) =>
+                                setDraftPaymentNotes({
+                                  ...draftPaymentNotes,
+                                  [apartment.id]: event.target.value,
+                                })
+                              }
+                            />
                           )}
                         </TableCell>
                         <TableCell>
