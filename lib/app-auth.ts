@@ -1,7 +1,7 @@
 export const DEFAULT_PASSWORD = '123456';
 export const SESSION_COOKIE = 'garbage_fee_session';
 const SESSION_DAYS = 30;
-const PBKDF2_ITERATIONS = 120_000;
+const PBKDF2_ITERATIONS = 100_000;
 
 export type SessionUser = {
   id: string;
