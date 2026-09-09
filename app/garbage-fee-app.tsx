@@ -78,12 +78,20 @@ type Payment = {
   amount: number;
 };
 
+type AppSettings = {
+  appName: string;
+  subtitle: string;
+  logoUrl: string;
+  theme: 'teal' | 'blue' | 'indigo' | 'amber' | 'rose';
+};
+
 type AppState = {
   users: User[];
   regions: Region[];
   blocks: Block[];
   apartments: Apartment[];
   payments: Payment[];
+  settings: AppSettings;
 };
 
 type WebMCPDocument = Document & {
@@ -180,6 +188,12 @@ const initialState: AppState = {
       amount: 50000,
     },
   ],
+  settings: {
+    appName: 'Thu tiền vệ sinh',
+    subtitle: 'Quản lý thu tiền vệ sinh theo từng căn hộ',
+    logoUrl: '',
+    theme: 'teal',
+  },
 };
 
 const money = new Intl.NumberFormat('vi-VN', {
@@ -982,23 +996,27 @@ export default function GarbageFeeApp() {
           : 'Chế độ dữ liệu mẫu';
 
   return (
-    <main className="min-h-screen bg-background text-foreground">
+    <main className={`min-h-screen bg-background text-foreground theme-${state.settings.theme}`}>
       <header className="sticky top-0 z-20 border-b bg-background/95 px-4 py-3 backdrop-blur">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <div className="grid size-10 place-items-center overflow-hidden rounded-lg bg-primary/10">
               <img
-                src="/app-icon.png"
+                src={state.settings.logoUrl || '/app-icon.png'}
                 alt=""
                 className="size-10 object-contain"
               />
             </div>
             <div>
-              <h1 className="text-lg font-semibold">Thu tiền vệ sinh</h1>
+              <h1 className="text-lg font-semibold">{state.settings.appName}</h1>
               <p className="text-sm text-muted-foreground">
-                {currentUser.name} ·{' '}
-                {currentUser.role === 'admin' ? 'Admin' : 'Nhân viên'}
+                {currentUser.name} · {currentUser.role === 'admin' ? 'Admin' : 'Nhân viên'}
               </p>
+              {state.settings.subtitle && (
+                <p className="max-w-[18rem] truncate text-xs text-muted-foreground/80">
+                  {state.settings.subtitle}
+                </p>
+              )}
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -1052,36 +1070,44 @@ export default function GarbageFeeApp() {
         </section>
 
         <Tabs defaultValue="collect" className="mt-5">
-          <TabsList className="h-11 w-full max-w-none gap-1 bg-primary/10 p-1 sm:h-10 sm:w-fit sm:max-w-full">
+          <TabsList className="h-11 w-full max-w-none justify-start gap-1 overflow-x-auto bg-primary/10 p-1 sm:h-10 sm:w-fit sm:max-w-full">
             <TabsTrigger
               value="collect"
-              className="min-h-9 flex-1 px-2 py-1.5 text-sm font-semibold text-foreground/75 data-active:bg-primary data-active:text-primary-foreground data-active:shadow-sm sm:px-3 sm:text-base"
+              className="min-h-9 flex-none whitespace-nowrap px-2 py-1.5 text-sm font-semibold text-foreground/75 data-active:bg-primary data-active:text-primary-foreground data-active:shadow-sm sm:flex-1 sm:px-3 sm:text-base"
             >
               Thu tháng
             </TabsTrigger>
             <TabsTrigger
               value="stats"
-              className="min-h-9 flex-1 px-2 py-1.5 text-sm font-semibold text-foreground/75 data-active:bg-primary data-active:text-primary-foreground data-active:shadow-sm sm:px-3 sm:text-base"
+              className="min-h-9 flex-none whitespace-nowrap px-2 py-1.5 text-sm font-semibold text-foreground/75 data-active:bg-primary data-active:text-primary-foreground data-active:shadow-sm sm:flex-1 sm:px-3 sm:text-base"
             >
               Thống kê
             </TabsTrigger>
             <TabsTrigger
               value="areas"
-              className="min-h-9 flex-1 px-2 py-1.5 text-sm font-semibold text-foreground/75 data-active:bg-primary data-active:text-primary-foreground data-active:shadow-sm sm:px-3 sm:text-base"
+              className="min-h-9 flex-none whitespace-nowrap px-2 py-1.5 text-sm font-semibold text-foreground/75 data-active:bg-primary data-active:text-primary-foreground data-active:shadow-sm sm:flex-1 sm:px-3 sm:text-base"
             >
               Khu vực
             </TabsTrigger>
             <TabsTrigger
               value="users"
-              className="min-h-9 flex-1 px-2 py-1.5 text-sm font-semibold text-foreground/75 data-active:bg-primary data-active:text-primary-foreground data-active:shadow-sm sm:px-3 sm:text-base"
+              className="min-h-9 flex-none whitespace-nowrap px-2 py-1.5 text-sm font-semibold text-foreground/75 data-active:bg-primary data-active:text-primary-foreground data-active:shadow-sm sm:flex-1 sm:px-3 sm:text-base"
             >
               Nhân viên
             </TabsTrigger>
+            {isAdmin && (
+              <TabsTrigger
+                value="settings"
+                className="min-h-9 flex-none whitespace-nowrap px-2 py-1.5 text-sm font-semibold text-foreground/75 data-active:bg-primary data-active:text-primary-foreground data-active:shadow-sm sm:flex-1 sm:px-3 sm:text-base"
+              >
+                Tùy chỉnh
+              </TabsTrigger>
+            )}
           </TabsList>
 
           <TabsContent value="collect" className="mt-4">
             <section className="min-w-0 rounded-lg border bg-card p-2 sm:p-4">
-              <div className="mb-3 grid grid-cols-3 gap-2 [&>div:last-child]:col-span-3 lg:grid-cols-[190px_170px_170px_minmax(220px,1fr)] lg:[&>div:last-child]:col-span-1">
+              <div className="mb-3 grid grid-cols-2 gap-2 [&>div:first-child]:col-span-2 [&>div:last-child]:col-span-2 lg:grid-cols-[190px_170px_170px_minmax(220px,1fr)] lg:[&>div:first-child]:col-span-1 lg:[&>div:last-child]:col-span-1">
                 <Field label="Kỳ thu">
                   <MonthYearSelect
                     value={selectedMonth}
@@ -1299,6 +1325,14 @@ export default function GarbageFeeApp() {
               <Restricted />
             )}
           </TabsContent>
+          {isAdmin && (
+            <TabsContent value="settings" className="mt-4">
+              <CustomizationPanel
+                settings={state.settings}
+                onSave={(settings) => void commit({ ...state, settings })}
+              />
+            </TabsContent>
+          )}
         </Tabs>
       </div>
     </main>
@@ -1613,6 +1647,96 @@ function Metric({
   );
 }
 
+function CustomizationPanel({
+  settings,
+  onSave,
+}: {
+  settings: AppSettings;
+  onSave: (settings: AppSettings) => Promise<void> | void;
+}) {
+  const [draft, setDraft] = useState(settings);
+  const [saving, setSaving] = useState(false);
+
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setSaving(true);
+    try {
+      await onSave({
+        ...draft,
+        appName: draft.appName.trim() || 'Thu tiền vệ sinh',
+        subtitle: draft.subtitle.trim(),
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <section className="rounded-lg border bg-card p-3 sm:p-5">
+      <div className="mb-4">
+        <h2 className="text-lg font-semibold">Tùy chỉnh ứng dụng</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Chỉ Admin có thể thay đổi nội dung nhận diện và màu giao diện. Thay đổi sẽ áp dụng cho tất cả tài khoản.
+        </p>
+      </div>
+      <form onSubmit={submit} className="grid gap-4 sm:grid-cols-2">
+        <Field label="Tên ứng dụng">
+          <Input
+            value={draft.appName}
+            onChange={(event) =>
+              setDraft((current) => ({ ...current, appName: event.target.value }))
+            }
+            placeholder="Thu tiền vệ sinh"
+            maxLength={50}
+            required
+          />
+        </Field>
+        <Field label="Dòng mô tả dưới tiêu đề">
+          <Input
+            value={draft.subtitle}
+            onChange={(event) =>
+              setDraft((current) => ({ ...current, subtitle: event.target.value }))
+            }
+            placeholder="Quản lý thu tiền vệ sinh theo từng căn hộ"
+            maxLength={100}
+          />
+        </Field>
+        <Field label="Logo URL (không bắt buộc)">
+          <Input
+            value={draft.logoUrl}
+            onChange={(event) =>
+              setDraft((current) => ({ ...current, logoUrl: event.target.value }))
+            }
+            placeholder="https://.../logo.png"
+            inputMode="url"
+          />
+        </Field>
+        <Field label="Màu giao diện">
+          <NativeSelect
+            className="w-full"
+            value={draft.theme}
+            onChange={(event) =>
+              setDraft((current) => ({
+                ...current,
+                theme: event.target.value as AppSettings['theme'],
+              }))
+            }
+          >
+            <NativeSelectOption value="teal">Xanh ngọc</NativeSelectOption>
+            <NativeSelectOption value="blue">Xanh dương</NativeSelectOption>
+            <NativeSelectOption value="indigo">Chàm</NativeSelectOption>
+            <NativeSelectOption value="amber">Vàng hổ phách</NativeSelectOption>
+            <NativeSelectOption value="rose">Hồng đỏ</NativeSelectOption>
+          </NativeSelect>
+        </Field>
+        <Button type="submit" className="sm:col-span-2" disabled={saving}>
+          {saving ? 'Đang lưu...' : 'Lưu tùy chỉnh'}
+        </Button>
+      </form>
+    </section>
+  );
+}
+
 function Restricted() {
   return (
     <section className="rounded-lg border bg-card p-5 text-sm text-muted-foreground">
@@ -1916,7 +2040,7 @@ function AdminAreas(props: {
       <div className="rounded-lg border bg-card p-2.5 sm:p-4">
         <h2 className="mb-2 text-base font-semibold">Căn hộ</h2>
         <form onSubmit={props.addApartment} className="mb-2 grid gap-1.5">
-          <div className="grid grid-cols-[minmax(0,1fr)_minmax(54px,0.8fr)_minmax(0,1fr)_68px_auto] gap-1.5">
+          <div className="grid gap-1.5 sm:grid-cols-[minmax(150px,1fr)_minmax(54px,0.8fr)_minmax(0,1fr)_88px_auto]">
             <NativeSelect
               className="h-9 min-w-0"
               value={props.newApartment.blockId}
@@ -1980,7 +2104,7 @@ function AdminAreas(props: {
           {state.apartments.map((apartment) => (
             <div
               key={apartment.id}
-              className="grid grid-cols-[minmax(0,1fr)_minmax(54px,0.8fr)_minmax(0,1fr)_68px_32px] gap-1.5 rounded-md border p-1.5"
+              className="grid gap-1.5 rounded-md border p-1.5 sm:grid-cols-[minmax(150px,1fr)_minmax(54px,0.8fr)_minmax(0,1fr)_88px_32px]"
             >
               <NativeSelect
                 className="h-8 min-w-0"
@@ -2115,7 +2239,8 @@ function AdminUsers(props: {
         đổi mật khẩu khi đăng nhập lần đầu.
       </div>
 
-      <Table>
+      <div className="overflow-x-auto">
+        <Table>
         <TableHeader>
           <TableRow>
             <TableHead>Tên</TableHead>
@@ -2205,7 +2330,8 @@ function AdminUsers(props: {
             </TableRow>
           ))}
         </TableBody>
-      </Table>
+        </Table>
+      </div>
     </section>
   );
 }

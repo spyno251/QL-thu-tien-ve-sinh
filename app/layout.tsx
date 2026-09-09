@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'Quan ly thu tien rac',
-  description: 'Quan ly khu vuc, day nha, can ho va lich su thu tien rac.',
+  title: 'Thu tiền vệ sinh',
+  description: 'Quản lý khu vực, dãy nhà, căn hộ và lịch sử thu tiền vệ sinh.',
   icons: {
     icon: '/app-icon.png',
     apple: '/app-icon.png',

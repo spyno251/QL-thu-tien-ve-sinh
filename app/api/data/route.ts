@@ -30,12 +30,19 @@ type Payment = {
   paidAt: string;
   amount: number;
 };
+type AppSettings = {
+  appName: string;
+  subtitle: string;
+  logoUrl: string;
+  theme: 'teal' | 'blue' | 'indigo' | 'amber' | 'rose';
+};
 type AppState = {
   users: User[];
   regions: Region[];
   blocks: Block[];
   apartments: Apartment[];
   payments: Payment[];
+  settings: AppSettings;
 };
 
 function json(data: unknown, status = 200) {
@@ -129,6 +136,7 @@ async function readState(): Promise<AppState> {
     blocksResult,
     apartmentsResult,
     paymentsResult,
+    settingsResult,
   ] = await Promise.all([
     db
       .from('users')
@@ -144,13 +152,14 @@ async function readState(): Promise<AppState> {
       .from('payments')
       .select('id, apartment_id, collector_id, month, paid_at, amount')
       .order('paid_at', { ascending: false }),
+    db.from('app_settings').select('app_name, subtitle, logo_url, theme').eq('id', 'default').maybeSingle(),
   ]);
   if (
     usersResult.error ||
     regionsResult.error ||
     blocksResult.error ||
     apartmentsResult.error ||
-    paymentsResult.error
+    paymentsResult.error || settingsResult.error
   )
     throw new Error('Read failed');
   return {
@@ -187,6 +196,14 @@ async function readState(): Promise<AppState> {
       paidAt: item.paid_at,
       amount: item.amount,
     })),
+    settings: {
+      appName: settingsResult.data?.app_name ?? 'Thu tiền vệ sinh',
+      subtitle:
+        settingsResult.data?.subtitle ??
+        'Quản lý thu tiền vệ sinh theo từng căn hộ',
+      logoUrl: settingsResult.data?.logo_url ?? '',
+      theme: (settingsResult.data?.theme ?? 'teal') as AppSettings['theme'],
+    },
   };
 }
 
@@ -288,4 +305,15 @@ async function saveState(state: AppState) {
           )
       ).error,
     );
+  fail(
+    (
+      await db.from('app_settings').upsert({
+        id: 'default',
+        app_name: state.settings.appName,
+        subtitle: state.settings.subtitle,
+        logo_url: state.settings.logoUrl,
+        theme: state.settings.theme,
+      })
+    ).error,
+  );
 }
