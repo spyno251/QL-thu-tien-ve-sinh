@@ -188,6 +188,10 @@ const money = new Intl.NumberFormat('vi-VN', {
   maximumFractionDigits: 0,
 });
 
+const number = new Intl.NumberFormat('vi-VN', {
+  maximumFractionDigits: 0,
+});
+
 function uid(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
@@ -203,6 +207,24 @@ function formatDate(value: string) {
 function parseAmount(value: string, fallback: number) {
   const amount = Number(value.replaceAll('.', '').replaceAll(',', ''));
   return Number.isFinite(amount) && amount > 0 ? Math.round(amount) : fallback;
+}
+
+function formatNumber(value: number) {
+  return number.format(Math.round(value));
+}
+
+function formatAmountInput(value: string) {
+  const digits = value.replace(/\D/g, '');
+  return digits ? formatNumber(Number(digits)) : '';
+}
+
+function getBlockDefaultFee(
+  blockId: string,
+  regions: Region[],
+  blocks: Block[],
+) {
+  const block = blocks.find((item) => item.id === blockId);
+  return regions.find((item) => item.id === block?.regionId)?.defaultFee ?? 0;
 }
 
 export default function GarbageFeeApp() {
@@ -225,13 +247,16 @@ export default function GarbageFeeApp() {
   const [selectedBlock, setSelectedBlock] = useState('all');
   const [query, setQuery] = useState('');
   const [draftAmounts, setDraftAmounts] = useState<Record<string, string>>({});
-  const [newRegion, setNewRegion] = useState({ name: '', defaultFee: '50000' });
+  const [newRegion, setNewRegion] = useState({
+    name: '',
+    defaultFee: '50.000',
+  });
   const [newBlock, setNewBlock] = useState({ regionId: 'r-a', name: '' });
   const [newApartment, setNewApartment] = useState({
     blockId: 'b-a1',
     code: '',
     owner: '',
-    monthlyFee: '',
+    monthlyFee: '50.000',
   });
   const [newUser, setNewUser] = useState({
     name: '',
@@ -248,8 +273,16 @@ export default function GarbageFeeApp() {
     setSyncStatus('synced');
     if (data.regions[0])
       setNewBlock((item) => ({ ...item, regionId: data.regions[0].id }));
-    if (data.blocks[0])
-      setNewApartment((item) => ({ ...item, blockId: data.blocks[0].id }));
+    if (data.blocks[0]) {
+      const blockId = data.blocks[0].id;
+      setNewApartment((item) => ({
+        ...item,
+        blockId,
+        monthlyFee: formatNumber(
+          getBlockDefaultFee(blockId, data.regions, data.blocks),
+        ),
+      }));
+    }
   };
 
   useEffect(() => {
@@ -538,7 +571,7 @@ export default function GarbageFeeApp() {
       name: newRegion.name.trim(),
       defaultFee: parseAmount(newRegion.defaultFee, 50000),
     };
-    setNewRegion({ name: '', defaultFee: '50000' });
+    setNewRegion({ name: '', defaultFee: '50.000' });
     void commit({ ...state, regions: [...state.regions, item] });
   };
 
@@ -605,9 +638,10 @@ export default function GarbageFeeApp() {
   const addApartment = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!newApartment.blockId || !newApartment.code.trim()) return;
-    const monthlyFee = newApartment.monthlyFee.trim()
-      ? parseAmount(newApartment.monthlyFee, 0)
-      : null;
+    const monthlyFee = parseAmount(
+      newApartment.monthlyFee,
+      getBlockDefaultFee(newApartment.blockId, state.regions, state.blocks),
+    );
     void commit({
       ...state,
       apartments: [
@@ -621,7 +655,14 @@ export default function GarbageFeeApp() {
         },
       ],
     });
-    setNewApartment({ ...newApartment, code: '', owner: '', monthlyFee: '' });
+    setNewApartment({
+      ...newApartment,
+      code: '',
+      owner: '',
+      monthlyFee: formatNumber(
+        getBlockDefaultFee(newApartment.blockId, state.regions, state.blocks),
+      ),
+    });
   };
 
   const updateApartment = (id: string, patch: Partial<Apartment>) => {
@@ -763,17 +804,17 @@ export default function GarbageFeeApp() {
             <div className="grid max-w-2xl gap-3 sm:grid-cols-3">
               <Metric
                 label="Căn hộ mẫu"
-                value={String(state.apartments.length)}
+                value={formatNumber(state.apartments.length)}
                 icon={Building2}
               />
               <Metric
                 label="Đã thu tháng này"
-                value={String(paidApartmentIds.size)}
+                value={formatNumber(paidApartmentIds.size)}
                 icon={ReceiptText}
               />
               <Metric
                 label="Nhân viên"
-                value={String(state.users.length - 1)}
+                value={formatNumber(state.users.length - 1)}
                 icon={UsersRound}
               />
             </div>
@@ -963,12 +1004,12 @@ export default function GarbageFeeApp() {
         <section className="grid grid-cols-2 gap-2 md:grid-cols-4">
           <Metric
             label="Tổng căn hộ"
-            value={String(state.apartments.length)}
+            value={formatNumber(state.apartments.length)}
             icon={Building2}
           />
           <Metric
             label="Đã thu"
-            value={`${paidApartmentIds.size}/${state.apartments.length}`}
+            value={`${formatNumber(paidApartmentIds.size)}/${formatNumber(state.apartments.length)}`}
             icon={ReceiptText}
           />
           <Metric
@@ -993,9 +1034,9 @@ export default function GarbageFeeApp() {
 
           <TabsContent value="collect" className="mt-4">
             <section className="min-w-0 rounded-lg border bg-card p-2 sm:p-4">
-              <div className="mb-3 grid grid-cols-3 gap-2 [&>div:last-child]:col-span-3 lg:grid-cols-[150px_170px_170px_minmax(220px,1fr)] lg:[&>div:last-child]:col-span-1">
-                <Field label="Tháng">
-                  <MonthInput
+              <div className="mb-3 grid grid-cols-3 gap-2 [&>div:last-child]:col-span-3 lg:grid-cols-[190px_170px_170px_minmax(220px,1fr)] lg:[&>div:last-child]:col-span-1">
+                <Field label="Kỳ thu">
+                  <MonthYearSelect
                     value={selectedMonth}
                     onChange={setSelectedMonth}
                   />
@@ -1048,7 +1089,9 @@ export default function GarbageFeeApp() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Căn hộ</TableHead>
-                    <TableHead>Khu/Dãy</TableHead>
+                    <TableHead className="hidden sm:table-cell">
+                      Khu/Dãy
+                    </TableHead>
                     <TableHead>Số tiền</TableHead>
                     <TableHead>Trạng thái</TableHead>
                     <TableHead>Người thu</TableHead>
@@ -1075,8 +1118,11 @@ export default function GarbageFeeApp() {
                           <div className="text-sm text-muted-foreground">
                             {apartment.owner || 'Chưa có tên'}
                           </div>
+                          <div className="text-xs text-muted-foreground sm:hidden">
+                            {region?.name ?? '-'} / {block?.name ?? '-'}
+                          </div>
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="hidden sm:table-cell">
                           {region?.name ?? '-'} / {block?.name ?? '-'}
                         </TableCell>
                         <TableCell>
@@ -1087,12 +1133,15 @@ export default function GarbageFeeApp() {
                               className="w-32"
                               inputMode="numeric"
                               value={
-                                draftAmounts[apartment.id] ?? String(defaultFee)
+                                draftAmounts[apartment.id] ??
+                                formatNumber(defaultFee)
                               }
                               onChange={(event) =>
                                 setDraftAmounts({
                                   ...draftAmounts,
-                                  [apartment.id]: event.target.value,
+                                  [apartment.id]: formatAmountInput(
+                                    event.target.value,
+                                  ),
                                 })
                               }
                             />
@@ -1330,32 +1379,51 @@ function PasswordChangeScreen({
   );
 }
 
-function MonthInput({
+function MonthYearSelect({
   value,
   onChange,
 }: {
   value: string;
   onChange: (value: string) => void;
 }) {
-  const display = `${value.slice(5, 7)}/${value.slice(0, 4)}`;
-  const [draft, setDraft] = useState(display);
-  useEffect(() => setDraft(display), [display]);
+  const selectedMonth = value.slice(5, 7);
+  const selectedYear = value.slice(0, 4);
+  const currentYear = new Date().getFullYear();
+  const years = Array.from(
+    { length: 21 },
+    (_, index) => currentYear - 10 + index,
+  );
+
+  const update = (month: string, year: string) => onChange(`${year}-${month}`);
+
   return (
-    <Input
-      aria-label="Tháng (mm/yyyy)"
-      placeholder="09/2026"
-      inputMode="numeric"
-      maxLength={7}
-      value={draft}
-      onChange={(event) => {
-        const raw = event.target.value;
-        setDraft(raw);
-        if (/^(0[1-9]|1[0-2])\/[1-9][0-9]{3}$/.test(raw)) {
-          onChange(`${raw.slice(3)}-${raw.slice(0, 2)}`);
-        }
-      }}
-      onBlur={() => setDraft(display)}
-    />
+    <div className="grid grid-cols-2 gap-1.5">
+      <NativeSelect
+        aria-label="Tháng"
+        value={selectedMonth}
+        onChange={(event) => update(event.target.value, selectedYear)}
+      >
+        {Array.from({ length: 12 }, (_, index) => {
+          const month = String(index + 1).padStart(2, '0');
+          return (
+            <NativeSelectOption key={month} value={month}>
+              Tháng {month}
+            </NativeSelectOption>
+          );
+        })}
+      </NativeSelect>
+      <NativeSelect
+        aria-label="Năm"
+        value={selectedYear}
+        onChange={(event) => update(selectedMonth, event.target.value)}
+      >
+        {years.map((year) => (
+          <NativeSelectOption key={year} value={String(year)}>
+            {year}
+          </NativeSelectOption>
+        ))}
+      </NativeSelect>
+    </div>
   );
 }
 
@@ -1471,7 +1539,7 @@ function StatsView({
             {byUser.map(({ user, count, total }) => (
               <TableRow key={user.id}>
                 <TableCell>{user.name}</TableCell>
-                <TableCell>{count}</TableCell>
+                <TableCell>{formatNumber(count)}</TableCell>
                 <TableCell>{money.format(total)}</TableCell>
               </TableRow>
             ))}
@@ -1547,6 +1615,8 @@ function AdminAreas(props: {
   const { state } = props;
   const regionName = (id: string) =>
     state.regions.find((item) => item.id === id)?.name ?? '-';
+  const defaultFeeForBlock = (blockId: string) =>
+    getBlockDefaultFee(blockId, state.regions, state.blocks);
 
   return (
     <section className="grid gap-3 xl:grid-cols-3">
@@ -1574,7 +1644,7 @@ function AdminAreas(props: {
             onChange={(event) =>
               props.setNewRegion({
                 ...props.newRegion,
-                defaultFee: event.target.value,
+                defaultFee: formatAmountInput(event.target.value),
               })
             }
           />
@@ -1599,11 +1669,11 @@ function AdminAreas(props: {
               <Input
                 className="h-8 min-w-0"
                 inputMode="numeric"
-                value={String(region.defaultFee)}
+                value={formatNumber(region.defaultFee)}
                 onChange={(event) =>
                   props.updateRegion(region.id, {
                     defaultFee: parseAmount(
-                      event.target.value,
+                      formatAmountInput(event.target.value),
                       region.defaultFee,
                     ),
                   })
@@ -1699,6 +1769,9 @@ function AdminAreas(props: {
                 props.setNewApartment({
                   ...props.newApartment,
                   blockId: event.target.value,
+                  monthlyFee: formatNumber(
+                    defaultFeeForBlock(event.target.value),
+                  ),
                 })
               }
             >
@@ -1738,7 +1811,7 @@ function AdminAreas(props: {
               onChange={(event) =>
                 props.setNewApartment({
                   ...props.newApartment,
-                  monthlyFee: event.target.value,
+                  monthlyFee: formatAmountInput(event.target.value),
                 })
               }
             />
@@ -1789,16 +1862,18 @@ function AdminAreas(props: {
               />
               <Input
                 className="h-8 min-w-0"
-                value={apartment.monthlyFee ? String(apartment.monthlyFee) : ''}
-                placeholder="Mặc định"
+                value={
+                  apartment.monthlyFee
+                    ? formatNumber(apartment.monthlyFee)
+                    : formatNumber(defaultFeeForBlock(apartment.blockId))
+                }
+                placeholder="Giá"
                 onChange={(event) =>
                   props.updateApartment(apartment.id, {
-                    monthlyFee: event.target.value
-                      ? parseAmount(
-                          event.target.value,
-                          apartment.monthlyFee ?? 0,
-                        )
-                      : null,
+                    monthlyFee: parseAmount(
+                      formatAmountInput(event.target.value),
+                      defaultFeeForBlock(apartment.blockId),
+                    ),
                   })
                 }
               />
