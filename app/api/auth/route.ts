@@ -103,7 +103,7 @@ async function login(db: D1Database, body: Record<string, unknown>) {
     .prepare('UPDATE users SET password = ?, must_change_password = ? WHERE id = ?')
     .bind(passwordHash, mustChangePassword ? 1 : 0, user.id)
     .run();
-  const session = await createSession(db, user.id);
+  const session = await createSession(db, user.id, body.remember === true);
   return json(
     { user: safeUser({ ...user, password: passwordHash, mustChangePassword }) },
     200,

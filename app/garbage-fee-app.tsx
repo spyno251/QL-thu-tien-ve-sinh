@@ -22,6 +22,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import {
@@ -166,8 +167,9 @@ function uid(prefix: string) {
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat('vi-VN', {
-    dateStyle: 'short',
-    timeStyle: 'short',
+    day: '2-digit',
+    month: '2-digit',
+    year: '2-digit',
   }).format(new Date(value));
 }
 
@@ -181,6 +183,7 @@ export default function GarbageFeeApp() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [loginPhone, setLoginPhone] = useState('0909000001');
   const [loginPassword, setLoginPassword] = useState('admin123');
+  const [remember, setRemember] = useState(false);
   const [loginError, setLoginError] = useState('');
   const [authLoading, setAuthLoading] = useState(true);
   const [forgotMode, setForgotMode] = useState(false);
@@ -303,7 +306,7 @@ export default function GarbageFeeApp() {
       const response = await fetch('/api/auth', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'login', phone: loginPhone, password: loginPassword }),
+        body: JSON.stringify({ action: 'login', phone: loginPhone, password: loginPassword, remember }),
       });
       const payload = (await response.json()) as { user?: User; error?: string };
       if (!response.ok || !payload.user) throw new Error(payload.error ?? 'Đăng nhập thất bại.');
@@ -722,6 +725,10 @@ export default function GarbageFeeApp() {
                   <Input type="password" value={loginPassword} onChange={(event) => setLoginPassword(event.target.value)} required />
                 </Field>
                 {loginError && <p className="text-sm font-medium text-destructive">{loginError}</p>}
+                <label className="flex min-h-11 items-center gap-2 text-sm">
+                  <Checkbox checked={remember} onCheckedChange={setRemember} />
+                  Nhớ mật khẩu
+                </label>
                 <Button type="submit" className="w-full" size="lg" disabled={authLoading}>
                   <Lock className="size-4" />
                   {authLoading ? 'Đang kiểm tra...' : 'Vào app'}
@@ -788,8 +795,8 @@ export default function GarbageFeeApp() {
         </div>
       </header>
 
-      <div className="mx-auto max-w-7xl px-4 py-5">
-        <section className="grid gap-3 md:grid-cols-4">
+      <div className="mx-auto max-w-7xl px-2 py-3 sm:px-4 sm:py-5">
+        <section className="grid grid-cols-2 gap-2 md:grid-cols-4">
           <Metric label="Tổng căn hộ" value={String(state.apartments.length)} icon={Building2} />
           <Metric label="Đã thu" value={`${paidApartmentIds.size}/${state.apartments.length}`} icon={ReceiptText} />
           <Metric label="Tổng tháng" value={money.format(totalPaid)} icon={CircleDollarSign} />
@@ -805,14 +812,10 @@ export default function GarbageFeeApp() {
           </TabsList>
 
           <TabsContent value="collect" className="mt-4">
-            <section className="rounded-lg border bg-card p-4">
-              <div className="mb-4 grid gap-3 lg:grid-cols-[150px_170px_170px_minmax(220px,1fr)]">
+            <section className="min-w-0 rounded-lg border bg-card p-2 sm:p-4">
+              <div className="mb-3 grid grid-cols-3 gap-2 [&>div:last-child]:col-span-3 lg:grid-cols-[150px_170px_170px_minmax(220px,1fr)] lg:[&>div:last-child]:col-span-1">
                 <Field label="Tháng">
-                  <Input
-                    type="month"
-                    value={selectedMonth}
-                    onChange={(event) => setSelectedMonth(event.target.value)}
-                  />
+                  <MonthInput value={selectedMonth} onChange={setSelectedMonth} />
                 </Field>
                 <Field label="Khu vực">
                   <NativeSelect
@@ -1090,9 +1093,32 @@ function PasswordChangeScreen({
   );
 }
 
+function MonthInput({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  const display = `${value.slice(5, 7)}/${value.slice(0, 4)}`;
+  const [draft, setDraft] = useState(display);
+  useEffect(() => setDraft(display), [display]);
+  return (
+    <Input
+      aria-label="Tháng (mm/yyyy)"
+      placeholder="09/2026"
+      inputMode="numeric"
+      maxLength={7}
+      value={draft}
+      onChange={(event) => {
+        const raw = event.target.value;
+        setDraft(raw);
+        if (/^(0[1-9]|1[0-2])\/[1-9][0-9]{3}$/.test(raw)) {
+          onChange(`${raw.slice(3)}-${raw.slice(0, 2)}`);
+        }
+      }}
+      onBlur={() => setDraft(display)}
+    />
+  );
+}
+
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="space-y-1.5">
+    <div className="min-w-0 space-y-1.5">
       <Label>{label}</Label>
       {children}
     </div>
@@ -1109,12 +1135,12 @@ function Metric({
   icon: LucideIcon;
 }) {
   return (
-    <div className="rounded-lg border bg-card p-4">
+    <div className="min-w-0 rounded-lg border bg-card p-2.5 sm:p-4">
       <div className="flex items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">{label}</p>
         <Icon className="size-4 text-primary" />
       </div>
-      <p className="mt-2 min-h-8 text-2xl font-semibold">{value}</p>
+      <p className="mt-1 break-words text-lg font-semibold tabular-nums sm:text-2xl">{value}</p>
     </div>
   );
 }
@@ -1155,7 +1181,7 @@ function StatsView({
   return (
     <section className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
       <div className="rounded-lg border bg-card p-4">
-        <h2 className="mb-3 text-base font-semibold">Tổng hợp tháng {month}</h2>
+        <h2 className="mb-3 text-base font-semibold">Tổng hợp tháng {month.slice(5, 7)}/{month.slice(0, 4)}</h2>
         <div className="grid gap-3 sm:grid-cols-2">
           <Metric label="Dự kiến" value={money.format(totalDue)} icon={CalendarDays} />
           <Metric label="Đã thu" value={money.format(totalPaid)} icon={CircleDollarSign} />

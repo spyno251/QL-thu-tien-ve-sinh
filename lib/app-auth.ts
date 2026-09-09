@@ -92,16 +92,16 @@ export async function getSessionUser(db: D1Database, request: Request) {
   return user ?? null;
 }
 
-export async function createSession(db: D1Database, userId: string) {
+export async function createSession(db: D1Database, userId: string, remember = false) {
   const token = crypto.randomUUID();
-  const expiresAt = new Date(Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000);
+  const expiresAt = new Date(Date.now() + (remember ? SESSION_DAYS : 1) * 24 * 60 * 60 * 1000);
   await db
     .prepare('INSERT INTO sessions (id, user_id, expires_at) VALUES (?, ?, ?)')
     .bind(token, userId, expiresAt.toISOString())
     .run();
   return {
     token,
-    cookie: `${SESSION_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; Secure; SameSite=Lax; Expires=${expiresAt.toUTCString()}`,
+    cookie: `${SESSION_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; Secure; SameSite=Lax${remember ? `; Expires=${expiresAt.toUTCString()}` : ''}`,
   };
 }
 
