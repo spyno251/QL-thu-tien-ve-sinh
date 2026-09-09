@@ -235,6 +235,7 @@ export default function GarbageFeeApp() {
   const [remember, setRemember] = useState(false);
   const [loginError, setLoginError] = useState('');
   const [authLoading, setAuthLoading] = useState(true);
+  const [setupRequired, setSetupRequired] = useState(false);
   const [forgotMode, setForgotMode] = useState(false);
   const [forgotEmail, setForgotEmail] = useState('');
   const [forgotMessage, setForgotMessage] = useState('');
@@ -289,9 +290,15 @@ export default function GarbageFeeApp() {
     let active = true;
     fetch('/api/auth')
       .then(async (response) => {
-        if (!response.ok) return null;
-        const payload = (await response.json()) as { user: User };
-        return payload.user;
+        const payload = (await response.json()) as {
+          user?: User;
+          setupRequired?: boolean;
+        };
+        if (payload.setupRequired) {
+          setSetupRequired(true);
+          return null;
+        }
+        return response.ok ? (payload.user ?? null) : null;
       })
       .then(async (user) => {
         if (!active || !user) return;
@@ -777,6 +784,18 @@ export default function GarbageFeeApp() {
         onChanged={(user) => {
           setCurrentUser(user);
           setShowChangePassword(false);
+        }}
+      />
+    );
+  }
+
+  if (setupRequired) {
+    return (
+      <AdminSetupScreen
+        onComplete={(user) => {
+          setCurrentUser(user);
+          setSetupRequired(false);
+          void loadState();
         }}
       />
     );
@@ -1277,6 +1296,112 @@ function getFee(
   const block = lookups.blocks.get(apartment.blockId);
   const region = block ? lookups.regions.get(block.regionId) : null;
   return region?.defaultFee ?? 0;
+}
+
+function AdminSetupScreen({
+  onComplete,
+}: {
+  onComplete: (user: User) => void;
+}) {
+  const [form, setForm] = useState({
+    name: '',
+    phone: '',
+    email: '',
+    password: '',
+  });
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setSaving(true);
+    setError('');
+    try {
+      const response = await fetch('/api/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'setup-admin', ...form }),
+      });
+      const payload = (await response.json()) as {
+        user?: User;
+        error?: string;
+      };
+      if (!response.ok || !payload.user)
+        throw new Error(payload.error ?? 'Không thể tạo admin.');
+      onComplete(payload.user);
+    } catch (reason) {
+      setError(
+        reason instanceof Error ? reason.message : 'Không thể tạo admin.',
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <main className="grid min-h-screen place-items-center bg-[radial-gradient(circle_at_top_left,#d9f0ef_0,#f4f7f4_31%,#f8fafc_68%)] px-4 py-8 text-foreground">
+      <section className="w-full max-w-md rounded-lg border bg-white p-5 shadow-[0_24px_80px_rgba(15,23,42,0.12)]">
+        <div className="mb-5 flex items-center gap-3">
+          <ShieldCheck className="size-10 rounded-lg bg-primary/10 p-2 text-primary" />
+          <div>
+            <h1 className="text-xl font-semibold">Thiết lập admin</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Tạo tài khoản quản trị đầu tiên cho ứng dụng.
+            </p>
+          </div>
+        </div>
+        <form onSubmit={submit} className="space-y-4">
+          <Field label="Tên admin">
+            <Input
+              value={form.name}
+              onChange={(event) =>
+                setForm({ ...form, name: event.target.value })
+              }
+              required
+            />
+          </Field>
+          <Field label="Số điện thoại">
+            <Input
+              inputMode="tel"
+              value={form.phone}
+              onChange={(event) =>
+                setForm({ ...form, phone: event.target.value })
+              }
+              required
+            />
+          </Field>
+          <Field label="Email">
+            <Input
+              type="email"
+              value={form.email}
+              onChange={(event) =>
+                setForm({ ...form, email: event.target.value })
+              }
+              required
+            />
+          </Field>
+          <Field label="Mật khẩu">
+            <Input
+              type="password"
+              minLength={6}
+              value={form.password}
+              onChange={(event) =>
+                setForm({ ...form, password: event.target.value })
+              }
+              required
+            />
+          </Field>
+          {error && (
+            <p className="text-sm font-medium text-destructive">{error}</p>
+          )}
+          <Button type="submit" className="w-full" size="lg" disabled={saving}>
+            <ShieldCheck className="size-4" />
+            {saving ? 'Đang thiết lập...' : 'Tạo tài khoản admin'}
+          </Button>
+        </form>
+      </section>
+    </main>
+  );
 }
 
 function PasswordChangeScreen({

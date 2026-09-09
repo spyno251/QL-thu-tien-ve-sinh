@@ -1,3 +1,5 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
+
 export const DEFAULT_PASSWORD = '123456';
 export const SESSION_COOKIE = 'garbage_fee_session';
 const SESSION_DAYS = 30;
@@ -55,7 +57,12 @@ export async function verifyPassword(password: string, stored: string) {
     ['deriveBits'],
   );
   const bits = await crypto.subtle.deriveBits(
-    { name: 'PBKDF2', hash: 'SHA-256', salt: base64ToBytes(saltValue), iterations },
+    {
+      name: 'PBKDF2',
+      hash: 'SHA-256',
+      salt: base64ToBytes(saltValue),
+      iterations,
+    },
     key,
     256,
   );
@@ -63,7 +70,8 @@ export async function verifyPassword(password: string, stored: string) {
   const expected = base64ToBytes(hashValue);
   if (actual.length !== expected.length) return false;
   let mismatch = 0;
-  for (let index = 0; index < actual.length; index += 1) mismatch |= actual[index] ^ expected[index];
+  for (let index = 0; index < actual.length; index += 1)
+    mismatch |= actual[index] ^ expected[index];
   return mismatch === 0;
 }
 
@@ -76,29 +84,48 @@ export function parseCookie(request: Request, name: string) {
   return null;
 }
 
-export async function getSessionUser(db: D1Database, request: Request) {
+export async function getSessionUser(db: SupabaseClient, request: Request) {
   const token = parseCookie(request, SESSION_COOKIE);
   if (!token) return null;
-  const user = await db
-    .prepare(
-      `SELECT users.id, users.phone, users.password, users.email, users.name, users.role,
-        users.must_change_password AS mustChangePassword
-       FROM sessions
-       JOIN users ON users.id = sessions.user_id
-       WHERE sessions.id = ? AND sessions.expires_at > ?`,
-    )
-    .bind(token, new Date().toISOString())
-    .first<StoredUser>();
-  return user ?? null;
+  const { data: session } = await db
+    .from('sessions')
+    .select('user_id')
+    .eq('id', token)
+    .gt('expires_at', new Date().toISOString())
+    .maybeSingle();
+  if (!session) return null;
+  const { data: user } = await db
+    .from('users')
+    .select('id, phone, password, email, name, role, must_change_password')
+    .eq('id', session.user_id)
+    .maybeSingle();
+  if (!user) return null;
+  return {
+    id: user.id,
+    phone: user.phone,
+    password: user.password,
+    email: user.email,
+    name: user.name,
+    role: user.role,
+    mustChangePassword: Boolean(user.must_change_password),
+  } as StoredUser;
 }
 
-export async function createSession(db: D1Database, userId: string, remember = false) {
+export async function createSession(
+  db: SupabaseClient,
+  userId: string,
+  remember = false,
+) {
   const token = crypto.randomUUID();
-  const expiresAt = new Date(Date.now() + (remember ? SESSION_DAYS : 1) * 24 * 60 * 60 * 1000);
-  await db
-    .prepare('INSERT INTO sessions (id, user_id, expires_at) VALUES (?, ?, ?)')
-    .bind(token, userId, expiresAt.toISOString())
-    .run();
+  const expiresAt = new Date(
+    Date.now() + (remember ? SESSION_DAYS : 1) * 24 * 60 * 60 * 1000,
+  );
+  const { error } = await db.from('sessions').insert({
+    id: token,
+    user_id: userId,
+    expires_at: expiresAt.toISOString(),
+  });
+  if (error) throw error;
   return {
     token,
     cookie: `${SESSION_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; Secure; SameSite=Lax${remember ? `; Expires=${expiresAt.toUTCString()}` : ''}`,
