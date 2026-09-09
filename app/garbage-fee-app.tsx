@@ -275,11 +275,11 @@ export default function GarbageFeeApp() {
     monthlyFee: '300.000',
   });
   const [quickSetup, setQuickSetup] = useState({
-    prefix: 'Galaxy',
+    prefix: 'Vạn phúc',
+    suffix1: 'Galaxy',
     regionStart: '1',
     regionEnd: '8',
-    structure: 'region-block' as 'region-block' | 'region-apartment',
-    blockName: 'Dãy 1',
+    suffix2: 'Căn',
     apartmentStart: '1',
     apartmentEnd: '40',
     defaultFee: '300.000',
@@ -618,21 +618,21 @@ export default function GarbageFeeApp() {
     const apartmentStart = Number.parseInt(quickSetup.apartmentStart, 10);
     const apartmentEnd = Number.parseInt(quickSetup.apartmentEnd, 10);
     const prefix = quickSetup.prefix.trim();
-    const blockName =
-      quickSetup.structure === 'region-apartment'
-        ? ''
-        : quickSetup.blockName.trim() || 'Dãy 1';
+    const suffix1 = quickSetup.suffix1.trim();
+    const suffix2 = quickSetup.suffix2.trim();
     const defaultFee = parseAmount(quickSetup.defaultFee, 300000);
 
     if (
       !prefix ||
+      !suffix1 ||
+      !suffix2 ||
       !Number.isInteger(regionStart) ||
       !Number.isInteger(regionEnd) ||
       !Number.isInteger(apartmentStart) ||
       !Number.isInteger(apartmentEnd) ||
       regionStart < 1 ||
       regionEnd < regionStart ||
-      apartmentStart < 0 ||
+      apartmentStart < 1 ||
       apartmentEnd < apartmentStart
     ) {
       setQuickSetupMessage('Vui lòng kiểm tra lại các khoảng số đã nhập.');
@@ -657,18 +657,18 @@ export default function GarbageFeeApp() {
     const padWidth = Math.max(2, String(apartmentEnd).length);
 
     for (let regionNumber = regionStart; regionNumber <= regionEnd; regionNumber += 1) {
-      const regionName = `${prefix} ${regionNumber}`;
+      const regionName = `${prefix} ${suffix1} ${regionNumber}`.replace(/\s+/g, ' ').trim();
       if (existingNames.has(regionName.toLowerCase())) continue;
       const regionId = uid('region');
       const blockId = uid('block');
       regions.push({ id: regionId, name: regionName, defaultFee });
-      blocks.push({ id: blockId, regionId, name: blockName });
+      blocks.push({ id: blockId, regionId, name: '' });
       addedRegions += 1;
       for (let apartmentNumber = apartmentStart; apartmentNumber <= apartmentEnd; apartmentNumber += 1) {
         apartments.push({
           id: uid('apt'),
           blockId,
-          code: String(apartmentNumber).padStart(padWidth, '0'),
+          code: `${suffix2} ${String(apartmentNumber).padStart(padWidth, '0')}`,
           owner: '',
           monthlyFee: defaultFee,
         });
@@ -1979,20 +1979,20 @@ function AdminAreas(props: {
   deleteApartment: (id: string) => void;
   quickSetup: {
     prefix: string;
+    suffix1: string;
     regionStart: string;
     regionEnd: string;
-    structure: 'region-block' | 'region-apartment';
-    blockName: string;
+    suffix2: string;
     apartmentStart: string;
     apartmentEnd: string;
     defaultFee: string;
   };
   setQuickSetup: (value: {
     prefix: string;
+    suffix1: string;
     regionStart: string;
     regionEnd: string;
-    structure: 'region-block' | 'region-apartment';
-    blockName: string;
+    suffix2: string;
     apartmentStart: string;
     apartmentEnd: string;
     defaultFee: string;
@@ -2014,38 +2014,29 @@ function AdminAreas(props: {
         <div className="mb-3">
           <h2 className="text-base font-semibold">Thêm nhanh khu và căn hộ</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Ví dụ: Galaxy 1 đến Galaxy 8, mỗi khu có Dãy 1 và căn 01 đến 40. Tên chủ hộ có thể bổ sung sau.
+            Ví dụ: Vạn phúc + Galaxy 1 đến 8, mỗi khu có Căn 01 đến 40. Tên chủ hộ có thể bổ sung sau.
           </p>
         </div>
         <form onSubmit={props.addQuickSetup} className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-          <Field label="Tên khu / tiền tố">
+          <Field label="Tiền tố">
             <Input
               value={props.quickSetup.prefix}
               onChange={(event) =>
                 props.setQuickSetup({ ...props.quickSetup, prefix: event.target.value })
               }
-              placeholder="Galaxy"
+              placeholder="Vạn phúc"
               required
             />
           </Field>
-          <Field label="Cấu trúc tạo">
-            <NativeSelect
-              className="w-full"
-              value={props.quickSetup.structure}
+          <Field label="Hậu tố 1">
+            <Input
+              value={props.quickSetup.suffix1}
               onChange={(event) =>
-                props.setQuickSetup({
-                  ...props.quickSetup,
-                  structure: event.target.value as 'region-block' | 'region-apartment',
-                })
+                props.setQuickSetup({ ...props.quickSetup, suffix1: event.target.value })
               }
-            >
-              <NativeSelectOption value="region-block">
-                Khu → Dãy → Căn
-              </NativeSelectOption>
-              <NativeSelectOption value="region-apartment">
-                Khu → Căn (bỏ trống dãy)
-              </NativeSelectOption>
-            </NativeSelect>
+              placeholder="Galaxy"
+              required
+            />
           </Field>
           <Field label="Khu từ - đến">
             <div className="grid grid-cols-2 gap-2">
@@ -2069,14 +2060,14 @@ function AdminAreas(props: {
               />
             </div>
           </Field>
-          <Field label="Tên dãy chung (không bắt buộc)">
+          <Field label="Hậu tố 2">
             <Input
-              value={props.quickSetup.blockName}
-              disabled={props.quickSetup.structure === 'region-apartment'}
+              value={props.quickSetup.suffix2}
               onChange={(event) =>
-                props.setQuickSetup({ ...props.quickSetup, blockName: event.target.value })
+                props.setQuickSetup({ ...props.quickSetup, suffix2: event.target.value })
               }
-              placeholder="Dãy 1"
+              placeholder="Căn"
+              required
             />
           </Field>
           <Field label="Giá mặc định / căn">
