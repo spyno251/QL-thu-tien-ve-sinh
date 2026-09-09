@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, ReactNode, useEffect, useMemo, useState } from 'react';
+import { FormEvent, ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Building2,
   CalendarDays,
@@ -243,6 +243,7 @@ function getBlockDefaultFee(
 
 export default function GarbageFeeApp() {
   const [state, setState] = useState<AppState>(initialState);
+  const commitQueue = useRef(Promise.resolve());
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [loginPhone, setLoginPhone] = useState('0909000001');
   const [loginPassword, setLoginPassword] = useState('admin123');
@@ -277,6 +278,7 @@ export default function GarbageFeeApp() {
     prefix: 'Galaxy',
     regionStart: '1',
     regionEnd: '8',
+    structure: 'region-block' as 'region-block' | 'region-apartment',
     blockName: 'Dãy 1',
     apartmentStart: '1',
     apartmentEnd: '40',
@@ -342,24 +344,27 @@ export default function GarbageFeeApp() {
     setState(nextState);
     setSyncStatus('saving');
 
-    try {
-      const response = await fetch('/api/data', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ state: nextState }),
-      });
-      if (response.status === 401) {
-        setCurrentUser(null);
-        setLoginError('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
-        throw new Error('Session expired');
+    commitQueue.current = commitQueue.current.then(async () => {
+      try {
+        const response = await fetch('/api/data', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ state: nextState }),
+        });
+        if (response.status === 401) {
+          setCurrentUser(null);
+          setLoginError('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+          throw new Error('Session expired');
+        }
+        if (!response.ok) throw new Error('Unable to save');
+        const payload = (await response.json()) as { state?: AppState };
+        if (payload.state) setState(payload.state);
+        setSyncStatus('synced');
+      } catch {
+        setSyncStatus('local');
       }
-      if (!response.ok) throw new Error('Unable to save');
-      const payload = (await response.json()) as { state?: AppState };
-      if (payload.state) setState(payload.state);
-      setSyncStatus('synced');
-    } catch {
-      setSyncStatus('local');
-    }
+    });
+    await commitQueue.current;
   };
 
   const lookups = useMemo(() => {
@@ -613,7 +618,10 @@ export default function GarbageFeeApp() {
     const apartmentStart = Number.parseInt(quickSetup.apartmentStart, 10);
     const apartmentEnd = Number.parseInt(quickSetup.apartmentEnd, 10);
     const prefix = quickSetup.prefix.trim();
-    const blockName = quickSetup.blockName.trim() || 'Dãy 1';
+    const blockName =
+      quickSetup.structure === 'region-apartment'
+        ? ''
+        : quickSetup.blockName.trim() || 'Dãy 1';
     const defaultFee = parseAmount(quickSetup.defaultFee, 300000);
 
     if (
@@ -908,7 +916,7 @@ export default function GarbageFeeApp() {
                 alt=""
                 className="size-5 object-contain"
               />
-              Quản lý thu tiền rác
+              Quản lý thu tiền vệ sinh
             </div>
             <div className="space-y-4">
               <h1 className="max-w-2xl text-4xl font-semibold leading-tight text-slate-950 sm:text-5xl">
@@ -922,7 +930,7 @@ export default function GarbageFeeApp() {
             </div>
             <div className="grid max-w-2xl gap-3 sm:grid-cols-3">
               <Metric
-                label="Căn hộ mẫu"
+                label="Căn hộ"
                 value={formatNumber(state.apartments.length)}
                 icon={Building2}
               />
@@ -1054,13 +1062,6 @@ export default function GarbageFeeApp() {
               </form>
             )}
 
-            {!forgotMode && (
-              <div className="mt-5 rounded-lg bg-muted p-3 text-sm text-muted-foreground">
-                <p className="font-medium text-foreground">Tài khoản thử</p>
-                <p>Admin: 0909000001 / admin123</p>
-                <p>Nhân viên: 0909000002 / 123456</p>
-              </div>
-            )}
           </div>
         </section>
       </main>
@@ -1980,6 +1981,7 @@ function AdminAreas(props: {
     prefix: string;
     regionStart: string;
     regionEnd: string;
+    structure: 'region-block' | 'region-apartment';
     blockName: string;
     apartmentStart: string;
     apartmentEnd: string;
@@ -1989,6 +1991,7 @@ function AdminAreas(props: {
     prefix: string;
     regionStart: string;
     regionEnd: string;
+    structure: 'region-block' | 'region-apartment';
     blockName: string;
     apartmentStart: string;
     apartmentEnd: string;
@@ -2000,6 +2003,8 @@ function AdminAreas(props: {
   const { state } = props;
   const regionName = (id: string) =>
     state.regions.find((item) => item.id === id)?.name ?? '-';
+  const blockLabel = (block: Block) =>
+    block.name ? `${regionName(block.regionId)} / ${block.name}` : regionName(block.regionId);
   const defaultFeeForBlock = (blockId: string) =>
     getBlockDefaultFee(blockId, state.regions, state.blocks);
 
@@ -2023,6 +2028,25 @@ function AdminAreas(props: {
               required
             />
           </Field>
+          <Field label="Cấu trúc tạo">
+            <NativeSelect
+              className="w-full"
+              value={props.quickSetup.structure}
+              onChange={(event) =>
+                props.setQuickSetup({
+                  ...props.quickSetup,
+                  structure: event.target.value as 'region-block' | 'region-apartment',
+                })
+              }
+            >
+              <NativeSelectOption value="region-block">
+                Khu → Dãy → Căn
+              </NativeSelectOption>
+              <NativeSelectOption value="region-apartment">
+                Khu → Căn (bỏ trống dãy)
+              </NativeSelectOption>
+            </NativeSelect>
+          </Field>
           <Field label="Khu từ - đến">
             <div className="grid grid-cols-2 gap-2">
               <Input
@@ -2045,9 +2069,10 @@ function AdminAreas(props: {
               />
             </div>
           </Field>
-          <Field label="Tên dãy chung">
+          <Field label="Tên dãy chung (không bắt buộc)">
             <Input
               value={props.quickSetup.blockName}
+              disabled={props.quickSetup.structure === 'region-apartment'}
               onChange={(event) =>
                 props.setQuickSetup({ ...props.quickSetup, blockName: event.target.value })
               }
@@ -2260,7 +2285,7 @@ function AdminAreas(props: {
             >
               {state.blocks.map((block) => (
                 <NativeSelectOption key={block.id} value={block.id}>
-                  {regionName(block.regionId)} / {block.name}
+                  {blockLabel(block)}
                 </NativeSelectOption>
               ))}
             </NativeSelect>
@@ -2321,7 +2346,7 @@ function AdminAreas(props: {
               >
                 {state.blocks.map((block) => (
                   <NativeSelectOption key={block.id} value={block.id}>
-                    {regionName(block.regionId)} / {block.name}
+                    {blockLabel(block)}
                   </NativeSelectOption>
                 ))}
               </NativeSelect>
