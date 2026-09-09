@@ -24,7 +24,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
+import {
+  NativeSelect,
+  NativeSelectOption,
+} from '@/components/ui/native-select';
 import {
   Table,
   TableBody,
@@ -138,10 +141,34 @@ const initialState: AppState = {
     { id: 'b-b1', regionId: 'r-b', name: 'Dãy B1' },
   ],
   apartments: [
-    { id: 'apt-a101', blockId: 'b-a1', code: 'A1-101', owner: 'Cô Hoa', monthlyFee: null },
-    { id: 'apt-a102', blockId: 'b-a1', code: 'A1-102', owner: 'Anh Nam', monthlyFee: null },
-    { id: 'apt-a201', blockId: 'b-a2', code: 'A2-201', owner: 'Chị Mai', monthlyFee: 70000 },
-    { id: 'apt-b101', blockId: 'b-b1', code: 'B1-101', owner: 'Chú Bình', monthlyFee: null },
+    {
+      id: 'apt-a101',
+      blockId: 'b-a1',
+      code: 'A1-101',
+      owner: 'Cô Hoa',
+      monthlyFee: null,
+    },
+    {
+      id: 'apt-a102',
+      blockId: 'b-a1',
+      code: 'A1-102',
+      owner: 'Anh Nam',
+      monthlyFee: null,
+    },
+    {
+      id: 'apt-a201',
+      blockId: 'b-a2',
+      code: 'A2-201',
+      owner: 'Chị Mai',
+      monthlyFee: 70000,
+    },
+    {
+      id: 'apt-b101',
+      blockId: 'b-b1',
+      code: 'B1-101',
+      owner: 'Chú Bình',
+      monthlyFee: null,
+    },
   ],
   payments: [
     {
@@ -190,9 +217,9 @@ export default function GarbageFeeApp() {
   const [forgotEmail, setForgotEmail] = useState('');
   const [forgotMessage, setForgotMessage] = useState('');
   const [showChangePassword, setShowChangePassword] = useState(false);
-  const [syncStatus, setSyncStatus] = useState<'loading' | 'synced' | 'saving' | 'local'>(
-    'loading',
-  );
+  const [syncStatus, setSyncStatus] = useState<
+    'loading' | 'synced' | 'saving' | 'local'
+  >('loading');
   const [selectedMonth, setSelectedMonth] = useState(monthNow);
   const [selectedRegion, setSelectedRegion] = useState('all');
   const [selectedBlock, setSelectedBlock] = useState('all');
@@ -219,8 +246,10 @@ export default function GarbageFeeApp() {
     const data = (await response.json()) as AppState;
     setState(data);
     setSyncStatus('synced');
-    if (data.regions[0]) setNewBlock((item) => ({ ...item, regionId: data.regions[0].id }));
-    if (data.blocks[0]) setNewApartment((item) => ({ ...item, blockId: data.blocks[0].id }));
+    if (data.regions[0])
+      setNewBlock((item) => ({ ...item, regionId: data.regions[0].id }));
+    if (data.blocks[0])
+      setNewApartment((item) => ({ ...item, blockId: data.blocks[0].id }));
   };
 
   useEffect(() => {
@@ -284,17 +313,31 @@ export default function GarbageFeeApp() {
     .filter((apartment) => {
       const block = lookups.blocks.get(apartment.blockId);
       const regionId = block?.regionId ?? '';
-      const matchesRegion = selectedRegion === 'all' || selectedRegion === regionId;
-      const matchesBlock = selectedBlock === 'all' || selectedBlock === apartment.blockId;
+      const matchesRegion =
+        selectedRegion === 'all' || selectedRegion === regionId;
+      const matchesBlock =
+        selectedBlock === 'all' || selectedBlock === apartment.blockId;
       const text = `${apartment.code} ${apartment.owner}`.toLowerCase();
-      return matchesRegion && matchesBlock && text.includes(query.toLowerCase());
+      return (
+        matchesRegion && matchesBlock && text.includes(query.toLowerCase())
+      );
     })
     .sort((a, b) => a.code.localeCompare(b.code, 'vi'));
 
-  const currentMonthPayments = state.payments.filter((item) => item.month === selectedMonth);
-  const paidApartmentIds = new Set(currentMonthPayments.map((item) => item.apartmentId));
-  const totalDue = state.apartments.reduce((sum, item) => sum + getFee(item, lookups), 0);
-  const totalPaid = currentMonthPayments.reduce((sum, item) => sum + item.amount, 0);
+  const currentMonthPayments = state.payments.filter(
+    (item) => item.month === selectedMonth,
+  );
+  const paidApartmentIds = new Set(
+    currentMonthPayments.map((item) => item.apartmentId),
+  );
+  const totalDue = state.apartments.reduce(
+    (sum, item) => sum + getFee(item, lookups),
+    0,
+  );
+  const totalPaid = currentMonthPayments.reduce(
+    (sum, item) => sum + item.amount,
+    0,
+  );
   const myTotal = currentMonthPayments
     .filter((item) => item.collectorId === currentUser?.id)
     .reduce((sum, item) => sum + item.amount, 0);
@@ -306,15 +349,26 @@ export default function GarbageFeeApp() {
       const response = await fetch('/api/auth', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'login', phone: loginPhone, password: loginPassword, remember }),
+        body: JSON.stringify({
+          action: 'login',
+          phone: loginPhone,
+          password: loginPassword,
+          remember,
+        }),
       });
-      const payload = (await response.json()) as { user?: User; error?: string };
-      if (!response.ok || !payload.user) throw new Error(payload.error ?? 'Đăng nhập thất bại.');
+      const payload = (await response.json()) as {
+        user?: User;
+        error?: string;
+      };
+      if (!response.ok || !payload.user)
+        throw new Error(payload.error ?? 'Đăng nhập thất bại.');
       setCurrentUser(payload.user);
       setLoginError('');
       await loadState();
     } catch (error) {
-      setLoginError(error instanceof Error ? error.message : 'Không thể đăng nhập.');
+      setLoginError(
+        error instanceof Error ? error.message : 'Không thể đăng nhập.',
+      );
     } finally {
       setAuthLoading(false);
     }
@@ -325,7 +379,8 @@ export default function GarbageFeeApp() {
     const defaultAmount = getFee(apartment, lookups);
     const amount = parseAmount(draftAmounts[apartment.id] ?? '', defaultAmount);
     const nextPayments = state.payments.filter(
-      (item) => !(item.apartmentId === apartment.id && item.month === selectedMonth),
+      (item) =>
+        !(item.apartmentId === apartment.id && item.month === selectedMonth),
     );
     const nextState = {
       ...state,
@@ -387,7 +442,10 @@ export default function GarbageFeeApp() {
           user: currentUser.name,
           apartments: state.apartments.length,
           collected: paidApartmentIds.size,
-          uncollected: Math.max(0, state.apartments.length - paidApartmentIds.size),
+          uncollected: Math.max(
+            0,
+            state.apartments.length - paidApartmentIds.size,
+          ),
           totalPaid,
           myTotal,
         };
@@ -412,7 +470,9 @@ export default function GarbageFeeApp() {
       async execute(input) {
         const payload = input as { apartmentCode?: unknown; amount?: unknown };
         const apartmentCode =
-          typeof payload.apartmentCode === 'string' ? payload.apartmentCode.trim() : '';
+          typeof payload.apartmentCode === 'string'
+            ? payload.apartmentCode.trim()
+            : '';
         if (!apartmentCode) throw new Error('apartmentCode is required');
 
         const apartment = state.apartments.find(
@@ -421,9 +481,11 @@ export default function GarbageFeeApp() {
         if (!apartment) throw new Error('Apartment not found');
 
         const existing = state.payments.find(
-          (item) => item.apartmentId === apartment.id && item.month === selectedMonth,
+          (item) =>
+            item.apartmentId === apartment.id && item.month === selectedMonth,
         );
-        if (existing) throw new Error('Apartment is already paid for this month');
+        if (existing)
+          throw new Error('Apartment is already paid for this month');
 
         const amount =
           typeof payload.amount === 'number' && Number.isFinite(payload.amount)
@@ -462,7 +524,9 @@ export default function GarbageFeeApp() {
   const updateRegion = (id: string, patch: Partial<Region>) => {
     void commit({
       ...state,
-      regions: state.regions.map((item) => (item.id === id ? { ...item, ...patch } : item)),
+      regions: state.regions.map((item) =>
+        item.id === id ? { ...item, ...patch } : item,
+      ),
     });
   };
 
@@ -479,7 +543,9 @@ export default function GarbageFeeApp() {
   };
 
   const deleteRegion = (id: string) => {
-    const blockIds = state.blocks.filter((item) => item.regionId === id).map((item) => item.id);
+    const blockIds = state.blocks
+      .filter((item) => item.regionId === id)
+      .map((item) => item.id);
     const apartmentIds = state.apartments
       .filter((item) => blockIds.includes(item.blockId))
       .map((item) => item.id);
@@ -487,8 +553,12 @@ export default function GarbageFeeApp() {
       ...state,
       regions: state.regions.filter((item) => item.id !== id),
       blocks: state.blocks.filter((item) => item.regionId !== id),
-      apartments: state.apartments.filter((item) => !blockIds.includes(item.blockId)),
-      payments: state.payments.filter((item) => !apartmentIds.includes(item.apartmentId)),
+      apartments: state.apartments.filter(
+        (item) => !blockIds.includes(item.blockId),
+      ),
+      payments: state.payments.filter(
+        (item) => !apartmentIds.includes(item.apartmentId),
+      ),
     });
   };
 
@@ -497,7 +567,14 @@ export default function GarbageFeeApp() {
     if (!newBlock.name.trim() || !newBlock.regionId) return;
     void commit({
       ...state,
-      blocks: [...state.blocks, { id: uid('block'), regionId: newBlock.regionId, name: newBlock.name.trim() }],
+      blocks: [
+        ...state.blocks,
+        {
+          id: uid('block'),
+          regionId: newBlock.regionId,
+          name: newBlock.name.trim(),
+        },
+      ],
     });
     setNewBlock({ ...newBlock, name: '' });
   };
@@ -510,14 +587,18 @@ export default function GarbageFeeApp() {
       ...state,
       blocks: state.blocks.filter((item) => item.id !== id),
       apartments: state.apartments.filter((item) => item.blockId !== id),
-      payments: state.payments.filter((item) => !apartmentIds.includes(item.apartmentId)),
+      payments: state.payments.filter(
+        (item) => !apartmentIds.includes(item.apartmentId),
+      ),
     });
   };
 
   const updateBlock = (id: string, patch: Partial<Block>) => {
     void commit({
       ...state,
-      blocks: state.blocks.map((item) => (item.id === id ? { ...item, ...patch } : item)),
+      blocks: state.blocks.map((item) =>
+        item.id === id ? { ...item, ...patch } : item,
+      ),
     });
   };
 
@@ -546,7 +627,9 @@ export default function GarbageFeeApp() {
   const updateApartment = (id: string, patch: Partial<Apartment>) => {
     void commit({
       ...state,
-      apartments: state.apartments.map((item) => (item.id === id ? { ...item, ...patch } : item)),
+      apartments: state.apartments.map((item) =>
+        item.id === id ? { ...item, ...patch } : item,
+      ),
     });
   };
 
@@ -560,7 +643,8 @@ export default function GarbageFeeApp() {
 
   const addUser = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!newUser.name.trim() || !newUser.phone.trim() || !newUser.email.trim()) return;
+    if (!newUser.name.trim() || !newUser.phone.trim() || !newUser.email.trim())
+      return;
     void commit({
       ...state,
       users: [
@@ -581,7 +665,9 @@ export default function GarbageFeeApp() {
   const updateUser = (id: string, patch: Partial<User>) => {
     void commit({
       ...state,
-      users: state.users.map((item) => (item.id === id ? { ...item, ...patch } : item)),
+      users: state.users.map((item) =>
+        item.id === id ? { ...item, ...patch } : item,
+      ),
     });
   };
 
@@ -600,7 +686,11 @@ export default function GarbageFeeApp() {
     const response = await fetch('/api/auth', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'forgot-password', phone: loginPhone, email: forgotEmail }),
+      body: JSON.stringify({
+        action: 'forgot-password',
+        phone: loginPhone,
+        email: forgotEmail,
+      }),
     });
     if (!response.ok) {
       setLoginError('Chưa thể xử lý yêu cầu. Vui lòng thử lại.');
@@ -671,16 +761,30 @@ export default function GarbageFeeApp() {
               </p>
             </div>
             <div className="grid max-w-2xl gap-3 sm:grid-cols-3">
-              <Metric label="Căn hộ mẫu" value={String(state.apartments.length)} icon={Building2} />
-              <Metric label="Đã thu tháng này" value={String(paidApartmentIds.size)} icon={ReceiptText} />
-              <Metric label="Nhân viên" value={String(state.users.length - 1)} icon={UsersRound} />
+              <Metric
+                label="Căn hộ mẫu"
+                value={String(state.apartments.length)}
+                icon={Building2}
+              />
+              <Metric
+                label="Đã thu tháng này"
+                value={String(paidApartmentIds.size)}
+                icon={ReceiptText}
+              />
+              <Metric
+                label="Nhân viên"
+                value={String(state.users.length - 1)}
+                icon={UsersRound}
+              />
             </div>
           </div>
 
           <div className="rounded-lg border bg-white p-5 shadow-[0_24px_80px_rgba(15,23,42,0.12)]">
             <div className="mb-5 flex items-center justify-between gap-4">
               <div>
-                <h2 className="text-xl font-semibold">{forgotMode ? 'Quên mật khẩu' : 'Đăng nhập'}</h2>
+                <h2 className="text-xl font-semibold">
+                  {forgotMode ? 'Quên mật khẩu' : 'Đăng nhập'}
+                </h2>
                 <p className="mt-1 text-sm text-muted-foreground">
                   {forgotMode
                     ? 'Nhập đúng số điện thoại và email đã đăng ký.'
@@ -697,47 +801,94 @@ export default function GarbageFeeApp() {
             {forgotMode ? (
               <form onSubmit={handleForgotPassword} className="space-y-4">
                 <Field label="Số điện thoại">
-                  <Input value={loginPhone} inputMode="tel" onChange={(event) => setLoginPhone(event.target.value)} required />
+                  <Input
+                    value={loginPhone}
+                    inputMode="tel"
+                    onChange={(event) => setLoginPhone(event.target.value)}
+                    required
+                  />
                 </Field>
                 <Field label="Email">
-                  <Input type="email" value={forgotEmail} onChange={(event) => setForgotEmail(event.target.value)} required />
+                  <Input
+                    type="email"
+                    value={forgotEmail}
+                    onChange={(event) => setForgotEmail(event.target.value)}
+                    required
+                  />
                 </Field>
-                {forgotMessage && <p className="rounded-lg bg-primary/10 p-3 text-sm text-primary">{forgotMessage}</p>}
-                {loginError && <p className="text-sm font-medium text-destructive">{loginError}</p>}
+                {forgotMessage && (
+                  <p className="rounded-lg bg-primary/10 p-3 text-sm text-primary">
+                    {forgotMessage}
+                  </p>
+                )}
+                {loginError && (
+                  <p className="text-sm font-medium text-destructive">
+                    {loginError}
+                  </p>
+                )}
                 <Button type="submit" className="w-full" size="lg">
                   <RotateCcw className="size-4" />
                   Đặt lại mật khẩu
                 </Button>
-                <Button type="button" variant="ghost" className="w-full" onClick={() => {
-                  setForgotMode(false);
-                  setForgotMessage('');
-                  setLoginError('');
-                }}>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="w-full"
+                  onClick={() => {
+                    setForgotMode(false);
+                    setForgotMessage('');
+                    setLoginError('');
+                  }}
+                >
                   Quay lại đăng nhập
                 </Button>
               </form>
             ) : (
               <form onSubmit={handleLogin} className="space-y-4">
                 <Field label="Số điện thoại">
-                  <Input value={loginPhone} inputMode="tel" onChange={(event) => setLoginPhone(event.target.value)} required />
+                  <Input
+                    value={loginPhone}
+                    inputMode="tel"
+                    onChange={(event) => setLoginPhone(event.target.value)}
+                    required
+                  />
                 </Field>
                 <Field label="Mật khẩu">
-                  <Input type="password" value={loginPassword} onChange={(event) => setLoginPassword(event.target.value)} required />
+                  <Input
+                    type="password"
+                    value={loginPassword}
+                    onChange={(event) => setLoginPassword(event.target.value)}
+                    required
+                  />
                 </Field>
-                {loginError && <p className="text-sm font-medium text-destructive">{loginError}</p>}
+                {loginError && (
+                  <p className="text-sm font-medium text-destructive">
+                    {loginError}
+                  </p>
+                )}
                 <label className="flex min-h-11 items-center gap-2 text-sm">
                   <Checkbox checked={remember} onCheckedChange={setRemember} />
                   Nhớ mật khẩu
                 </label>
-                <Button type="submit" className="w-full" size="lg" disabled={authLoading}>
+                <Button
+                  type="submit"
+                  className="w-full"
+                  size="lg"
+                  disabled={authLoading}
+                >
                   <Lock className="size-4" />
                   {authLoading ? 'Đang kiểm tra...' : 'Vào app'}
                 </Button>
-                <Button type="button" variant="link" className="w-full" onClick={() => {
-                  setForgotMode(true);
-                  setForgotMessage('');
-                  setLoginError('');
-                }}>
+                <Button
+                  type="button"
+                  variant="link"
+                  className="w-full"
+                  onClick={() => {
+                    setForgotMode(true);
+                    setForgotMessage('');
+                    setLoginError('');
+                  }}
+                >
                   Quên mật khẩu?
                 </Button>
               </form>
@@ -777,17 +928,30 @@ export default function GarbageFeeApp() {
             <div>
               <h1 className="text-lg font-semibold">Thu tiền rác</h1>
               <p className="text-sm text-muted-foreground">
-                {currentUser.name} · {currentUser.role === 'admin' ? 'Admin' : 'Nhân viên'}
+                {currentUser.name} ·{' '}
+                {currentUser.role === 'admin' ? 'Admin' : 'Nhân viên'}
               </p>
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <Badge variant={syncStatus === 'local' ? 'destructive' : 'secondary'}>{syncText}</Badge>
-            <Button type="button" variant="outline" onClick={() => setShowChangePassword(true)}>
+            <Badge
+              variant={syncStatus === 'local' ? 'destructive' : 'secondary'}
+            >
+              {syncText}
+            </Badge>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setShowChangePassword(true)}
+            >
               <KeyRound className="size-4" />
               Đổi mật khẩu
             </Button>
-            <Button type="button" variant="outline" onClick={() => void handleLogout()}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void handleLogout()}
+            >
               <LogOut className="size-4" />
               Đăng xuất
             </Button>
@@ -797,10 +961,26 @@ export default function GarbageFeeApp() {
 
       <div className="mx-auto max-w-7xl px-2 py-3 sm:px-4 sm:py-5">
         <section className="grid grid-cols-2 gap-2 md:grid-cols-4">
-          <Metric label="Tổng căn hộ" value={String(state.apartments.length)} icon={Building2} />
-          <Metric label="Đã thu" value={`${paidApartmentIds.size}/${state.apartments.length}`} icon={ReceiptText} />
-          <Metric label="Tổng tháng" value={money.format(totalPaid)} icon={CircleDollarSign} />
-          <Metric label="Tôi đã thu" value={money.format(myTotal)} icon={UserRound} />
+          <Metric
+            label="Tổng căn hộ"
+            value={String(state.apartments.length)}
+            icon={Building2}
+          />
+          <Metric
+            label="Đã thu"
+            value={`${paidApartmentIds.size}/${state.apartments.length}`}
+            icon={ReceiptText}
+          />
+          <Metric
+            label="Tổng tháng"
+            value={money.format(totalPaid)}
+            icon={CircleDollarSign}
+          />
+          <Metric
+            label="Tôi đã thu"
+            value={money.format(myTotal)}
+            icon={UserRound}
+          />
         </section>
 
         <Tabs defaultValue="collect" className="mt-5">
@@ -815,7 +995,10 @@ export default function GarbageFeeApp() {
             <section className="min-w-0 rounded-lg border bg-card p-2 sm:p-4">
               <div className="mb-3 grid grid-cols-3 gap-2 [&>div:last-child]:col-span-3 lg:grid-cols-[150px_170px_170px_minmax(220px,1fr)] lg:[&>div:last-child]:col-span-1">
                 <Field label="Tháng">
-                  <MonthInput value={selectedMonth} onChange={setSelectedMonth} />
+                  <MonthInput
+                    value={selectedMonth}
+                    onChange={setSelectedMonth}
+                  />
                 </Field>
                 <Field label="Khu vực">
                   <NativeSelect
@@ -875,19 +1058,27 @@ export default function GarbageFeeApp() {
                 <TableBody>
                   {visibleApartments.map((apartment) => {
                     const block = lookups.blocks.get(apartment.blockId);
-                    const region = block ? lookups.regions.get(block.regionId) : null;
+                    const region = block
+                      ? lookups.regions.get(block.regionId)
+                      : null;
                     const payment = currentMonthPayments.find(
                       (item) => item.apartmentId === apartment.id,
                     );
-                    const collector = payment ? lookups.users.get(payment.collectorId) : null;
+                    const collector = payment
+                      ? lookups.users.get(payment.collectorId)
+                      : null;
                     const defaultFee = getFee(apartment, lookups);
                     return (
                       <TableRow key={apartment.id}>
                         <TableCell>
                           <div className="font-medium">{apartment.code}</div>
-                          <div className="text-sm text-muted-foreground">{apartment.owner || 'Chưa có tên'}</div>
+                          <div className="text-sm text-muted-foreground">
+                            {apartment.owner || 'Chưa có tên'}
+                          </div>
                         </TableCell>
-                        <TableCell>{region?.name ?? '-'} / {block?.name ?? '-'}</TableCell>
+                        <TableCell>
+                          {region?.name ?? '-'} / {block?.name ?? '-'}
+                        </TableCell>
                         <TableCell>
                           {payment ? (
                             money.format(payment.amount)
@@ -895,7 +1086,9 @@ export default function GarbageFeeApp() {
                             <Input
                               className="w-32"
                               inputMode="numeric"
-                              value={draftAmounts[apartment.id] ?? String(defaultFee)}
+                              value={
+                                draftAmounts[apartment.id] ?? String(defaultFee)
+                              }
                               onChange={(event) =>
                                 setDraftAmounts({
                                   ...draftAmounts,
@@ -913,15 +1106,21 @@ export default function GarbageFeeApp() {
                         <TableCell>
                           {payment ? (
                             <div>
-                              <div>{collector?.name ?? payment.collectorId}</div>
-                              <div className="text-xs text-muted-foreground">{formatDate(payment.paidAt)}</div>
+                              <div>
+                                {collector?.name ?? payment.collectorId}
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                {formatDate(payment.paidAt)}
+                              </div>
                             </div>
                           ) : (
                             <span className="text-muted-foreground">-</span>
                           )}
                         </TableCell>
                         <TableCell>
-                          {payment && (isAdmin || payment.collectorId === currentUser.id) ? (
+                          {payment &&
+                          (isAdmin ||
+                            payment.collectorId === currentUser.id) ? (
                             <Button
                               type="button"
                               variant="outline"
@@ -931,11 +1130,17 @@ export default function GarbageFeeApp() {
                               Hủy
                             </Button>
                           ) : !payment ? (
-                            <Button type="button" size="sm" onClick={() => recordPayment(apartment)}>
+                            <Button
+                              type="button"
+                              size="sm"
+                              onClick={() => recordPayment(apartment)}
+                            >
                               Thu
                             </Button>
                           ) : (
-                            <span className="text-sm text-muted-foreground">Đã ghi nhận</span>
+                            <span className="text-sm text-muted-foreground">
+                              Đã ghi nhận
+                            </span>
                           )}
                         </TableCell>
                       </TableRow>
@@ -1044,7 +1249,11 @@ function PasswordChangeScreen({
     const response = await fetch('/api/auth', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'change-password', currentPassword, newPassword }),
+      body: JSON.stringify({
+        action: 'change-password',
+        currentPassword,
+        newPassword,
+      }),
     });
     const payload = (await response.json()) as { user?: User; error?: string };
     setSaving(false);
@@ -1061,29 +1270,57 @@ function PasswordChangeScreen({
         <div className="mb-5 flex items-center gap-3">
           <ShieldCheck className="size-10 rounded-lg bg-primary/10 p-2 text-primary" />
           <div>
-            <h1 className="text-xl font-semibold">{required ? 'Tạo mật khẩu mới' : 'Đổi mật khẩu'}</h1>
+            <h1 className="text-xl font-semibold">
+              {required ? 'Tạo mật khẩu mới' : 'Đổi mật khẩu'}
+            </h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              {required ? 'Bạn cần đổi mật khẩu trước khi vào ứng dụng.' : user.name}
+              {required
+                ? 'Bạn cần đổi mật khẩu trước khi vào ứng dụng.'
+                : user.name}
             </p>
           </div>
         </div>
         <form onSubmit={submit} className="space-y-4">
           <Field label="Mật khẩu hiện tại">
-            <Input type="password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} required />
+            <Input
+              type="password"
+              value={currentPassword}
+              onChange={(event) => setCurrentPassword(event.target.value)}
+              required
+            />
           </Field>
           <Field label="Mật khẩu mới">
-            <Input type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} minLength={6} required />
+            <Input
+              type="password"
+              value={newPassword}
+              onChange={(event) => setNewPassword(event.target.value)}
+              minLength={6}
+              required
+            />
           </Field>
           <Field label="Nhập lại mật khẩu mới">
-            <Input type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} minLength={6} required />
+            <Input
+              type="password"
+              value={confirmPassword}
+              onChange={(event) => setConfirmPassword(event.target.value)}
+              minLength={6}
+              required
+            />
           </Field>
-          {error && <p className="text-sm font-medium text-destructive">{error}</p>}
+          {error && (
+            <p className="text-sm font-medium text-destructive">{error}</p>
+          )}
           <Button type="submit" className="w-full" size="lg" disabled={saving}>
             <ShieldCheck className="size-4" />
             {saving ? 'Đang lưu...' : 'Lưu mật khẩu mới'}
           </Button>
           {!required && (
-            <Button type="button" variant="ghost" className="w-full" onClick={onCancel}>
+            <Button
+              type="button"
+              variant="ghost"
+              className="w-full"
+              onClick={onCancel}
+            >
               Quay lại
             </Button>
           )}
@@ -1093,7 +1330,13 @@ function PasswordChangeScreen({
   );
 }
 
-function MonthInput({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+function MonthInput({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+}) {
   const display = `${value.slice(5, 7)}/${value.slice(0, 4)}`;
   const [draft, setDraft] = useState(display);
   useEffect(() => setDraft(display), [display]);
@@ -1140,7 +1383,9 @@ function Metric({
         <p className="text-sm text-muted-foreground">{label}</p>
         <Icon className="size-4 text-primary" />
       </div>
-      <p className="mt-1 break-words text-lg font-semibold tabular-nums sm:text-2xl">{value}</p>
+      <p className="mt-1 break-words text-lg font-semibold tabular-nums sm:text-2xl">
+        {value}
+      </p>
     </div>
   );
 }
@@ -1166,11 +1411,17 @@ function StatsView({
   currentUser: User;
   totalDue: number;
   totalPaid: number;
-  lookups: { regions: Map<string, Region>; blocks: Map<string, Block>; users: Map<string, User> };
+  lookups: {
+    regions: Map<string, Region>;
+    blocks: Map<string, Block>;
+    users: Map<string, User>;
+  };
 }) {
   const payments = state.payments.filter((item) => item.month === month);
   const byUser = state.users.map((user) => {
-    const userPayments = payments.filter((item) => item.collectorId === user.id);
+    const userPayments = payments.filter(
+      (item) => item.collectorId === user.id,
+    );
     return {
       user,
       count: userPayments.length,
@@ -1181,13 +1432,24 @@ function StatsView({
   return (
     <section className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
       <div className="rounded-lg border bg-card p-4">
-        <h2 className="mb-3 text-base font-semibold">Tổng hợp tháng {month.slice(5, 7)}/{month.slice(0, 4)}</h2>
+        <h2 className="mb-3 text-base font-semibold">
+          Tổng hợp tháng {month.slice(5, 7)}/{month.slice(0, 4)}
+        </h2>
         <div className="grid gap-3 sm:grid-cols-2">
-          <Metric label="Dự kiến" value={money.format(totalDue)} icon={CalendarDays} />
-          <Metric label="Đã thu" value={money.format(totalPaid)} icon={CircleDollarSign} />
+          <Metric
+            label="Dự kiến"
+            value={money.format(totalDue)}
+            icon={CalendarDays}
+          />
+          <Metric
+            label="Đã thu"
+            value={money.format(totalPaid)}
+            icon={CircleDollarSign}
+          />
         </div>
         <div className="mt-4 rounded-lg bg-muted p-3 text-sm">
-          Riêng {currentUser.name}: {money.format(
+          Riêng {currentUser.name}:{' '}
+          {money.format(
             payments
               .filter((item) => item.collectorId === currentUser.id)
               .reduce((sum, item) => sum + item.amount, 0),
@@ -1230,12 +1492,18 @@ function StatsView({
           </TableHeader>
           <TableBody>
             {state.payments.slice(0, 12).map((payment) => {
-              const apartment = state.apartments.find((item) => item.id === payment.apartmentId);
+              const apartment = state.apartments.find(
+                (item) => item.id === payment.apartmentId,
+              );
               const collector = lookups.users.get(payment.collectorId);
               return (
                 <TableRow key={payment.id}>
-                  <TableCell>{apartment?.code ?? payment.apartmentId}</TableCell>
-                  <TableCell>{collector?.name ?? payment.collectorId}</TableCell>
+                  <TableCell>
+                    {apartment?.code ?? payment.apartmentId}
+                  </TableCell>
+                  <TableCell>
+                    {collector?.name ?? payment.collectorId}
+                  </TableCell>
                   <TableCell>{formatDate(payment.paidAt)}</TableCell>
                   <TableCell>{money.format(payment.amount)}</TableCell>
                 </TableRow>
@@ -1260,64 +1528,111 @@ function AdminAreas(props: {
   addBlock: (event: FormEvent<HTMLFormElement>) => void;
   updateBlock: (id: string, patch: Partial<Block>) => void;
   deleteBlock: (id: string) => void;
-  newApartment: { blockId: string; code: string; owner: string; monthlyFee: string };
-  setNewApartment: (value: { blockId: string; code: string; owner: string; monthlyFee: string }) => void;
+  newApartment: {
+    blockId: string;
+    code: string;
+    owner: string;
+    monthlyFee: string;
+  };
+  setNewApartment: (value: {
+    blockId: string;
+    code: string;
+    owner: string;
+    monthlyFee: string;
+  }) => void;
   addApartment: (event: FormEvent<HTMLFormElement>) => void;
   updateApartment: (id: string, patch: Partial<Apartment>) => void;
   deleteApartment: (id: string) => void;
 }) {
   const { state } = props;
-  const regionName = (id: string) => state.regions.find((item) => item.id === id)?.name ?? '-';
+  const regionName = (id: string) =>
+    state.regions.find((item) => item.id === id)?.name ?? '-';
 
   return (
-    <section className="grid gap-4 xl:grid-cols-3">
-      <div className="rounded-lg border bg-card p-4">
-        <h2 className="mb-3 text-base font-semibold">Khu vực</h2>
-        <form onSubmit={props.addRegion} className="mb-4 grid gap-2 sm:grid-cols-[1fr_130px_auto]">
+    <section className="grid gap-3 xl:grid-cols-3">
+      <div className="rounded-lg border bg-card p-2.5 sm:p-4">
+        <h2 className="mb-2 text-base font-semibold">Khu vực</h2>
+        <form
+          onSubmit={props.addRegion}
+          className="mb-2 grid grid-cols-[minmax(0,1fr)_96px_auto] gap-1.5 sm:grid-cols-[1fr_130px_auto]"
+        >
           <Input
+            className="h-9 min-w-0"
             placeholder="Tên khu vực"
             value={props.newRegion.name}
-            onChange={(event) => props.setNewRegion({ ...props.newRegion, name: event.target.value })}
+            onChange={(event) =>
+              props.setNewRegion({
+                ...props.newRegion,
+                name: event.target.value,
+              })
+            }
           />
           <Input
+            className="h-9 min-w-0"
             inputMode="numeric"
             value={props.newRegion.defaultFee}
-            onChange={(event) => props.setNewRegion({ ...props.newRegion, defaultFee: event.target.value })}
+            onChange={(event) =>
+              props.setNewRegion({
+                ...props.newRegion,
+                defaultFee: event.target.value,
+              })
+            }
           />
-          <Button type="submit">
+          <Button type="submit" className="h-9 px-2.5 sm:px-4">
             <Plus className="size-4" />
             Thêm
           </Button>
         </form>
-        <div className="space-y-2">
+        <div className="space-y-1.5">
           {state.regions.map((region) => (
-            <div key={region.id} className="grid gap-2 rounded-lg border p-2 sm:grid-cols-[1fr_130px_auto]">
+            <div
+              key={region.id}
+              className="grid grid-cols-[minmax(0,1fr)_96px_38px] gap-1.5 rounded-md border p-1.5 sm:grid-cols-[1fr_130px_38px]"
+            >
               <Input
+                className="h-8 min-w-0"
                 value={region.name}
-                onChange={(event) => props.updateRegion(region.id, { name: event.target.value })}
+                onChange={(event) =>
+                  props.updateRegion(region.id, { name: event.target.value })
+                }
               />
               <Input
+                className="h-8 min-w-0"
                 inputMode="numeric"
                 value={String(region.defaultFee)}
                 onChange={(event) =>
                   props.updateRegion(region.id, {
-                    defaultFee: parseAmount(event.target.value, region.defaultFee),
+                    defaultFee: parseAmount(
+                      event.target.value,
+                      region.defaultFee,
+                    ),
                   })
                 }
               />
-              <IconButton label="Xóa khu vực" onClick={() => props.deleteRegion(region.id)} />
+              <IconButton
+                label="Xóa khu vực"
+                onClick={() => props.deleteRegion(region.id)}
+              />
             </div>
           ))}
         </div>
       </div>
 
-      <div className="rounded-lg border bg-card p-4">
-        <h2 className="mb-3 text-base font-semibold">Dãy</h2>
-        <form onSubmit={props.addBlock} className="mb-4 grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
+      <div className="rounded-lg border bg-card p-2.5 sm:p-4">
+        <h2 className="mb-2 text-base font-semibold">Dãy</h2>
+        <form
+          onSubmit={props.addBlock}
+          className="mb-2 grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-1.5"
+        >
           <NativeSelect
-            className="w-full"
+            className="h-9 min-w-0"
             value={props.newBlock.regionId}
-            onChange={(event) => props.setNewBlock({ ...props.newBlock, regionId: event.target.value })}
+            onChange={(event) =>
+              props.setNewBlock({
+                ...props.newBlock,
+                regionId: event.target.value,
+              })
+            }
           >
             {state.regions.map((region) => (
               <NativeSelectOption key={region.id} value={region.id}>
@@ -1326,22 +1641,30 @@ function AdminAreas(props: {
             ))}
           </NativeSelect>
           <Input
+            className="h-9 min-w-0"
             placeholder="Tên dãy"
             value={props.newBlock.name}
-            onChange={(event) => props.setNewBlock({ ...props.newBlock, name: event.target.value })}
+            onChange={(event) =>
+              props.setNewBlock({ ...props.newBlock, name: event.target.value })
+            }
           />
-          <Button type="submit">
+          <Button type="submit" className="h-9 px-2.5 sm:px-4">
             <Plus className="size-4" />
             Thêm
           </Button>
         </form>
-        <div className="space-y-2">
+        <div className="space-y-1.5">
           {state.blocks.map((block) => (
-            <div key={block.id} className="grid gap-2 rounded-lg border p-2 sm:grid-cols-[1fr_1fr_auto]">
+            <div
+              key={block.id}
+              className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_38px] gap-1.5 rounded-md border p-1.5"
+            >
               <NativeSelect
-                className="w-full"
+                className="h-8 min-w-0"
                 value={block.regionId}
-                onChange={(event) => props.updateBlock(block.id, { regionId: event.target.value })}
+                onChange={(event) =>
+                  props.updateBlock(block.id, { regionId: event.target.value })
+                }
               >
                 {state.regions.map((region) => (
                   <NativeSelectOption key={region.id} value={region.id}>
@@ -1350,67 +1673,95 @@ function AdminAreas(props: {
                 ))}
               </NativeSelect>
               <Input
+                className="h-8 min-w-0"
                 value={block.name}
-                onChange={(event) => props.updateBlock(block.id, { name: event.target.value })}
+                onChange={(event) =>
+                  props.updateBlock(block.id, { name: event.target.value })
+                }
               />
-              <IconButton label="Xóa dãy" onClick={() => props.deleteBlock(block.id)} />
+              <IconButton
+                label="Xóa dãy"
+                onClick={() => props.deleteBlock(block.id)}
+              />
             </div>
           ))}
         </div>
       </div>
 
-      <div className="rounded-lg border bg-card p-4">
-        <h2 className="mb-3 text-base font-semibold">Căn hộ</h2>
-        <form onSubmit={props.addApartment} className="mb-4 grid gap-2">
-          <NativeSelect
-            className="w-full"
-            value={props.newApartment.blockId}
-            onChange={(event) =>
-              props.setNewApartment({ ...props.newApartment, blockId: event.target.value })
-            }
-          >
-            {state.blocks.map((block) => (
-              <NativeSelectOption key={block.id} value={block.id}>
-                {regionName(block.regionId)} / {block.name}
-              </NativeSelectOption>
-            ))}
-          </NativeSelect>
-          <div className="grid gap-2 sm:grid-cols-3">
+      <div className="rounded-lg border bg-card p-2.5 sm:p-4">
+        <h2 className="mb-2 text-base font-semibold">Căn hộ</h2>
+        <form onSubmit={props.addApartment} className="mb-2 grid gap-1.5">
+          <div className="grid grid-cols-[minmax(0,1fr)_minmax(54px,0.8fr)_minmax(0,1fr)_68px_auto] gap-1.5">
+            <NativeSelect
+              className="h-9 min-w-0"
+              value={props.newApartment.blockId}
+              onChange={(event) =>
+                props.setNewApartment({
+                  ...props.newApartment,
+                  blockId: event.target.value,
+                })
+              }
+            >
+              {state.blocks.map((block) => (
+                <NativeSelectOption key={block.id} value={block.id}>
+                  {regionName(block.regionId)} / {block.name}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
             <Input
-              placeholder="Số căn"
+              className="h-9 min-w-0"
+              placeholder="Căn"
               value={props.newApartment.code}
               onChange={(event) =>
-                props.setNewApartment({ ...props.newApartment, code: event.target.value })
+                props.setNewApartment({
+                  ...props.newApartment,
+                  code: event.target.value,
+                })
               }
             />
             <Input
+              className="h-9 min-w-0"
               placeholder="Chủ hộ"
               value={props.newApartment.owner}
               onChange={(event) =>
-                props.setNewApartment({ ...props.newApartment, owner: event.target.value })
+                props.setNewApartment({
+                  ...props.newApartment,
+                  owner: event.target.value,
+                })
               }
             />
             <Input
-              placeholder="Tiền riêng"
+              className="h-9 min-w-0"
+              placeholder="Giá"
               inputMode="numeric"
               value={props.newApartment.monthlyFee}
               onChange={(event) =>
-                props.setNewApartment({ ...props.newApartment, monthlyFee: event.target.value })
+                props.setNewApartment({
+                  ...props.newApartment,
+                  monthlyFee: event.target.value,
+                })
               }
             />
+            <Button type="submit" className="h-9 px-2.5 sm:px-4">
+              <Plus className="size-4" />
+              Thêm
+            </Button>
           </div>
-          <Button type="submit">
-            <Plus className="size-4" />
-            Thêm căn hộ
-          </Button>
         </form>
-        <div className="max-h-[420px] space-y-2 overflow-auto pr-1">
+        <div className="max-h-[420px] space-y-1.5 overflow-auto pr-1">
           {state.apartments.map((apartment) => (
-            <div key={apartment.id} className="grid gap-2 rounded-lg border p-2">
+            <div
+              key={apartment.id}
+              className="grid grid-cols-[minmax(0,1fr)_minmax(54px,0.8fr)_minmax(0,1fr)_68px_32px] gap-1.5 rounded-md border p-1.5"
+            >
               <NativeSelect
-                className="w-full"
+                className="h-8 min-w-0"
                 value={apartment.blockId}
-                onChange={(event) => props.updateApartment(apartment.id, { blockId: event.target.value })}
+                onChange={(event) =>
+                  props.updateApartment(apartment.id, {
+                    blockId: event.target.value,
+                  })
+                }
               >
                 {state.blocks.map((block) => (
                   <NativeSelectOption key={block.id} value={block.id}>
@@ -1418,28 +1769,43 @@ function AdminAreas(props: {
                   </NativeSelectOption>
                 ))}
               </NativeSelect>
-              <div className="grid gap-2 sm:grid-cols-[1fr_1fr_110px_auto]">
-                <Input
-                  value={apartment.code}
-                  onChange={(event) => props.updateApartment(apartment.id, { code: event.target.value })}
-                />
-                <Input
-                  value={apartment.owner}
-                  onChange={(event) => props.updateApartment(apartment.id, { owner: event.target.value })}
-                />
-                <Input
-                  value={apartment.monthlyFee ? String(apartment.monthlyFee) : ''}
-                  placeholder="Mặc định"
-                  onChange={(event) =>
-                    props.updateApartment(apartment.id, {
-                      monthlyFee: event.target.value
-                        ? parseAmount(event.target.value, apartment.monthlyFee ?? 0)
-                        : null,
-                    })
-                  }
-                />
-                <IconButton label="Xóa căn hộ" onClick={() => props.deleteApartment(apartment.id)} />
-              </div>
+              <Input
+                className="h-8 min-w-0"
+                value={apartment.code}
+                onChange={(event) =>
+                  props.updateApartment(apartment.id, {
+                    code: event.target.value,
+                  })
+                }
+              />
+              <Input
+                className="h-8 min-w-0"
+                value={apartment.owner}
+                onChange={(event) =>
+                  props.updateApartment(apartment.id, {
+                    owner: event.target.value,
+                  })
+                }
+              />
+              <Input
+                className="h-8 min-w-0"
+                value={apartment.monthlyFee ? String(apartment.monthlyFee) : ''}
+                placeholder="Mặc định"
+                onChange={(event) =>
+                  props.updateApartment(apartment.id, {
+                    monthlyFee: event.target.value
+                      ? parseAmount(
+                          event.target.value,
+                          apartment.monthlyFee ?? 0,
+                        )
+                      : null,
+                  })
+                }
+              />
+              <IconButton
+                label="Xóa căn hộ"
+                onClick={() => props.deleteApartment(apartment.id)}
+              />
             </div>
           ))}
         </div>
@@ -1452,7 +1818,12 @@ function AdminUsers(props: {
   users: User[];
   currentUserId: string;
   newUser: { name: string; phone: string; email: string; role: Role };
-  setNewUser: (value: { name: string; phone: string; email: string; role: Role }) => void;
+  setNewUser: (value: {
+    name: string;
+    phone: string;
+    email: string;
+    role: Role;
+  }) => void;
   addUser: (event: FormEvent<HTMLFormElement>) => void;
   updateUser: (id: string, patch: Partial<User>) => void;
   deleteUser: (id: string) => void;
@@ -1461,29 +1832,43 @@ function AdminUsers(props: {
   return (
     <section className="rounded-lg border bg-card p-4">
       <h2 className="mb-3 text-base font-semibold">Tài khoản truy cập</h2>
-      <form onSubmit={props.addUser} className="mb-4 grid gap-2 lg:grid-cols-[1fr_150px_1fr_130px_auto]">
+      <form
+        onSubmit={props.addUser}
+        className="mb-4 grid gap-2 lg:grid-cols-[1fr_150px_1fr_130px_auto]"
+      >
         <Input
           placeholder="Tên nhân viên"
           value={props.newUser.name}
-          onChange={(event) => props.setNewUser({ ...props.newUser, name: event.target.value })}
+          onChange={(event) =>
+            props.setNewUser({ ...props.newUser, name: event.target.value })
+          }
         />
         <Input
           placeholder="Số điện thoại"
           inputMode="tel"
           value={props.newUser.phone}
-          onChange={(event) => props.setNewUser({ ...props.newUser, phone: event.target.value })}
+          onChange={(event) =>
+            props.setNewUser({ ...props.newUser, phone: event.target.value })
+          }
         />
         <Input
           type="email"
           placeholder="Email khôi phục"
           value={props.newUser.email}
-          onChange={(event) => props.setNewUser({ ...props.newUser, email: event.target.value })}
+          onChange={(event) =>
+            props.setNewUser({ ...props.newUser, email: event.target.value })
+          }
           required
         />
         <NativeSelect
           className="w-full"
           value={props.newUser.role}
-          onChange={(event) => props.setNewUser({ ...props.newUser, role: event.target.value as Role })}
+          onChange={(event) =>
+            props.setNewUser({
+              ...props.newUser,
+              role: event.target.value as Role,
+            })
+          }
         >
           <NativeSelectOption value="staff">Nhân viên</NativeSelectOption>
           <NativeSelectOption value="admin">Admin</NativeSelectOption>
@@ -1495,7 +1880,9 @@ function AdminUsers(props: {
       </form>
 
       <div className="mb-4 rounded-lg bg-muted p-3 text-sm text-muted-foreground">
-        Tài khoản mới có mật khẩu mặc định <span className="font-semibold text-foreground">123456</span> và phải đổi mật khẩu khi đăng nhập lần đầu.
+        Tài khoản mới có mật khẩu mặc định{' '}
+        <span className="font-semibold text-foreground">123456</span> và phải
+        đổi mật khẩu khi đăng nhập lần đầu.
       </div>
 
       <Table>
@@ -1515,14 +1902,18 @@ function AdminUsers(props: {
               <TableCell>
                 <Input
                   value={user.name}
-                  onChange={(event) => props.updateUser(user.id, { name: event.target.value })}
+                  onChange={(event) =>
+                    props.updateUser(user.id, { name: event.target.value })
+                  }
                 />
               </TableCell>
               <TableCell>
                 <Input
                   value={user.phone}
                   inputMode="tel"
-                  onChange={(event) => props.updateUser(user.id, { phone: event.target.value })}
+                  onChange={(event) =>
+                    props.updateUser(user.id, { phone: event.target.value })
+                  }
                 />
               </TableCell>
               <TableCell>
@@ -1530,22 +1921,34 @@ function AdminUsers(props: {
                   type="email"
                   value={user.email}
                   placeholder="Chưa có email"
-                  onChange={(event) => props.updateUser(user.id, { email: event.target.value })}
+                  onChange={(event) =>
+                    props.updateUser(user.id, { email: event.target.value })
+                  }
                 />
               </TableCell>
               <TableCell>
                 <NativeSelect
                   className="w-full"
                   value={user.role}
-                  onChange={(event) => props.updateUser(user.id, { role: event.target.value as Role })}
+                  onChange={(event) =>
+                    props.updateUser(user.id, {
+                      role: event.target.value as Role,
+                    })
+                  }
                 >
-                  <NativeSelectOption value="staff">Nhân viên</NativeSelectOption>
+                  <NativeSelectOption value="staff">
+                    Nhân viên
+                  </NativeSelectOption>
                   <NativeSelectOption value="admin">Admin</NativeSelectOption>
                 </NativeSelect>
               </TableCell>
               <TableCell>
-                <Badge variant={user.mustChangePassword ? 'outline' : 'secondary'}>
-                  {user.mustChangePassword ? 'Chờ đổi mật khẩu' : 'Đã kích hoạt'}
+                <Badge
+                  variant={user.mustChangePassword ? 'outline' : 'secondary'}
+                >
+                  {user.mustChangePassword
+                    ? 'Chờ đổi mật khẩu'
+                    : 'Đã kích hoạt'}
                 </Badge>
               </TableCell>
               <TableCell>
@@ -1591,6 +1994,7 @@ function IconButton({
       type="button"
       variant="destructive"
       size="icon"
+      className="h-8 w-8 rounded-md"
       aria-label={label}
       title={label}
       disabled={disabled}
