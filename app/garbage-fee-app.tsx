@@ -623,7 +623,6 @@ export default function GarbageFeeApp() {
     const defaultFee = parseAmount(quickSetup.defaultFee, 300000);
 
     if (
-      !prefix ||
       !suffix1 ||
       !suffix2 ||
       !Number.isInteger(regionStart) ||
@@ -657,7 +656,9 @@ export default function GarbageFeeApp() {
     const padWidth = Math.max(2, String(apartmentEnd).length);
 
     for (let regionNumber = regionStart; regionNumber <= regionEnd; regionNumber += 1) {
-      const regionName = `${prefix} ${suffix1} ${regionNumber}`.replace(/\s+/g, ' ').trim();
+      const regionName = [prefix, suffix1, String(regionNumber)]
+        .filter(Boolean)
+        .join(' ');
       if (existingNames.has(regionName.toLowerCase())) continue;
       const regionId = uid('region');
       const blockId = uid('block');
@@ -2018,17 +2019,16 @@ function AdminAreas(props: {
           </p>
         </div>
         <form onSubmit={props.addQuickSetup} className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-          <Field label="Tiền tố">
+          <Field label="Tiền tố (không bắt buộc)">
             <Input
               value={props.quickSetup.prefix}
               onChange={(event) =>
                 props.setQuickSetup({ ...props.quickSetup, prefix: event.target.value })
               }
               placeholder="Vạn phúc"
-              required
             />
           </Field>
-          <Field label="Hậu tố 1">
+          <Field label="Hậu tố 1 / tên khu">
             <Input
               value={props.quickSetup.suffix1}
               onChange={(event) =>
@@ -2223,7 +2223,7 @@ function AdminAreas(props: {
           </Button>
         </form>
         <div className="space-y-1.5">
-          {state.blocks.map((block) => (
+          {state.blocks.filter((block) => block.name.trim()).map((block) => (
             <div
               key={block.id}
               className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_38px] gap-1.5 rounded-md border p-1.5"
