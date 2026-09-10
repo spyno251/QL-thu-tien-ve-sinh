@@ -1257,13 +1257,13 @@ export default function GarbageFeeApp() {
                 </Field>
               </div>
 
-              <Table className="min-w-[600px]">
+              <Table className="min-w-[640px] table-fixed">
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Căn hộ</TableHead>
-                    <TableHead>Nội dung</TableHead>
-                    <TableHead>Giá trị</TableHead>
-                    <TableHead>Thanh toán</TableHead>
+                    <TableHead className="w-1/4 border-r">Căn hộ</TableHead>
+                    <TableHead className="w-1/4 border-r">Nội dung</TableHead>
+                    <TableHead className="w-1/4 border-r">Giá trị</TableHead>
+                    <TableHead className="w-1/4">Thanh toán</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1280,9 +1280,13 @@ export default function GarbageFeeApp() {
                       : null;
                     const defaultFee = getFee(apartment, lookups);
                     return (
-                      <TableRow key={apartment.id} className="align-top">
-                        <TableCell className="w-[210px] min-w-[210px]">
-                          <div className="flex items-center gap-1.5 font-medium">
+                      <TableRow
+                        key={apartment.id}
+                        className="align-top border-b-2 border-primary/35"
+                      >
+                        <TableCell className="w-1/4 border-r p-0 align-top">
+                          <div className="grid min-h-[168px] grid-rows-[40px_44px_44px_40px] divide-y">
+                            <div className="flex items-center gap-1.5 px-3 font-medium">
                             <span>{apartment.code}</span>
                             {apartment.phone && (
                               <a
@@ -1294,10 +1298,10 @@ export default function GarbageFeeApp() {
                                 <Phone className="size-3.5" />
                               </a>
                             )}
-                          </div>
-                          <div className="mt-2 grid grid-cols-2 gap-1.5">
+                            </div>
+                            <div className="flex items-center px-2">
                             <Input
-                              className="h-8 min-w-0 text-sm"
+                              className="h-8 w-full text-sm"
                               defaultValue={apartment.owner}
                               placeholder="Chủ hộ"
                               onBlur={(event) => {
@@ -1307,8 +1311,10 @@ export default function GarbageFeeApp() {
                                 }
                               }}
                             />
-                            <Input
-                              className="h-8 min-w-0 text-sm"
+                            </div>
+                            <div className="flex items-center px-2">
+                              <Input
+                              className="h-8 w-full text-sm"
                               defaultValue={apartment.phone}
                               inputMode="tel"
                               placeholder="SĐT"
@@ -1319,13 +1325,14 @@ export default function GarbageFeeApp() {
                                 }
                               }}
                             />
-                          </div>
-                          <div className="mt-2 text-xs text-muted-foreground">
+                            </div>
+                            <div className="flex items-center px-3 text-xs text-muted-foreground">
                             {region?.name ?? '-'} / {block?.name ?? '-'}
+                            </div>
                           </div>
                         </TableCell>
-                        <TableCell className="w-[84px] min-w-[84px] p-0">
-                          <div className="grid divide-y">
+                        <TableCell className="w-1/4 border-r p-0 align-top">
+                          <div className="grid min-h-[168px] grid-rows-[40px_40px_48px_40px] divide-y">
                             <div className="flex h-10 items-center px-3 text-sm font-medium">
                               Số tiền
                             </div>
@@ -1340,8 +1347,8 @@ export default function GarbageFeeApp() {
                             </div>
                           </div>
                         </TableCell>
-                        <TableCell className="min-w-[160px] p-0">
-                          <div className="grid divide-y">
+                        <TableCell className="w-1/4 border-r p-0 align-top">
+                          <div className="grid min-h-[168px] grid-rows-[40px_40px_48px_40px] divide-y">
                             <div className="flex h-10 items-center px-2">
                           {payment ? (
                             money.format(payment.amount)
@@ -1412,10 +1419,14 @@ export default function GarbageFeeApp() {
                             </div>
                           </div>
                         </TableCell>
-                        <TableCell className="w-[120px] min-w-[120px]">
-                          <div className="flex h-full min-h-[152px] flex-col gap-2">
-                          {payment ? (
-                            <span className="pt-1 text-sm">
+                        <TableCell className="w-1/4 p-0 align-top">
+                          <div className="grid min-h-[168px] grid-rows-[40px_40px_1fr] divide-y">
+                            <div className="flex items-center px-3 text-sm font-medium">
+                              Thanh toán
+                            </div>
+                            <div className="flex items-center px-2">
+                              {payment ? (
+                            <span className="text-sm">
                               {payment.method === 'transfer'
                                 ? 'Chuyển khoản'
                                 : 'Tiền mặt'}
@@ -1435,14 +1446,15 @@ export default function GarbageFeeApp() {
                               <NativeSelectOption value="transfer">Chuyển khoản</NativeSelectOption>
                             </NativeSelect>
                           )}
-                          <div className="mt-auto">
+                            </div>
+                            <div className="p-2">
                             {payment &&
                             (isAdmin ||
                               payment.collectorId === currentUser.id) ? (
                             <Button
                               type="button"
                               variant="outline"
-                              className="w-full"
+                              className="h-full min-h-16 w-full text-base font-semibold"
                               onClick={() => cancelPayment(payment.id)}
                             >
                               Hủy
@@ -1450,7 +1462,7 @@ export default function GarbageFeeApp() {
                           ) : !payment ? (
                             <Button
                               type="button"
-                              className="w-full"
+                              className="h-full min-h-16 w-full text-lg font-bold"
                               onClick={() => recordPayment(apartment)}
                             >
                               Thu tiền
@@ -1460,7 +1472,7 @@ export default function GarbageFeeApp() {
                               Đã ghi nhận
                             </span>
                           )}
-                          </div>
+                            </div>
                           </div>
                         </TableCell>
                       </TableRow>
