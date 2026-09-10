@@ -292,7 +292,9 @@ export default function GarbageFeeApp() {
   const [draftPaymentMethods, setDraftPaymentMethods] = useState<
     Record<string, Payment['method']>
   >({});
-  const [collectionMessage, setCollectionMessage] = useState('');
+  const [paymentCountdown, setPaymentCountdown] = useState<
+    Record<string, number>
+  >({});
   const [newRegion, setNewRegion] = useState({
     name: '',
     defaultFee: '300.000',
@@ -409,6 +411,20 @@ export default function GarbageFeeApp() {
     (block) => selectedRegion === 'all' || block.regionId === selectedRegion,
   );
 
+  useEffect(() => {
+    if (!Object.keys(paymentCountdown).length) return;
+    const timer = window.setTimeout(() => {
+      setPaymentCountdown((current) =>
+        Object.fromEntries(
+          Object.entries(current).flatMap(([apartmentId, seconds]) =>
+            seconds > 1 ? [[apartmentId, seconds - 1]] : [],
+          ),
+        ),
+      );
+    }, 1000);
+    return () => window.clearTimeout(timer);
+  }, [paymentCountdown]);
+
   const currentMonthPayments = state.payments.filter(
     (item) => item.month === selectedMonth,
   );
@@ -427,7 +443,9 @@ export default function GarbageFeeApp() {
       const isPaid = paidApartmentIds.has(apartment.id);
       const matchesPayment =
         paymentFilter === 'all' ||
-        (paymentFilter === 'paid' ? isPaid : !isPaid);
+        (paymentFilter === 'paid'
+          ? isPaid
+          : !isPaid || paymentCountdown[apartment.id] !== undefined);
       const text = `${apartment.code} ${apartment.owner}`.toLowerCase();
       return (
         matchesRegion &&
@@ -511,7 +529,7 @@ export default function GarbageFeeApp() {
       ],
     };
     void commit(nextState);
-    setCollectionMessage(`Đã ghi nhận thu tiền ${apartment.code}.`);
+    setPaymentCountdown((current) => ({ ...current, [apartment.id]: 3 }));
     setDraftPaymentNotes((current) => {
       const { [apartment.id]: _removed, ...remaining } = current;
       return remaining;
@@ -1323,15 +1341,6 @@ export default function GarbageFeeApp() {
                   Tất cả
                 </Button>
               </div>
-              {collectionMessage && (
-                <p
-                  className="mb-3 rounded-md border border-primary/25 bg-primary/10 px-3 py-2 text-sm font-medium text-primary"
-                  aria-live="polite"
-                >
-                  {collectionMessage}
-                </p>
-              )}
-
               <Table className="min-w-[640px] table-fixed">
                 <TableHeader>
                   <TableRow>
@@ -1361,6 +1370,7 @@ export default function GarbageFeeApp() {
                     const collector = payment
                       ? lookups.users.get(payment.collectorId)
                       : null;
+                    const countdown = paymentCountdown[apartment.id];
                     const defaultFee = getFee(apartment, lookups);
                     return (
                       <TableRow
@@ -1529,7 +1539,18 @@ export default function GarbageFeeApp() {
                           )}
                             </div>
                             <div className="p-2">
-                            {payment && isAdmin ? (
+                            {countdown !== undefined ? (
+                            <Button
+                              type="button"
+                              disabled
+                              className="h-full min-h-16 w-full flex-col gap-1 whitespace-normal text-base font-bold disabled:opacity-100"
+                            >
+                              <span>Đã thu tiền</span>
+                              <span className="text-xs font-medium">
+                                Ẩn giao dịch trong {countdown} giây
+                              </span>
+                            </Button>
+                          ) : payment && isAdmin ? (
                             <Button
                               type="button"
                               variant="outline"
