@@ -1001,6 +1001,8 @@ export default function GarbageFeeApp() {
   };
 
   const updateUser = (id: string, patch: Partial<User>) => {
+    if (id === currentUser?.id)
+      setCurrentUser({ ...currentUser, ...patch });
     void commit({
       ...state,
       users: state.users.map((item) =>
@@ -1009,13 +1011,23 @@ export default function GarbageFeeApp() {
     });
   };
 
-  const deleteUser = (id: string) => {
-    if (id === currentUser?.id) return;
-    void commit({
+  const deleteUser = async (id: string) => {
+    const user = state.users.find((item) => item.id === id);
+    if (!user) return;
+    const deletingSelf = id === currentUser?.id;
+    const warning = deletingSelf
+      ? `Xóa chính tài khoản ${user.name}? Bạn sẽ bị đăng xuất ngay và toàn bộ dữ liệu thu, công nợ của tài khoản này cũng bị xóa.`
+      : `Xóa tài khoản ${user.name} cùng toàn bộ dữ liệu thu và công nợ liên quan?`;
+    if (!window.confirm(warning)) return;
+    await commit({
       ...state,
       users: state.users.filter((item) => item.id !== id),
       payments: state.payments.filter((item) => item.collectorId !== id),
+      debtSettlements: state.debtSettlements.filter(
+        (item) => item.staffId !== id && item.confirmedBy !== id,
+      ),
     });
+    if (deletingSelf) await handleLogout();
   };
 
   const handleForgotPassword = async (event: FormEvent<HTMLFormElement>) => {
@@ -1756,7 +1768,6 @@ export default function GarbageFeeApp() {
             {canManage ? (
               <AdminUsers
                 users={state.users}
-                currentUserId={currentUser.id}
                 newUser={newUser}
                 setNewUser={setNewUser}
                 addUser={addUser}
@@ -3384,7 +3395,6 @@ function AdminAreas(props: {
 
 function AdminUsers(props: {
   users: User[];
-  currentUserId: string;
   newUser: { name: string; phone: string; email: string; role: Role };
   setNewUser: (value: {
     name: string;
@@ -3394,7 +3404,7 @@ function AdminUsers(props: {
   }) => void;
   addUser: (event: FormEvent<HTMLFormElement>) => void;
   updateUser: (id: string, patch: Partial<User>) => void;
-  deleteUser: (id: string) => void;
+  deleteUser: (id: string) => Promise<void>;
   resetUserPassword: (id: string) => void;
 }) {
   return (
@@ -3524,22 +3534,19 @@ function AdminUsers(props: {
               </TableCell>
               <TableCell>
                 <div className="flex items-center gap-2">
-                  {user.role !== 'admin' && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      aria-label="Đặt lại mật khẩu"
-                      title="Đặt lại mật khẩu về 123456"
-                      onClick={() => props.resetUserPassword(user.id)}
-                    >
-                      <RotateCcw className="size-4" />
-                    </Button>
-                  )}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    aria-label="Đặt lại mật khẩu"
+                    title="Đặt lại mật khẩu về 123456"
+                    onClick={() => props.resetUserPassword(user.id)}
+                  >
+                    <RotateCcw className="size-4" />
+                  </Button>
                   <IconButton
                     label="Xóa tài khoản"
-                    disabled={user.id === props.currentUserId}
-                    onClick={() => props.deleteUser(user.id)}
+                    onClick={() => void props.deleteUser(user.id)}
                   />
                 </div>
               </TableCell>
