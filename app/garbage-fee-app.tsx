@@ -23,6 +23,13 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import {
   NativeSelect,
@@ -269,7 +276,8 @@ export default function GarbageFeeApp() {
   const [forgotEmail, setForgotEmail] = useState('');
   const [forgotMessage, setForgotMessage] = useState('');
   const [showChangePassword, setShowChangePassword] = useState(false);
-  const [syncStatus, setSyncStatus] = useState<
+  const [showAccountInfo, setShowAccountInfo] = useState(false);
+  const [, setSyncStatus] = useState<
     'loading' | 'synced' | 'saving' | 'local'
   >('loading');
   const [selectedMonth, setSelectedMonth] = useState(monthNow);
@@ -907,6 +915,7 @@ export default function GarbageFeeApp() {
     });
     setCurrentUser(null);
     setShowChangePassword(false);
+    setShowAccountInfo(false);
   };
 
   const resetUserPassword = async (userId: string) => {
@@ -1085,14 +1094,13 @@ export default function GarbageFeeApp() {
   }
 
   const isAdmin = currentUser.role === 'admin';
-  const syncText =
-    syncStatus === 'synced'
-      ? 'Đã đồng bộ'
-      : syncStatus === 'saving'
-        ? 'Đang lưu'
-        : syncStatus === 'loading'
-          ? 'Đang tải'
-          : 'Chế độ dữ liệu mẫu';
+  const accountPayments = state.payments
+    .filter((payment) => payment.collectorId === currentUser.id)
+    .sort((a, b) => b.paidAt.localeCompare(a.paidAt));
+  const accountTotal = accountPayments.reduce(
+    (total, payment) => total + payment.amount,
+    0,
+  );
 
   return (
     <main className={`min-h-screen bg-background text-foreground theme-${state.settings.theme}`}>
@@ -1118,12 +1126,15 @@ export default function GarbageFeeApp() {
               )}
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge
-              variant={syncStatus === 'local' ? 'destructive' : 'secondary'}
+          <div className="grid w-full grid-cols-3 gap-2 sm:flex sm:w-auto">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setShowAccountInfo(true)}
             >
-              {syncText}
-            </Badge>
+              <UserRound className="size-4" />
+              Thông tin tài khoản
+            </Button>
             <Button
               type="button"
               variant="outline"
@@ -1143,6 +1154,17 @@ export default function GarbageFeeApp() {
           </div>
         </div>
       </header>
+
+      <AccountInformationDialog
+        open={showAccountInfo}
+        onOpenChange={setShowAccountInfo}
+        user={currentUser}
+        payments={accountPayments}
+        apartments={state.apartments}
+        blocks={state.blocks}
+        regions={state.regions}
+        total={accountTotal}
+      />
 
       <div className="mx-auto max-w-7xl px-2 py-3 sm:px-4 sm:py-5">
         <section className="grid grid-cols-2 gap-2 md:grid-cols-4">
@@ -1284,18 +1306,18 @@ export default function GarbageFeeApp() {
                         key={apartment.id}
                         className="align-top border-b-2 border-primary/35"
                       >
-                        <TableCell className="w-1/4 border-r p-0 align-top">
+                        <TableCell className="w-1/4 border-r bg-primary/10 p-0 align-top">
                           <div className="grid min-h-[168px] grid-rows-[40px_44px_44px_40px] divide-y">
                             <div className="flex items-center gap-1.5 px-3 font-medium">
                             <span>{apartment.code}</span>
                             {apartment.phone && (
                               <a
                                 href={`tel:${apartment.phone}`}
-                                className="inline-flex size-6 shrink-0 items-center justify-center rounded-md border text-primary hover:bg-primary/10"
+                                className="inline-flex size-8 shrink-0 items-center justify-center rounded-md border-primary bg-primary text-primary-foreground shadow-sm hover:bg-primary/90"
                                 aria-label={`Gọi ${apartment.owner || apartment.code}`}
                                 title={`Gọi ${apartment.phone}`}
                               >
-                                <Phone className="size-3.5" />
+                                <Phone className="size-4" />
                               </a>
                             )}
                             </div>
@@ -1836,6 +1858,134 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
       <Label>{label}</Label>
       {children}
     </div>
+  );
+}
+
+function AccountInformationDialog({
+  open,
+  onOpenChange,
+  user,
+  payments,
+  apartments,
+  blocks,
+  regions,
+  total,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  user: User;
+  payments: Payment[];
+  apartments: Apartment[];
+  blocks: Block[];
+  regions: Region[];
+  total: number;
+}) {
+  const apartmentById = new Map(apartments.map((item) => [item.id, item]));
+  const blockById = new Map(blocks.map((item) => [item.id, item]));
+  const regionById = new Map(regions.map((item) => [item.id, item]));
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[85vh] max-w-[calc(100%-1rem)] overflow-y-auto sm:max-w-3xl">
+        <DialogHeader>
+          <DialogTitle>Thông tin tài khoản</DialogTitle>
+          <DialogDescription>
+            Thông tin cá nhân và các khoản thu do bạn thực hiện.
+          </DialogDescription>
+        </DialogHeader>
+
+        <section className="grid gap-2 sm:grid-cols-2">
+          <div className="rounded-lg border bg-muted/30 p-3">
+            <p className="text-xs text-muted-foreground">Họ tên</p>
+            <p className="mt-1 font-semibold">{user.name}</p>
+          </div>
+          <div className="rounded-lg border bg-muted/30 p-3">
+            <p className="text-xs text-muted-foreground">Vai trò</p>
+            <p className="mt-1 font-semibold">
+              {user.role === 'admin' ? 'Admin' : 'Nhân viên'}
+            </p>
+          </div>
+          <div className="rounded-lg border bg-muted/30 p-3">
+            <p className="text-xs text-muted-foreground">Số điện thoại</p>
+            <p className="mt-1 font-semibold">{user.phone || '-'}</p>
+          </div>
+          <div className="rounded-lg border bg-muted/30 p-3">
+            <p className="text-xs text-muted-foreground">Email</p>
+            <p className="mt-1 break-all font-semibold">{user.email || '-'}</p>
+          </div>
+        </section>
+
+        <section className="rounded-lg border bg-card p-3">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h2 className="font-semibold">Chi tiết đã thu</h2>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                {payments.length} căn đã thu
+              </p>
+            </div>
+            <div className="text-right">
+              <p className="text-xs text-muted-foreground">Tổng tiền</p>
+              <p className="font-semibold tabular-nums text-primary">
+                {money.format(total)}
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-3">
+            <Table className="min-w-[600px]">
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Căn hộ</TableHead>
+                  <TableHead>Khu vực</TableHead>
+                  <TableHead>Kỳ thu</TableHead>
+                  <TableHead>Ngày thu</TableHead>
+                  <TableHead>Số tiền</TableHead>
+                  <TableHead>Thanh toán</TableHead>
+                  <TableHead>Ghi chú</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {payments.map((payment) => {
+                  const apartment = apartmentById.get(payment.apartmentId);
+                  const block = apartment
+                    ? blockById.get(apartment.blockId)
+                    : null;
+                  const region = block
+                    ? regionById.get(block.regionId)
+                    : null;
+                  return (
+                    <TableRow key={payment.id}>
+                      <TableCell>{apartment?.code ?? '-'}</TableCell>
+                      <TableCell>
+                        {region?.name ?? '-'} / {block?.name ?? '-'}
+                      </TableCell>
+                      <TableCell>
+                        {payment.month.slice(5, 7)}/{payment.month.slice(0, 4)}
+                      </TableCell>
+                      <TableCell>{formatDate(payment.paidAt)}</TableCell>
+                      <TableCell>{money.format(payment.amount)}</TableCell>
+                      <TableCell>
+                        {payment.method === 'transfer'
+                          ? 'Chuyển khoản'
+                          : 'Tiền mặt'}
+                      </TableCell>
+                      <TableCell>{payment.note || '-'}</TableCell>
+                    </TableRow>
+                  );
+                })}
+                {!payments.length && (
+                  <TableRow>
+                    <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
+                      Chưa có khoản thu nào.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </section>
+      </DialogContent>
+    </Dialog>
   );
 }
 
