@@ -45,6 +45,21 @@ type DebtSettlement = {
   confirmedBy: string | null;
   status: 'pending' | 'confirmed';
 };
+type UiPreferences = {
+  primaryColor: string;
+  backgroundColor: string;
+  headerAlignment: 'left' | 'center';
+  fontScale: 'small' | 'normal' | 'large';
+  density: 'compact' | 'comfortable' | 'spacious';
+  tableStyle: 'plain' | 'striped' | 'tinted';
+  cornerStyle: 'sharp' | 'soft' | 'rounded';
+  cardStyle: 'flat' | 'bordered' | 'soft';
+  showSubtitle: boolean;
+};
+const defaultUiPreferences: UiPreferences = {
+  primaryColor: '#007563', backgroundColor: '#f4fbfa', headerAlignment: 'left', fontScale: 'normal', density: 'comfortable', tableStyle: 'tinted', cornerStyle: 'soft', cardStyle: 'bordered', showSubtitle: true,
+};
+const themeColors = { teal: '#007563', blue: '#1d5fd1', indigo: '#5d42c6', amber: '#b35d00', rose: '#b8325a' } as const;
 type AppSettings = {
   appName: string;
   subtitle: string;
@@ -52,6 +67,7 @@ type AppSettings = {
   theme: 'teal' | 'blue' | 'indigo' | 'amber' | 'rose';
   showAdminInStats: boolean;
   autoBackupEnabled: boolean;
+  uiPreferences: UiPreferences;
 };
 type AppState = {
   users: User[];
@@ -65,6 +81,24 @@ type AppState = {
 
 function json(data: unknown, status = 200) {
   return Response.json(data, { status });
+}
+
+function normalizeUiPreferences(value: unknown, theme: AppSettings['theme'] = 'teal'): UiPreferences {
+  const source = value && typeof value === 'object' ? value as Record<string, unknown> : {};
+  const pick = <T extends string>(key: string, options: readonly T[], fallback: T) =>
+    typeof source[key] === 'string' && options.includes(source[key] as T) ? source[key] as T : fallback;
+  const color = (key: string, fallback: string) =>
+    typeof source[key] === 'string' && /^#[0-9a-fA-F]{6}$/.test(source[key] as string) ? source[key] as string : fallback;
+  return {
+    primaryColor: color('primaryColor', themeColors[theme]), backgroundColor: color('backgroundColor', defaultUiPreferences.backgroundColor),
+    headerAlignment: pick('headerAlignment', ['left', 'center'], defaultUiPreferences.headerAlignment),
+    fontScale: pick('fontScale', ['small', 'normal', 'large'], defaultUiPreferences.fontScale),
+    density: pick('density', ['compact', 'comfortable', 'spacious'], defaultUiPreferences.density),
+    tableStyle: pick('tableStyle', ['plain', 'striped', 'tinted'], defaultUiPreferences.tableStyle),
+    cornerStyle: pick('cornerStyle', ['sharp', 'soft', 'rounded'], defaultUiPreferences.cornerStyle),
+    cardStyle: pick('cardStyle', ['flat', 'bordered', 'soft'], defaultUiPreferences.cardStyle),
+    showSubtitle: typeof source.showSubtitle === 'boolean' ? source.showSubtitle : defaultUiPreferences.showSubtitle,
+  };
 }
 
 export async function GET(request: Request) {
@@ -291,7 +325,7 @@ export async function POST(request: Request) {
       );
     if (
       currentUser.role === 'manager' &&
-      payload.state.settings.autoBackupEnabled !== existing.settings.autoBackupEnabled
+      JSON.stringify(payload.state.settings) !== JSON.stringify(existing.settings)
     )
       return json({ error: 'Chỉ Admin được thay đổi chế độ sao lưu tự động.' }, 403);
     const nextState =
@@ -407,7 +441,7 @@ async function readState(): Promise<AppState> {
       .order('submitted_at', { ascending: false }),
     db
       .from('app_settings')
-      .select('app_name, subtitle, logo_url, theme, show_admin_in_stats, auto_backup_enabled')
+      .select('app_name, subtitle, logo_url, theme, show_admin_in_stats, auto_backup_enabled, ui_preferences')
       .eq('id', 'default')
       .maybeSingle(),
   ]);
@@ -479,6 +513,7 @@ async function readState(): Promise<AppState> {
       theme: (settingsResult.data?.theme ?? 'teal') as AppSettings['theme'],
       showAdminInStats: Boolean(settingsResult.data?.show_admin_in_stats),
       autoBackupEnabled: Boolean(settingsResult.data?.auto_backup_enabled),
+      uiPreferences: normalizeUiPreferences(settingsResult.data?.ui_preferences, (settingsResult.data?.theme ?? 'teal') as AppSettings['theme']),
     },
   };
 }
@@ -614,6 +649,7 @@ async function saveState(state: AppState) {
         theme: state.settings.theme,
         show_admin_in_stats: state.settings.showAdminInStats,
         auto_backup_enabled: state.settings.autoBackupEnabled,
+        ui_preferences: normalizeUiPreferences(state.settings.uiPreferences),
       })
     ).error,
   );

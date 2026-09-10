@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import { CSSProperties, FormEvent, ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Building2,
   CalendarDays,
@@ -111,6 +111,30 @@ type DebtSettlement = {
   status: 'pending' | 'confirmed';
 };
 
+type UiPreferences = {
+  primaryColor: string;
+  backgroundColor: string;
+  headerAlignment: 'left' | 'center';
+  fontScale: 'small' | 'normal' | 'large';
+  density: 'compact' | 'comfortable' | 'spacious';
+  tableStyle: 'plain' | 'striped' | 'tinted';
+  cornerStyle: 'sharp' | 'soft' | 'rounded';
+  cardStyle: 'flat' | 'bordered' | 'soft';
+  showSubtitle: boolean;
+};
+
+const defaultUiPreferences: UiPreferences = {
+  primaryColor: '#007563', backgroundColor: '#f4fbfa', headerAlignment: 'left', fontScale: 'normal', density: 'comfortable', tableStyle: 'tinted', cornerStyle: 'soft', cardStyle: 'bordered', showSubtitle: true,
+};
+
+const themeColors = {
+  teal: '#007563',
+  blue: '#1d5fd1',
+  indigo: '#5d42c6',
+  amber: '#b35d00',
+  rose: '#b8325a',
+} as const;
+
 type AppSettings = {
   appName: string;
   subtitle: string;
@@ -118,6 +142,7 @@ type AppSettings = {
   theme: 'teal' | 'blue' | 'indigo' | 'amber' | 'rose';
   showAdminInStats: boolean;
   autoBackupEnabled: boolean;
+  uiPreferences: UiPreferences;
 };
 
 type BackupPoint = {
@@ -255,6 +280,7 @@ const initialState: AppState = {
     theme: 'teal',
     showAdminInStats: false,
     autoBackupEnabled: false,
+    uiPreferences: defaultUiPreferences,
   },
 };
 
@@ -1320,9 +1346,12 @@ export default function GarbageFeeApp() {
   );
 
   return (
-    <main className={`min-h-screen bg-background text-foreground theme-${state.settings.theme}`}>
+    <main
+      className={`min-h-screen bg-background text-foreground theme-${state.settings.theme} ui-font-${state.settings.uiPreferences.fontScale} ui-density-${state.settings.uiPreferences.density} ui-table-${state.settings.uiPreferences.tableStyle} ui-corners-${state.settings.uiPreferences.cornerStyle} ui-cards-${state.settings.uiPreferences.cardStyle} ui-header-${state.settings.uiPreferences.headerAlignment}`}
+      style={{ '--primary': state.settings.uiPreferences.primaryColor, '--ring': state.settings.uiPreferences.primaryColor, '--background': state.settings.uiPreferences.backgroundColor } as CSSProperties}
+    >
       <header className="sticky top-0 z-20 border-b bg-background/95 px-4 py-3 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3">
+        <div className="ui-header-content mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <div className="grid size-10 place-items-center overflow-hidden rounded-lg bg-primary/10">
               <img
@@ -1341,7 +1370,7 @@ export default function GarbageFeeApp() {
                     ? 'Quản trị'
                     : 'Nhân viên'}
               </p>
-              {state.settings.subtitle && (
+              {state.settings.uiPreferences.showSubtitle && state.settings.subtitle && (
                 <p className="max-w-[18rem] truncate text-xs text-muted-foreground/80">
                   {state.settings.subtitle}
                 </p>
@@ -2607,6 +2636,10 @@ function CustomizationPanel({
               setDraft((current) => ({
                 ...current,
                 theme: event.target.value as AppSettings['theme'],
+                uiPreferences: {
+                  ...current.uiPreferences,
+                  primaryColor: themeColors[event.target.value as AppSettings['theme']],
+                },
               }))
             }
           >
@@ -2617,6 +2650,100 @@ function CustomizationPanel({
             <NativeSelectOption value="rose">Hồng đỏ</NativeSelectOption>
           </NativeSelect>
         </Field>
+        <ColorField
+          label="Màu chủ đạo riêng"
+          value={draft.uiPreferences.primaryColor}
+          onChange={(primaryColor) =>
+            setDraft((current) => ({
+              ...current,
+              uiPreferences: { ...current.uiPreferences, primaryColor },
+            }))
+          }
+        />
+        <ColorField
+          label="Màu nền ứng dụng"
+          value={draft.uiPreferences.backgroundColor}
+          onChange={(backgroundColor) =>
+            setDraft((current) => ({
+              ...current,
+              uiPreferences: { ...current.uiPreferences, backgroundColor },
+            }))
+          }
+        />
+        <SelectPreference
+          label="Vị trí nội dung Header"
+          value={draft.uiPreferences.headerAlignment}
+          onChange={(headerAlignment) =>
+            setDraft((current) => ({ ...current, uiPreferences: { ...current.uiPreferences, headerAlignment: headerAlignment as UiPreferences['headerAlignment'] } }))
+          }
+          options={[['left', 'Căn trái'], ['center', 'Căn giữa']]}
+        />
+        <SelectPreference
+          label="Kích thước chữ"
+          value={draft.uiPreferences.fontScale}
+          onChange={(fontScale) =>
+            setDraft((current) => ({ ...current, uiPreferences: { ...current.uiPreferences, fontScale: fontScale as UiPreferences['fontScale'] } }))
+          }
+          options={[['small', 'Gọn'], ['normal', 'Tiêu chuẩn'], ['large', 'Lớn']]}
+        />
+        <SelectPreference
+          label="Mật độ nội dung"
+          value={draft.uiPreferences.density}
+          onChange={(density) =>
+            setDraft((current) => ({ ...current, uiPreferences: { ...current.uiPreferences, density: density as UiPreferences['density'] } }))
+          }
+          options={[['compact', 'Gọn'], ['comfortable', 'Thoải mái'], ['spacious', 'Rộng']]}
+        />
+        <SelectPreference
+          label="Kiểu bảng dữ liệu"
+          value={draft.uiPreferences.tableStyle}
+          onChange={(tableStyle) =>
+            setDraft((current) => ({ ...current, uiPreferences: { ...current.uiPreferences, tableStyle: tableStyle as UiPreferences['tableStyle'] } }))
+          }
+          options={[['tinted', 'Tiêu đề màu'], ['striped', 'Dòng xen kẽ'], ['plain', 'Tối giản']]}
+        />
+        <SelectPreference
+          label="Bo góc giao diện"
+          value={draft.uiPreferences.cornerStyle}
+          onChange={(cornerStyle) =>
+            setDraft((current) => ({ ...current, uiPreferences: { ...current.uiPreferences, cornerStyle: cornerStyle as UiPreferences['cornerStyle'] } }))
+          }
+          options={[['sharp', 'Vuông'], ['soft', 'Nhẹ'], ['rounded', 'Bo nhiều']]}
+        />
+        <SelectPreference
+          label="Bề mặt khối thông tin"
+          value={draft.uiPreferences.cardStyle}
+          onChange={(cardStyle) =>
+            setDraft((current) => ({ ...current, uiPreferences: { ...current.uiPreferences, cardStyle: cardStyle as UiPreferences['cardStyle'] } }))
+          }
+          options={[['bordered', 'Có viền'], ['soft', 'Nền nhẹ'], ['flat', 'Phẳng']]}
+        />
+        <label className="flex min-h-11 items-center gap-2 text-sm sm:col-span-2">
+          <Checkbox
+            checked={draft.uiPreferences.showSubtitle}
+            onCheckedChange={(checked) =>
+              setDraft((current) => ({
+                ...current,
+                uiPreferences: { ...current.uiPreferences, showSubtitle: checked },
+              }))
+            }
+          />
+          Hiển thị dòng mô tả ở Header
+        </label>
+        <Button
+          type="button"
+          variant="outline"
+          className="sm:col-span-2"
+          onClick={() =>
+            setDraft((current) => ({
+              ...current,
+              theme: 'teal',
+              uiPreferences: defaultUiPreferences,
+            }))
+          }
+        >
+          Khôi phục giao diện chuẩn
+        </Button>
         <label className="flex min-h-11 items-center gap-2 text-sm sm:col-span-2">
           <Checkbox
             checked={draft.showAdminInStats}
@@ -2704,6 +2831,47 @@ function CustomizationPanel({
         </DialogContent>
       </Dialog>
     </section>
+  );
+}
+
+function ColorField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <Field label={label}>
+      <div className="flex items-center gap-2">
+        <Input type="color" className="h-10 w-14 p-1" value={value} onChange={(event) => onChange(event.target.value)} aria-label={label} />
+        <Input value={value} onChange={(event) => onChange(event.target.value)} maxLength={7} aria-label={`Mã ${label.toLowerCase()}`} />
+      </div>
+    </Field>
+  );
+}
+
+function SelectPreference({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: [string, string][];
+}) {
+  return (
+    <Field label={label}>
+      <NativeSelect className="w-full" value={value} onChange={(event) => onChange(event.target.value)}>
+        {options.map(([optionValue, optionLabel]) => (
+          <NativeSelectOption key={optionValue} value={optionValue}>{optionLabel}</NativeSelectOption>
+        ))}
+      </NativeSelect>
+    </Field>
   );
 }
 
