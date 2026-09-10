@@ -73,7 +73,68 @@ export async function POST(request: Request) {
     if (!currentUser) return json({ error: 'Unauthorized' }, 401);
     if (currentUser.mustChangePassword)
       return json({ error: 'Password change required' }, 403);
-    const payload = (await request.json()) as { state?: AppState };
+    const payload = (await request.json()) as {
+      state?: AppState;
+      action?: string;
+      payment?: Partial<Payment>;
+      paymentId?: string;
+      note?: string;
+    };
+    if (payload.action === 'record-payment') {
+      const payment = payload.payment;
+      if (
+        !payment?.apartmentId ||
+        !/^\d{4}-(0[1-9]|1[0-2])$/.test(String(payment.month)) ||
+        !Number.isInteger(payment.amount) ||
+        Number(payment.amount) <= 0
+      )
+        return json({ error: 'Dữ liệu thanh toán không hợp lệ.' }, 400);
+      const { error } = await db.from('payments').insert({
+        id: crypto.randomUUID(),
+        apartment_id: payment.apartmentId,
+        collector_id: currentUser.id,
+        month: payment.month,
+        paid_at: new Date().toISOString(),
+        amount: payment.amount,
+        note: String(payment.note ?? '').trim(),
+        method: payment.method === 'transfer' ? 'transfer' : 'cash',
+      });
+      if (error?.code === '23505')
+        return json({ error: 'Căn hộ này đã được thu trong kỳ này.' }, 409);
+      if (error) throw error;
+      return json({
+        ok: true,
+        state: visibleState(await readState(), currentUser),
+      });
+    }
+    if (payload.action === 'cancel-payment') {
+      if (currentUser.role !== 'admin')
+        return json({ error: 'Chỉ Admin được hủy khoản thu.' }, 403);
+      const paymentId = String(payload.paymentId ?? '');
+      if (!paymentId) return json({ error: 'Thiếu mã giao dịch.' }, 400);
+      const { error } = await db.from('payments').delete().eq('id', paymentId);
+      if (error) throw error;
+      return json({
+        ok: true,
+        state: visibleState(await readState(), currentUser),
+      });
+    }
+    if (payload.action === 'update-payment-note') {
+      const paymentId = String(payload.paymentId ?? '');
+      if (!paymentId) return json({ error: 'Thiếu mã giao dịch.' }, 400);
+      let update = db
+        .from('payments')
+        .update({ note: String(payload.note ?? '').trim() })
+        .eq('id', paymentId);
+      if (currentUser.role !== 'admin')
+        update = update.eq('collector_id', currentUser.id);
+      const { error } = await update;
+      if (error) throw error;
+      return json({
+        ok: true,
+        state: visibleState(await readState(), currentUser),
+      });
+    }
     if (!payload.state) return json({ error: 'Missing state' }, 400);
     const existing = await readState();
     const nextState =

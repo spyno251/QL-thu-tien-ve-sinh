@@ -295,6 +295,10 @@ export default function GarbageFeeApp() {
   const [paymentCountdown, setPaymentCountdown] = useState<
     Record<string, number>
   >({});
+  const [recordingPayments, setRecordingPayments] = useState<
+    Record<string, boolean>
+  >({});
+  const [paymentError, setPaymentError] = useState('');
   const [newRegion, setNewRegion] = useState({
     name: '',
     defaultFee: '300.000',
@@ -504,56 +508,76 @@ export default function GarbageFeeApp() {
     }
   };
 
-  const recordPayment = (apartment: Apartment) => {
+  const recordPayment = async (apartment: Apartment) => {
     if (!currentUser) return;
+    setRecordingPayments((current) => ({ ...current, [apartment.id]: true }));
+    setPaymentError('');
     const defaultAmount = getFee(apartment, lookups);
     const amount = parseAmount(draftAmounts[apartment.id] ?? '', defaultAmount);
-    const nextPayments = state.payments.filter(
-      (item) =>
-        !(item.apartmentId === apartment.id && item.month === selectedMonth),
-    );
-    const nextState = {
-      ...state,
-      payments: [
-        {
-          id: uid('pay'),
-          apartmentId: apartment.id,
-          collectorId: currentUser.id,
-          month: selectedMonth,
-          paidAt: new Date().toISOString(),
-          amount,
-          note: draftPaymentNotes[apartment.id]?.trim() ?? '',
-          method: draftPaymentMethods[apartment.id] ?? 'cash',
-        },
-        ...nextPayments,
-      ],
-    };
-    void commit(nextState);
-    setPaymentCountdown((current) => ({ ...current, [apartment.id]: 3 }));
-    setDraftPaymentNotes((current) => {
-      const { [apartment.id]: _removed, ...remaining } = current;
-      return remaining;
-    });
-    setDraftPaymentMethods((current) => {
-      const { [apartment.id]: _removed, ...remaining } = current;
-      return remaining;
-    });
+    try {
+      const response = await fetch('/api/data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'record-payment',
+          payment: {
+            apartmentId: apartment.id,
+            month: selectedMonth,
+            amount,
+            note: draftPaymentNotes[apartment.id]?.trim() ?? '',
+            method: draftPaymentMethods[apartment.id] ?? 'cash',
+          },
+        }),
+      });
+      const payload = (await response.json()) as {
+        state?: AppState;
+        error?: string;
+      };
+      if (!response.ok) throw new Error(payload.error ?? 'Chưa thể ghi nhận khoản thu.');
+      if (payload.state) setState(payload.state);
+      setPaymentCountdown((current) => ({ ...current, [apartment.id]: 3 }));
+      setDraftPaymentNotes((current) => {
+        const { [apartment.id]: _removed, ...remaining } = current;
+        return remaining;
+      });
+      setDraftPaymentMethods((current) => {
+        const { [apartment.id]: _removed, ...remaining } = current;
+        return remaining;
+      });
+    } catch (error) {
+      setPaymentError(
+        error instanceof Error ? error.message : 'Chưa thể ghi nhận khoản thu.',
+      );
+    } finally {
+      setRecordingPayments((current) => {
+        const { [apartment.id]: _removed, ...remaining } = current;
+        return remaining;
+      });
+    }
   };
 
-  const updatePayment = (paymentId: string, updates: Partial<Payment>) => {
-    void commit({
-      ...state,
-      payments: state.payments.map((payment) =>
-        payment.id === paymentId ? { ...payment, ...updates } : payment,
-      ),
+  const updatePayment = async (paymentId: string, updates: Partial<Payment>) => {
+    const response = await fetch('/api/data', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'update-payment-note',
+        paymentId,
+        note: updates.note ?? '',
+      }),
     });
+    const payload = (await response.json()) as { state?: AppState };
+    if (response.ok && payload.state) setState(payload.state);
   };
 
-  const cancelPayment = (paymentId: string) => {
-    void commit({
-      ...state,
-      payments: state.payments.filter((item) => item.id !== paymentId),
+  const cancelPayment = async (paymentId: string) => {
+    const response = await fetch('/api/data', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'cancel-payment', paymentId }),
     });
+    const payload = (await response.json()) as { state?: AppState };
+    if (response.ok && payload.state) setState(payload.state);
   };
 
   useEffect(() => {
@@ -1341,6 +1365,11 @@ export default function GarbageFeeApp() {
                   Tất cả
                 </Button>
               </div>
+              {paymentError && (
+                <p className="mb-3 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm font-medium text-destructive">
+                  {paymentError}
+                </p>
+              )}
               <Table className="min-w-[640px] table-fixed">
                 <TableHeader>
                   <TableRow>
@@ -1371,6 +1400,7 @@ export default function GarbageFeeApp() {
                       ? lookups.users.get(payment.collectorId)
                       : null;
                     const countdown = paymentCountdown[apartment.id];
+                    const isRecording = recordingPayments[apartment.id];
                     const defaultFee = getFee(apartment, lookups);
                     return (
                       <TableRow
@@ -1539,7 +1569,15 @@ export default function GarbageFeeApp() {
                           )}
                             </div>
                             <div className="p-2">
-                            {countdown !== undefined ? (
+                            {isRecording ? (
+                            <Button
+                              type="button"
+                              disabled
+                              className="h-full min-h-16 w-full text-base font-bold disabled:opacity-100"
+                            >
+                              Đang ghi nhận...
+                            </Button>
+                          ) : countdown !== undefined ? (
                             <Button
                               type="button"
                               disabled
