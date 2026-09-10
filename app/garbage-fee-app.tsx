@@ -1279,8 +1279,20 @@ export default function GarbageFeeApp() {
                     return (
                       <TableRow key={apartment.id}>
                         <TableCell>
-                          <div className="font-medium">{apartment.code}</div>
-                          <div className="mt-1 flex items-center gap-1.5">
+                          <div className="flex items-center gap-1.5 font-medium">
+                            <span>{apartment.code}</span>
+                            {apartment.phone && (
+                              <a
+                                href={`tel:${apartment.phone}`}
+                                className="inline-flex size-6 shrink-0 items-center justify-center rounded-md border text-primary hover:bg-primary/10"
+                                aria-label={`Gọi ${apartment.owner || apartment.code}`}
+                                title={`Gọi ${apartment.phone}`}
+                              >
+                                <Phone className="size-3.5" />
+                              </a>
+                            )}
+                          </div>
+                          <div className="mt-1 space-y-1.5">
                             <Input
                               className="h-7 w-36 text-sm"
                               defaultValue={apartment.owner}
@@ -1292,22 +1304,19 @@ export default function GarbageFeeApp() {
                                 }
                               }}
                             />
-                            {apartment.phone && (
-                              <a
-                                href={`tel:${apartment.phone}`}
-                                className="inline-flex size-7 shrink-0 items-center justify-center rounded-md border text-primary hover:bg-primary/10"
-                                aria-label={`Gọi ${apartment.owner || apartment.code}`}
-                                title={`Gọi ${apartment.phone}`}
-                              >
-                                <Phone className="size-4" />
-                              </a>
-                            )}
+                            <Input
+                              className="h-7 w-36 text-sm"
+                              defaultValue={apartment.phone}
+                              inputMode="tel"
+                              placeholder="SĐT"
+                              onBlur={(event) => {
+                                const phone = event.target.value.trim();
+                                if (phone !== apartment.phone) {
+                                  updateApartment(apartment.id, { phone });
+                                }
+                              }}
+                            />
                           </div>
-                          {apartment.phone && (
-                            <div className="mt-1 text-xs text-muted-foreground">
-                              {apartment.phone}
-                            </div>
-                          )}
                           <div className="text-xs text-muted-foreground sm:hidden">
                             {region?.name ?? '-'} / {block?.name ?? '-'}
                           </div>
@@ -2443,17 +2452,31 @@ function AdminAreas(props: {
                 })
               }
             />
-            <Input
-              className="h-9 min-w-0"
-              placeholder="Chủ hộ"
-              value={props.newApartment.owner}
-              onChange={(event) =>
-                props.setNewApartment({
-                  ...props.newApartment,
-                  owner: event.target.value,
-                })
-              }
-            />
+            <div className="space-y-1.5">
+              <Input
+                className="h-9 min-w-0"
+                placeholder="Chủ hộ"
+                value={props.newApartment.owner}
+                onChange={(event) =>
+                  props.setNewApartment({
+                    ...props.newApartment,
+                    owner: event.target.value,
+                  })
+                }
+              />
+              <Input
+                className="h-9 min-w-0"
+                placeholder="SĐT"
+                inputMode="tel"
+                value={props.newApartment.phone}
+                onChange={(event) =>
+                  props.setNewApartment({
+                    ...props.newApartment,
+                    phone: event.target.value,
+                  })
+                }
+              />
+            </div>
             <Input
               className="h-9 min-w-0"
               placeholder="Giá"
@@ -2471,18 +2494,6 @@ function AdminAreas(props: {
               Thêm
             </Button>
           </div>
-          <Input
-            className="h-9"
-            placeholder="Số điện thoại chủ hộ"
-            inputMode="tel"
-            value={props.newApartment.phone}
-            onChange={(event) =>
-              props.setNewApartment({
-                ...props.newApartment,
-                phone: event.target.value,
-              })
-            }
-          />
         </form>
         <div className="max-h-[420px] space-y-1.5 overflow-auto pr-1">
           {state.apartments.map((apartment) => (
@@ -2514,15 +2525,29 @@ function AdminAreas(props: {
                   })
                 }
               />
-              <Input
-                className="h-8 min-w-0"
-                value={apartment.owner}
-                onChange={(event) =>
-                  props.updateApartment(apartment.id, {
-                    owner: event.target.value,
-                  })
-                }
-              />
+              <div className="space-y-1.5">
+                <Input
+                  className="h-8 min-w-0"
+                  value={apartment.owner}
+                  placeholder="Chủ hộ"
+                  onChange={(event) =>
+                    props.updateApartment(apartment.id, {
+                      owner: event.target.value,
+                    })
+                  }
+                />
+                <Input
+                  className="h-8 min-w-0"
+                  placeholder="SĐT"
+                  inputMode="tel"
+                  value={apartment.phone}
+                  onChange={(event) =>
+                    props.updateApartment(apartment.id, {
+                      phone: event.target.value,
+                    })
+                  }
+                />
+              </div>
               <Input
                 className="h-8 min-w-0"
                 value={
@@ -2543,17 +2568,6 @@ function AdminAreas(props: {
               <IconButton
                 label="Xóa căn hộ"
                 onClick={() => props.deleteApartment(apartment.id)}
-              />
-              <Input
-                className="h-8 sm:col-span-5"
-                placeholder="Số điện thoại chủ hộ"
-                inputMode="tel"
-                value={apartment.phone}
-                onChange={(event) =>
-                  props.updateApartment(apartment.id, {
-                    phone: event.target.value,
-                  })
-                }
               />
             </div>
           ))}
