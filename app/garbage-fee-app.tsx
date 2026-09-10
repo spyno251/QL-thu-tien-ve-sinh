@@ -5,12 +5,15 @@ import {
   Building2,
   CalendarDays,
   CircleDollarSign,
+  FileSpreadsheet,
+  FileText,
   KeyRound,
   Lock,
   LogOut,
   Mail,
   Pencil,
   Plus,
+  Printer,
   Phone,
   ReceiptText,
   RotateCcw,
@@ -32,6 +35,12 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import {
   NativeSelect,
   NativeSelectOption,
@@ -2758,9 +2767,100 @@ function StatsView({
   const selectedPayments = payments.filter(
     (payment) => payment.collectorId === selectedCollectorId,
   );
+  const detailRows = payments.map((payment) => {
+    const apartment = state.apartments.find((item) => item.id === payment.apartmentId);
+    const block = apartment ? lookups.blocks.get(apartment.blockId) : undefined;
+    const region = block ? lookups.regions.get(block.regionId) : undefined;
+    const collector = lookups.users.get(payment.collectorId);
+    return {
+      apartment: apartment?.code ?? payment.apartmentId,
+      area: `${region?.name ?? '-'} / ${block?.name ?? '-'}`,
+      collector: collector?.name ?? payment.collectorId,
+      paidAt: formatDate(payment.paidAt),
+      amount: payment.amount,
+      method: payment.method === 'transfer' ? 'Chuyển khoản' : 'Tiền mặt',
+      note: payment.note || '-',
+    };
+  });
+
+  const exportExcel = async () => {
+    const XLSX = await import('xlsx');
+    const summaryRows = byUser.map(({ user, count, total, settled, outstanding }) => ({
+      'Nhân viên': user.name,
+      'Số căn': count,
+      'Tổng tiền': total,
+      'Đã nộp': settled,
+      'Còn nợ': outstanding,
+    }));
+    const workbook = XLSX.utils.book_new();
+    const summary = XLSX.utils.aoa_to_sheet([
+      ['BÁO CÁO THỐNG KÊ THU TIỀN VỆ SINH'],
+      ['Kỳ thu', `${month.slice(5, 7)}/${month.slice(0, 4)}`],
+      ['Dự kiến', totalDue],
+      ['Đã thu', totalPaid],
+      [],
+    ]);
+    XLSX.utils.sheet_add_json(summary, summaryRows, { origin: 'A7' });
+    summary['!cols'] = [{ wch: 22 }, { wch: 12 }, { wch: 18 }, { wch: 18 }, { wch: 18 }];
+    const details = XLSX.utils.json_to_sheet(
+      detailRows.map((row) => ({
+        'Căn hộ': row.apartment,
+        'Khu vực': row.area,
+        'Người thu': row.collector,
+        'Ngày thu': row.paidAt,
+        'Số tiền': row.amount,
+        'Thanh toán': row.method,
+        'Ghi chú': row.note,
+      })),
+    );
+    details['!cols'] = [{ wch: 18 }, { wch: 24 }, { wch: 20 }, { wch: 14 }, { wch: 16 }, { wch: 18 }, { wch: 32 }];
+    XLSX.utils.book_append_sheet(workbook, summary, 'Tổng hợp');
+    XLSX.utils.book_append_sheet(workbook, details, 'Chi tiết thu');
+    XLSX.writeFile(workbook, `Thong-ke-thu-ve-sinh-${month}.xlsx`);
+  };
+
+  const printReport = (forPdf: boolean) => {
+    const escapeHtml = (value: string) =>
+      value.replace(/[&<>'"]/g, (character) =>
+        ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#039;', '"': '&quot;' })[character] ?? character,
+      );
+    const reportWindow = window.open('', '_blank', 'noopener,noreferrer');
+    if (!reportWindow) return;
+    const employeeRows = byUser
+      .map(({ user, count, total, settled, outstanding }) =>
+        `<tr><td>${escapeHtml(user.name)}</td><td>${formatNumber(count)}</td><td>${money.format(total)}</td><td>${money.format(settled)}</td><td>${money.format(outstanding)}</td></tr>`,
+      )
+      .join('');
+    const paymentRows = detailRows
+      .map((row) =>
+        `<tr><td>${escapeHtml(row.apartment)}</td><td>${escapeHtml(row.area)}</td><td>${escapeHtml(row.collector)}</td><td>${escapeHtml(row.paidAt)}</td><td>${money.format(row.amount)}</td><td>${escapeHtml(row.method)}</td><td>${escapeHtml(row.note)}</td></tr>`,
+      )
+      .join('');
+    reportWindow.document.write(`<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>Thống kê ${month}</title><style>body{font-family:Arial,sans-serif;color:#102a30;padding:28px}h1{margin:0 0 6px;font-size:24px}p{margin:0 0 20px;color:#547077}.summary{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-bottom:24px}.metric{border:1px solid #bdd9d5;border-radius:6px;padding:12px}.metric span{display:block;color:#587277;font-size:12px}.metric strong{font-size:19px}h2{font-size:17px;margin:24px 0 10px}table{border-collapse:collapse;width:100%;font-size:12px}th{background:#006d5a;color:#fff}th,td{border:1px solid #bdd9d5;padding:8px;text-align:left;vertical-align:top}@page{size:A4 landscape;margin:12mm}@media print{body{padding:0}}</style></head><body><h1>Báo cáo thu tiền vệ sinh</h1><p>Kỳ thu: ${month.slice(5, 7)}/${month.slice(0, 4)}${forPdf ? ' · Chọn “Lưu dưới dạng PDF” trong hộp in.' : ''}</p><div class="summary"><div class="metric"><span>Dự kiến</span><strong>${money.format(totalDue)}</strong></div><div class="metric"><span>Đã thu</span><strong>${money.format(totalPaid)}</strong></div></div><h2>Theo nhân viên</h2><table><thead><tr><th>Nhân viên</th><th>Số căn</th><th>Tổng tiền</th><th>Đã nộp</th><th>Còn nợ</th></tr></thead><tbody>${employeeRows || '<tr><td colspan="5">Chưa có dữ liệu</td></tr>'}</tbody></table><h2>Chi tiết thu trong kỳ</h2><table><thead><tr><th>Căn hộ</th><th>Khu vực</th><th>Người thu</th><th>Ngày thu</th><th>Số tiền</th><th>Thanh toán</th><th>Ghi chú</th></tr></thead><tbody>${paymentRows || '<tr><td colspan="7">Chưa có khoản thu</td></tr>'}</tbody></table></body></html>`);
+    reportWindow.document.close();
+    window.setTimeout(() => reportWindow.print(), 250);
+  };
 
   return (
     <section className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
+      <div className="flex justify-end lg:col-span-2">
+        <DropdownMenu>
+          <DropdownMenuTrigger render={<Button type="button" variant="outline" />}>
+            Xuất dữ liệu thống kê
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={() => void exportExcel()}>
+              <FileSpreadsheet className="size-4" /> Xuất Excel
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => printReport(true)}>
+              <FileText className="size-4" /> Xuất PDF
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => printReport(false)}>
+              <Printer className="size-4" /> In
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
       <div className="rounded-lg border bg-card p-4">
         <h2 className="mb-3 text-base font-semibold">
           Tổng hợp tháng {month.slice(5, 7)}/{month.slice(0, 4)}
