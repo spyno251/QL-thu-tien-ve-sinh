@@ -10,6 +10,7 @@ import {
   LogOut,
   Mail,
   Plus,
+  Phone,
   ReceiptText,
   RotateCcw,
   Search,
@@ -65,6 +66,7 @@ type Apartment = {
   blockId: string;
   code: string;
   owner: string;
+  phone: string;
   note: string;
   monthlyFee: number | null;
 };
@@ -77,6 +79,7 @@ type Payment = {
   paidAt: string;
   amount: number;
   note: string;
+  method: 'cash' | 'transfer';
 };
 
 type AppSettings = {
@@ -155,6 +158,7 @@ const initialState: AppState = {
       blockId: 'b-a1',
       code: 'A1-101',
       owner: 'Cô Hoa',
+      phone: '',
       note: '',
       monthlyFee: null,
     },
@@ -163,6 +167,7 @@ const initialState: AppState = {
       blockId: 'b-a1',
       code: 'A1-102',
       owner: 'Anh Nam',
+      phone: '',
       note: '',
       monthlyFee: null,
     },
@@ -171,6 +176,7 @@ const initialState: AppState = {
       blockId: 'b-a2',
       code: 'A2-201',
       owner: 'Chị Mai',
+      phone: '',
       note: '',
       monthlyFee: 70000,
     },
@@ -179,6 +185,7 @@ const initialState: AppState = {
       blockId: 'b-b1',
       code: 'B1-101',
       owner: 'Chú Bình',
+      phone: '',
       note: '',
       monthlyFee: null,
     },
@@ -192,6 +199,7 @@ const initialState: AppState = {
       paidAt: new Date().toISOString(),
       amount: 50000,
       note: '',
+      method: 'cash',
     },
   ],
   settings: {
@@ -270,6 +278,9 @@ export default function GarbageFeeApp() {
   const [query, setQuery] = useState('');
   const [draftAmounts, setDraftAmounts] = useState<Record<string, string>>({});
   const [draftPaymentNotes, setDraftPaymentNotes] = useState<Record<string, string>>({});
+  const [draftPaymentMethods, setDraftPaymentMethods] = useState<
+    Record<string, Payment['method']>
+  >({});
   const [newRegion, setNewRegion] = useState({
     name: '',
     defaultFee: '300.000',
@@ -279,6 +290,7 @@ export default function GarbageFeeApp() {
     blockId: 'b-a1',
     code: '',
     owner: '',
+    phone: '',
     monthlyFee: '300.000',
   });
   const [quickSetup, setQuickSetup] = useState({
@@ -469,12 +481,17 @@ export default function GarbageFeeApp() {
           paidAt: new Date().toISOString(),
           amount,
           note: draftPaymentNotes[apartment.id]?.trim() ?? '',
+          method: draftPaymentMethods[apartment.id] ?? 'cash',
         },
         ...nextPayments,
       ],
     };
     void commit(nextState);
     setDraftPaymentNotes((current) => {
+      const { [apartment.id]: _removed, ...remaining } = current;
+      return remaining;
+    });
+    setDraftPaymentMethods((current) => {
       const { [apartment.id]: _removed, ...remaining } = current;
       return remaining;
     });
@@ -580,6 +597,7 @@ export default function GarbageFeeApp() {
           paidAt: new Date().toISOString(),
           amount,
           note: '',
+          method: 'cash',
         };
         await commit({ ...state, payments: [payment, ...state.payments] });
         return {
@@ -684,6 +702,7 @@ export default function GarbageFeeApp() {
           blockId,
           code: `${suffix2} ${String(apartmentNumber).padStart(padWidth, '0')}`,
           owner: '',
+          phone: '',
           note: '',
           monthlyFee: defaultFee,
         });
@@ -777,6 +796,7 @@ export default function GarbageFeeApp() {
           blockId: newApartment.blockId,
           code: newApartment.code.trim(),
           owner: newApartment.owner.trim(),
+          phone: newApartment.phone.trim(),
           note: '',
           monthlyFee,
         },
@@ -786,6 +806,7 @@ export default function GarbageFeeApp() {
       ...newApartment,
       code: '',
       owner: '',
+      phone: '',
       monthlyFee: formatNumber(
         getBlockDefaultFee(newApartment.blockId, state.regions, state.blocks),
       ),
@@ -1238,6 +1259,7 @@ export default function GarbageFeeApp() {
                     <TableHead>Trạng thái</TableHead>
                     <TableHead>Người thu</TableHead>
                     <TableHead>Ghi chú</TableHead>
+                    <TableHead>Thanh toán</TableHead>
                     <TableHead>Thao tác</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -1258,9 +1280,34 @@ export default function GarbageFeeApp() {
                       <TableRow key={apartment.id}>
                         <TableCell>
                           <div className="font-medium">{apartment.code}</div>
-                          <div className="text-sm text-muted-foreground">
-                            {apartment.owner || 'Chưa có tên'}
+                          <div className="mt-1 flex items-center gap-1.5">
+                            <Input
+                              className="h-7 w-36 text-sm"
+                              defaultValue={apartment.owner}
+                              placeholder="Chủ hộ"
+                              onBlur={(event) => {
+                                const owner = event.target.value.trim();
+                                if (owner !== apartment.owner) {
+                                  updateApartment(apartment.id, { owner });
+                                }
+                              }}
+                            />
+                            {apartment.phone && (
+                              <a
+                                href={`tel:${apartment.phone}`}
+                                className="inline-flex size-7 shrink-0 items-center justify-center rounded-md border text-primary hover:bg-primary/10"
+                                aria-label={`Gọi ${apartment.owner || apartment.code}`}
+                                title={`Gọi ${apartment.phone}`}
+                              >
+                                <Phone className="size-4" />
+                              </a>
+                            )}
                           </div>
+                          {apartment.phone && (
+                            <div className="mt-1 text-xs text-muted-foreground">
+                              {apartment.phone}
+                            </div>
+                          )}
                           <div className="text-xs text-muted-foreground sm:hidden">
                             {region?.name ?? '-'} / {block?.name ?? '-'}
                           </div>
@@ -1326,6 +1373,25 @@ export default function GarbageFeeApp() {
                                 })
                               }
                             />
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {payment ? (
+                            payment.method === 'transfer' ? 'Chuyển khoản' : 'Tiền mặt'
+                          ) : (
+                            <NativeSelect
+                              className="w-32"
+                              value={draftPaymentMethods[apartment.id] ?? 'cash'}
+                              onChange={(event) =>
+                                setDraftPaymentMethods({
+                                  ...draftPaymentMethods,
+                                  [apartment.id]: event.target.value as Payment['method'],
+                                })
+                              }
+                            >
+                              <NativeSelectOption value="cash">Tiền mặt</NativeSelectOption>
+                              <NativeSelectOption value="transfer">Chuyển khoản</NativeSelectOption>
+                            </NativeSelect>
                           )}
                         </TableCell>
                         <TableCell>
@@ -1960,6 +2026,7 @@ function StatsView({
                   <TableHead>Ngày thu</TableHead>
                   <TableHead>Số tiền</TableHead>
                   <TableHead>Ghi chú</TableHead>
+                  <TableHead>Thanh toán</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -1975,6 +2042,9 @@ function StatsView({
                       <TableCell>{formatDate(payment.paidAt)}</TableCell>
                       <TableCell>{money.format(payment.amount)}</TableCell>
                       <TableCell>{payment.note || '-'}</TableCell>
+                      <TableCell>
+                        {payment.method === 'transfer' ? 'Chuyển khoản' : 'Tiền mặt'}
+                      </TableCell>
                     </TableRow>
                   );
                 })}
@@ -1996,6 +2066,7 @@ function StatsView({
               <TableHead>Căn hộ</TableHead>
               <TableHead>Người thu</TableHead>
               <TableHead>Ghi chú</TableHead>
+              <TableHead>Thanh toán</TableHead>
               <TableHead>Ngày thu</TableHead>
               <TableHead>Số tiền</TableHead>
             </TableRow>
@@ -2015,6 +2086,9 @@ function StatsView({
                     {collector?.name ?? payment.collectorId}
                   </TableCell>
                   <TableCell>{payment.note || '-'}</TableCell>
+                  <TableCell>
+                    {payment.method === 'transfer' ? 'Chuyển khoản' : 'Tiền mặt'}
+                  </TableCell>
                   <TableCell>{formatDate(payment.paidAt)}</TableCell>
                   <TableCell>{money.format(payment.amount)}</TableCell>
                 </TableRow>
@@ -2043,12 +2117,14 @@ function AdminAreas(props: {
     blockId: string;
     code: string;
     owner: string;
+    phone: string;
     monthlyFee: string;
   };
   setNewApartment: (value: {
     blockId: string;
     code: string;
     owner: string;
+    phone: string;
     monthlyFee: string;
   }) => void;
   addApartment: (event: FormEvent<HTMLFormElement>) => void;
@@ -2395,6 +2471,18 @@ function AdminAreas(props: {
               Thêm
             </Button>
           </div>
+          <Input
+            className="h-9"
+            placeholder="Số điện thoại chủ hộ"
+            inputMode="tel"
+            value={props.newApartment.phone}
+            onChange={(event) =>
+              props.setNewApartment({
+                ...props.newApartment,
+                phone: event.target.value,
+              })
+            }
+          />
         </form>
         <div className="max-h-[420px] space-y-1.5 overflow-auto pr-1">
           {state.apartments.map((apartment) => (
@@ -2455,6 +2543,17 @@ function AdminAreas(props: {
               <IconButton
                 label="Xóa căn hộ"
                 onClick={() => props.deleteApartment(apartment.id)}
+              />
+              <Input
+                className="h-8 sm:col-span-5"
+                placeholder="Số điện thoại chủ hộ"
+                inputMode="tel"
+                value={apartment.phone}
+                onChange={(event) =>
+                  props.updateApartment(apartment.id, {
+                    phone: event.target.value,
+                  })
+                }
               />
             </div>
           ))}

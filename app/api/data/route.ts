@@ -20,6 +20,7 @@ type Apartment = {
   blockId: string;
   code: string;
   owner: string;
+  phone: string;
   note: string;
   monthlyFee: number | null;
 };
@@ -31,6 +32,7 @@ type Payment = {
   paidAt: string;
   amount: number;
   note: string;
+  method: 'cash' | 'transfer';
 };
 type AppSettings = {
   appName: string;
@@ -148,11 +150,11 @@ async function readState(): Promise<AppState> {
     db.from('blocks').select('id, region_id, name').order('name'),
     db
       .from('apartments')
-      .select('id, block_id, code, owner, note, monthly_fee')
+      .select('id, block_id, code, owner, phone, note, monthly_fee')
       .order('code'),
     db
       .from('payments')
-      .select('id, apartment_id, collector_id, month, paid_at, amount, note')
+      .select('id, apartment_id, collector_id, month, paid_at, amount, note, method')
       .order('paid_at', { ascending: false }),
     db.from('app_settings').select('app_name, subtitle, logo_url, theme').eq('id', 'default').maybeSingle(),
   ]);
@@ -188,6 +190,7 @@ async function readState(): Promise<AppState> {
       blockId: item.block_id,
       code: item.code,
       owner: item.owner,
+      phone: item.phone,
       note: item.note,
       monthlyFee: item.monthly_fee,
     })),
@@ -199,6 +202,7 @@ async function readState(): Promise<AppState> {
       paidAt: item.paid_at,
       amount: item.amount,
       note: item.note,
+      method: item.method as Payment['method'],
     })),
     settings: {
       appName: settingsResult.data?.app_name ?? 'Thu tiền vệ sinh',
@@ -287,6 +291,7 @@ async function saveState(state: AppState) {
               block_id: item.blockId,
               code: item.code,
               owner: item.owner,
+              phone: item.phone,
               note: item.note,
               monthly_fee: item.monthlyFee,
             })),
@@ -307,6 +312,7 @@ async function saveState(state: AppState) {
               paid_at: item.paidAt,
               amount: item.amount,
               note: item.note,
+              method: item.method,
             })),
           )
       ).error,
