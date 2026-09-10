@@ -292,6 +292,7 @@ export default function GarbageFeeApp() {
   const [draftPaymentMethods, setDraftPaymentMethods] = useState<
     Record<string, Payment['method']>
   >({});
+  const [collectionMessage, setCollectionMessage] = useState('');
   const [newRegion, setNewRegion] = useState({
     name: '',
     defaultFee: '300.000',
@@ -510,6 +511,7 @@ export default function GarbageFeeApp() {
       ],
     };
     void commit(nextState);
+    setCollectionMessage(`Đã ghi nhận thu tiền ${apartment.code}.`);
     setDraftPaymentNotes((current) => {
       const { [apartment.id]: _removed, ...remaining } = current;
       return remaining;
@@ -1321,6 +1323,14 @@ export default function GarbageFeeApp() {
                   Tất cả
                 </Button>
               </div>
+              {collectionMessage && (
+                <p
+                  className="mb-3 rounded-md border border-primary/25 bg-primary/10 px-3 py-2 text-sm font-medium text-primary"
+                  aria-live="polite"
+                >
+                  {collectionMessage}
+                </p>
+              )}
 
               <Table className="min-w-[640px] table-fixed">
                 <TableHeader>
@@ -1352,7 +1362,9 @@ export default function GarbageFeeApp() {
                         <TableCell className="w-1/4 border-r p-0 align-top">
                           <div className="grid min-h-[168px] grid-rows-[40px_44px_44px_40px] divide-y">
                             <div className="flex items-center gap-1.5 bg-primary/15 px-3 font-medium">
-                            <span>{apartment.code}</span>
+                            <span>
+                              {apartment.code} - {region?.name ?? '-'}
+                            </span>
                             {apartment.phone && (
                               <a
                                 href={`tel:${apartment.phone}`}
@@ -1391,8 +1403,8 @@ export default function GarbageFeeApp() {
                               }}
                             />
                             </div>
-                            <div className="flex items-center px-3 text-xs text-muted-foreground">
-                            {region?.name ?? '-'} / {block?.name ?? '-'}
+                            <div className="flex items-center px-3 text-sm font-medium">
+                              Ghi chú
                             </div>
                           </div>
                         </TableCell>
@@ -1407,8 +1419,32 @@ export default function GarbageFeeApp() {
                             <div className="flex h-12 items-center px-3 text-sm font-medium">
                               Người thu
                             </div>
-                            <div className="flex h-10 items-center px-3 text-sm font-medium">
-                              Ghi chú
+                            <div className="flex h-10 items-center px-2">
+                              {payment ? (
+                                <Input
+                                  className="h-8 w-full"
+                                  defaultValue={payment.note}
+                                  placeholder="Ghi chú"
+                                  onBlur={(event) => {
+                                    const note = event.target.value.trim();
+                                    if (note !== payment.note) {
+                                      updatePayment(payment.id, { note });
+                                    }
+                                  }}
+                                />
+                              ) : (
+                                <Input
+                                  className="h-8 w-full"
+                                  placeholder="Ví dụ: khách hẹn lại"
+                                  value={draftPaymentNotes[apartment.id] ?? ''}
+                                  onChange={(event) =>
+                                    setDraftPaymentNotes({
+                                      ...draftPaymentNotes,
+                                      [apartment.id]: event.target.value,
+                                    })
+                                  }
+                                />
+                              )}
                             </div>
                           </div>
                         </TableCell>
@@ -1455,33 +1491,7 @@ export default function GarbageFeeApp() {
                             <span className="text-muted-foreground">-</span>
                           )}
                             </div>
-                            <div className="flex h-10 items-center px-2">
-                          {payment ? (
-                            <Input
-                              className="h-8 w-full"
-                              defaultValue={payment.note}
-                              placeholder="Ghi chú"
-                              onBlur={(event) => {
-                                const note = event.target.value.trim();
-                                if (note !== payment.note) {
-                                  updatePayment(payment.id, { note });
-                                }
-                              }}
-                            />
-                          ) : (
-                            <Input
-                              className="h-8 w-full"
-                              placeholder="Ví dụ: khách hẹn lại"
-                              value={draftPaymentNotes[apartment.id] ?? ''}
-                              onChange={(event) =>
-                                setDraftPaymentNotes({
-                                  ...draftPaymentNotes,
-                                  [apartment.id]: event.target.value,
-                                })
-                              }
-                            />
-                          )}
-                            </div>
+                            <div className="h-10" />
                           </div>
                         </TableCell>
                         <TableCell className="w-1/4 p-0 align-top">
