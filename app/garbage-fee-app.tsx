@@ -284,6 +284,9 @@ export default function GarbageFeeApp() {
   const [selectedRegion, setSelectedRegion] = useState('all');
   const [selectedBlock, setSelectedBlock] = useState('all');
   const [query, setQuery] = useState('');
+  const [paymentFilter, setPaymentFilter] = useState<
+    'unpaid' | 'paid' | 'all'
+  >('unpaid');
   const [draftAmounts, setDraftAmounts] = useState<Record<string, string>>({});
   const [draftPaymentNotes, setDraftPaymentNotes] = useState<Record<string, string>>({});
   const [draftPaymentMethods, setDraftPaymentMethods] = useState<
@@ -405,6 +408,13 @@ export default function GarbageFeeApp() {
     (block) => selectedRegion === 'all' || block.regionId === selectedRegion,
   );
 
+  const currentMonthPayments = state.payments.filter(
+    (item) => item.month === selectedMonth,
+  );
+  const paidApartmentIds = new Set(
+    currentMonthPayments.map((item) => item.apartmentId),
+  );
+
   const visibleApartments = state.apartments
     .filter((apartment) => {
       const block = lookups.blocks.get(apartment.blockId);
@@ -413,19 +423,24 @@ export default function GarbageFeeApp() {
         selectedRegion === 'all' || selectedRegion === regionId;
       const matchesBlock =
         selectedBlock === 'all' || selectedBlock === apartment.blockId;
+      const isPaid = paidApartmentIds.has(apartment.id);
+      const matchesPayment =
+        paymentFilter === 'all' ||
+        (paymentFilter === 'paid' ? isPaid : !isPaid);
       const text = `${apartment.code} ${apartment.owner}`.toLowerCase();
       return (
-        matchesRegion && matchesBlock && text.includes(query.toLowerCase())
+        matchesRegion &&
+        matchesBlock &&
+        matchesPayment &&
+        text.includes(query.toLowerCase())
       );
     })
-    .sort((a, b) => a.code.localeCompare(b.code, 'vi'));
-
-  const currentMonthPayments = state.payments.filter(
-    (item) => item.month === selectedMonth,
-  );
-  const paidApartmentIds = new Set(
-    currentMonthPayments.map((item) => item.apartmentId),
-  );
+    .sort((a, b) =>
+      a.code.localeCompare(b.code, 'vi', {
+        numeric: true,
+        sensitivity: 'base',
+      }),
+    );
   const totalDue = state.apartments.reduce(
     (sum, item) => sum + getFee(item, lookups),
     0,
@@ -1279,6 +1294,34 @@ export default function GarbageFeeApp() {
                 </Field>
               </div>
 
+              <div className="mb-3 flex flex-wrap items-center gap-1.5">
+                <span className="mr-1 text-sm font-medium">Lọc nhanh:</span>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={paymentFilter === 'unpaid' ? 'default' : 'outline'}
+                  onClick={() => setPaymentFilter('unpaid')}
+                >
+                  Chưa thu
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={paymentFilter === 'paid' ? 'default' : 'outline'}
+                  onClick={() => setPaymentFilter('paid')}
+                >
+                  Đã thu
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={paymentFilter === 'all' ? 'default' : 'outline'}
+                  onClick={() => setPaymentFilter('all')}
+                >
+                  Tất cả
+                </Button>
+              </div>
+
               <Table className="min-w-[640px] table-fixed">
                 <TableHeader>
                   <TableRow>
@@ -1306,9 +1349,9 @@ export default function GarbageFeeApp() {
                         key={apartment.id}
                         className="align-top border-b-2 border-primary/35"
                       >
-                        <TableCell className="w-1/4 border-r bg-primary/10 p-0 align-top">
+                        <TableCell className="w-1/4 border-r p-0 align-top">
                           <div className="grid min-h-[168px] grid-rows-[40px_44px_44px_40px] divide-y">
-                            <div className="flex items-center gap-1.5 px-3 font-medium">
+                            <div className="flex items-center gap-1.5 bg-primary/15 px-3 font-medium">
                             <span>{apartment.code}</span>
                             {apartment.phone && (
                               <a
@@ -2075,7 +2118,7 @@ function CustomizationPanel({
             inputMode="url"
           />
         </Field>
-        <Field label="Màu giao diện">
+        <Field label="Màu chủ đạo (mã căn và nút)">
           <NativeSelect
             className="w-full"
             value={draft.theme}
