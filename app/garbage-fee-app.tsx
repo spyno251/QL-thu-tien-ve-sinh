@@ -622,6 +622,37 @@ export default function GarbageFeeApp() {
     if (response.ok && payload.state) setState(payload.state);
   };
 
+  const updateDebtSettlement = async (
+    settlementId: string,
+    amount: number,
+    method: DebtSettlement['method'],
+  ) => {
+    const response = await fetch('/api/data', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'update-debt-settlement',
+        settlementId,
+        amount,
+        method,
+      }),
+    });
+    const payload = (await response.json()) as { state?: AppState; error?: string };
+    if (response.ok && payload.state) setState(payload.state);
+    return response.ok ? null : payload.error ?? 'Chưa thể cập nhật giao dịch.';
+  };
+
+  const deleteDebtSettlement = async (settlementId: string) => {
+    const response = await fetch('/api/data', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'delete-debt-settlement', settlementId }),
+    });
+    const payload = (await response.json()) as { state?: AppState; error?: string };
+    if (response.ok && payload.state) setState(payload.state);
+    return response.ok ? null : payload.error ?? 'Chưa thể xóa giao dịch.';
+  };
+
   useEffect(() => {
     const context = (document as WebMCPDocument).modelContext;
     if (!context?.registerTool || !currentUser) return;
@@ -1744,6 +1775,8 @@ export default function GarbageFeeApp() {
                 payments={state.payments}
                 settlements={state.debtSettlements}
                 onConfirm={confirmDebtSettlement}
+                onUpdate={updateDebtSettlement}
+                onDelete={deleteDebtSettlement}
               />
             </TabsContent>
           )}
@@ -2657,14 +2690,53 @@ function DebtManagement({
   payments,
   settlements,
   onConfirm,
+  onUpdate,
+  onDelete,
 }: {
   users: User[];
   payments: Payment[];
   settlements: DebtSettlement[];
   onConfirm: (settlementId: string) => Promise<void>;
+  onUpdate: (
+    settlementId: string,
+    amount: number,
+    method: DebtSettlement['method'],
+  ) => Promise<string | null>;
+  onDelete: (settlementId: string) => Promise<string | null>;
 }) {
   const staff = users.filter((user) => user.role === 'staff');
   const pending = settlements.filter((settlement) => settlement.status === 'pending');
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editAmount, setEditAmount] = useState('');
+  const [editMethod, setEditMethod] = useState<DebtSettlement['method']>('cash');
+  const [actionError, setActionError] = useState('');
+
+  const beginEdit = (settlement: DebtSettlement) => {
+    setEditingId(settlement.id);
+    setEditAmount(formatAmountInput(String(settlement.amount)));
+    setEditMethod(settlement.method);
+    setActionError('');
+  };
+
+  const saveEdit = async (settlement: DebtSettlement) => {
+    const amount = parseAmount(editAmount, settlement.amount);
+    if (!amount) {
+      setActionError('Nhập số tiền hợp lệ.');
+      return;
+    }
+    const error = await onUpdate(settlement.id, amount, editMethod);
+    if (error) {
+      setActionError(error);
+      return;
+    }
+    setEditingId(null);
+  };
+
+  const remove = async (settlementId: string) => {
+    if (!window.confirm('Xóa giao dịch công nợ này?')) return;
+    const error = await onDelete(settlementId);
+    if (error) setActionError(error);
+  };
 
   return (
     <section className="grid gap-4 lg:grid-cols-2">
@@ -2743,6 +2815,101 @@ function DebtManagement({
             })}
           </TableBody>
         </Table>
+      </div>
+
+      <div className="rounded-lg border bg-card p-4 lg:col-span-2">
+        <h2 className="mb-1 text-base font-semibold">Lịch sử công nợ</h2>
+        <p className="mb-3 text-sm text-muted-foreground">
+          Admin và Quản trị có thể điều chỉnh hoặc xóa giao dịch khi cần đối soát.
+        </p>
+        {actionError && <p className="mb-3 text-sm text-destructive">{actionError}</p>}
+        <div className="overflow-x-auto">
+          <Table className="min-w-[850px]">
+            <TableHeader>
+              <TableRow>
+                <TableHead>Nhân viên</TableHead>
+                <TableHead>Ngày trả</TableHead>
+                <TableHead>Số tiền</TableHead>
+                <TableHead>Hình thức</TableHead>
+                <TableHead>Trạng thái</TableHead>
+                <TableHead className="text-right">Thao tác</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {settlements.map((settlement) => {
+                const user = users.find((item) => item.id === settlement.staffId);
+                const editing = editingId === settlement.id;
+                return (
+                  <TableRow key={settlement.id}>
+                    <TableCell>{user?.name ?? settlement.staffId}</TableCell>
+                    <TableCell>{formatDate(settlement.submittedAt)}</TableCell>
+                    <TableCell>
+                      {editing ? (
+                        <Input
+                          className="h-8 w-32"
+                          inputMode="numeric"
+                          value={editAmount}
+                          onChange={(event) => setEditAmount(formatAmountInput(event.target.value))}
+                        />
+                      ) : (
+                        money.format(settlement.amount)
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {editing ? (
+                        <NativeSelect
+                          className="h-8 w-36"
+                          value={editMethod}
+                          onChange={(event) =>
+                            setEditMethod(event.target.value as DebtSettlement['method'])
+                          }
+                        >
+                          <NativeSelectOption value="cash">Tiền mặt</NativeSelectOption>
+                          <NativeSelectOption value="transfer">Chuyển khoản</NativeSelectOption>
+                        </NativeSelect>
+                      ) : settlement.method === 'transfer' ? (
+                        'Chuyển khoản'
+                      ) : (
+                        'Tiền mặt'
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {settlement.status === 'confirmed' ? 'Đã xác nhận' : 'Chờ xác nhận'}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {editing ? (
+                        <span className="inline-flex gap-2">
+                          <Button type="button" size="sm" onClick={() => void saveEdit(settlement)}>
+                            Lưu
+                          </Button>
+                          <Button type="button" size="sm" variant="outline" onClick={() => setEditingId(null)}>
+                            Hủy
+                          </Button>
+                        </span>
+                      ) : (
+                        <span className="inline-flex gap-2">
+                          <Button type="button" size="sm" variant="outline" onClick={() => beginEdit(settlement)}>
+                            Sửa
+                          </Button>
+                          <Button type="button" size="icon-sm" variant="destructive" onClick={() => void remove(settlement.id)} aria-label="Xóa giao dịch công nợ">
+                            <Trash2 className="size-4" />
+                          </Button>
+                        </span>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+              {!settlements.length && (
+                <TableRow>
+                  <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
+                    Chưa có giao dịch công nợ.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </div>
       </div>
     </section>
   );

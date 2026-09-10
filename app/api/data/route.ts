@@ -220,6 +220,64 @@ export async function POST(request: Request) {
         state: visibleState(await readState(), currentUser),
       });
     }
+    if (payload.action === 'update-debt-settlement') {
+      if (currentUser.role === 'staff')
+        return json({ error: 'Chỉ Quản trị hoặc Admin được sửa công nợ.' }, 403);
+      const settlementId = String(payload.settlementId ?? '');
+      const amount = Number(payload.amount);
+      if (!settlementId || !Number.isInteger(amount) || amount <= 0)
+        return json({ error: 'Dữ liệu công nợ không hợp lệ.' }, 400);
+      const { data: settlement, error: settlementError } = await db
+        .from('debt_settlements')
+        .select('id, staff_id, status')
+        .eq('id', settlementId)
+        .maybeSingle();
+      if (settlementError) throw settlementError;
+      if (!settlement) return json({ error: 'Không tìm thấy giao dịch.' }, 404);
+      const [paymentsResult, settlementsResult] = await Promise.all([
+        db.from('payments').select('amount').eq('collector_id', settlement.staff_id),
+        db
+          .from('debt_settlements')
+          .select('id, amount, status')
+          .eq('staff_id', settlement.staff_id),
+      ]);
+      if (paymentsResult.error || settlementsResult.error) throw new Error('Read failed');
+      const totalCollected = (paymentsResult.data ?? []).reduce(
+        (sum, payment) => sum + payment.amount,
+        0,
+      );
+      const otherSettlements = (settlementsResult.data ?? []).filter(
+        (item) => item.id !== settlementId,
+      );
+      const otherCommitted = otherSettlements.reduce(
+        (sum, item) => sum + item.amount,
+        0,
+      );
+      const otherConfirmed = otherSettlements
+        .filter((item) => item.status === 'confirmed')
+        .reduce((sum, item) => sum + item.amount, 0);
+      if (amount > totalCollected - otherCommitted)
+        return json({ error: 'Số tiền vượt quá khoản công nợ có thể đối soát.' }, 400);
+      const { error } = await db
+        .from('debt_settlements')
+        .update({
+          amount,
+          method: payload.method === 'transfer' ? 'transfer' : 'cash',
+          debt_at_submission: Math.max(0, totalCollected - otherConfirmed),
+        })
+        .eq('id', settlementId);
+      if (error) throw error;
+      return json({ ok: true, state: visibleState(await readState(), currentUser) });
+    }
+    if (payload.action === 'delete-debt-settlement') {
+      if (currentUser.role === 'staff')
+        return json({ error: 'Chỉ Quản trị hoặc Admin được xóa công nợ.' }, 403);
+      const settlementId = String(payload.settlementId ?? '');
+      if (!settlementId) return json({ error: 'Thiếu mã giao dịch.' }, 400);
+      const { error } = await db.from('debt_settlements').delete().eq('id', settlementId);
+      if (error) throw error;
+      return json({ ok: true, state: visibleState(await readState(), currentUser) });
+    }
     if (!payload.state) return json({ error: 'Missing state' }, 400);
     const existing = await readState();
     const nextState =
