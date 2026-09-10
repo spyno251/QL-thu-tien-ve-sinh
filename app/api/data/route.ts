@@ -38,6 +38,8 @@ type DebtSettlement = {
   id: string;
   staffId: string;
   amount: number;
+  debtAtSubmission: number;
+  method: 'cash' | 'transfer';
   submittedAt: string;
   confirmedAt: string | null;
   confirmedBy: string | null;
@@ -91,6 +93,7 @@ export async function POST(request: Request) {
       paymentId?: string;
       note?: string;
       amount?: number;
+      method?: 'cash' | 'transfer';
       settlementId?: string;
     };
     if (payload.action === 'record-payment') {
@@ -166,16 +169,25 @@ export async function POST(request: Request) {
         (sum, payment) => sum + payment.amount,
         0,
       );
-      const totalSettled = (settlementsResult.data ?? []).reduce(
+      const confirmedSettled = (settlementsResult.data ?? [])
+        .filter((settlement) => settlement.status === 'confirmed')
+        .reduce(
+          (sum, settlement) => sum + settlement.amount,
+          0,
+        );
+      const totalCommitted = (settlementsResult.data ?? []).reduce(
         (sum, settlement) => sum + settlement.amount,
         0,
       );
-      if (amount > totalCollected - totalSettled)
+      const debtAtSubmission = Math.max(0, totalCollected - confirmedSettled);
+      if (amount > totalCollected - totalCommitted)
         return json({ error: 'Số tiền nộp vượt quá công nợ hiện có.' }, 400);
       const { error } = await db.from('debt_settlements').insert({
         id: crypto.randomUUID(),
         staff_id: currentUser.id,
         amount,
+        debt_at_submission: debtAtSubmission,
+        method: payload.method === 'transfer' ? 'transfer' : 'cash',
         submitted_at: new Date().toISOString(),
         status: 'pending',
       });
@@ -292,7 +304,7 @@ async function readState(): Promise<AppState> {
       .order('paid_at', { ascending: false }),
     db
       .from('debt_settlements')
-      .select('id, staff_id, amount, submitted_at, confirmed_at, confirmed_by, status')
+      .select('id, staff_id, amount, debt_at_submission, method, submitted_at, confirmed_at, confirmed_by, status')
       .order('submitted_at', { ascending: false }),
     db
       .from('app_settings')
@@ -352,6 +364,8 @@ async function readState(): Promise<AppState> {
       id: item.id,
       staffId: item.staff_id,
       amount: item.amount,
+      debtAtSubmission: item.debt_at_submission,
+      method: item.method as DebtSettlement['method'],
       submittedAt: item.submitted_at,
       confirmedAt: item.confirmed_at,
       confirmedBy: item.confirmed_by,
@@ -480,6 +494,8 @@ async function saveState(state: AppState) {
             id: item.id,
             staff_id: item.staffId,
             amount: item.amount,
+            debt_at_submission: item.debtAtSubmission,
+            method: item.method,
             submitted_at: item.submittedAt,
             confirmed_at: item.confirmedAt,
             confirmed_by: item.confirmedBy,

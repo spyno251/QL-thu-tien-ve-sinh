@@ -93,6 +93,8 @@ type DebtSettlement = {
   id: string;
   staffId: string;
   amount: number;
+  debtAtSubmission: number;
+  method: 'cash' | 'transfer';
   submittedAt: string;
   confirmedAt: string | null;
   confirmedBy: string | null;
@@ -595,11 +597,14 @@ export default function GarbageFeeApp() {
     if (response.ok && payload.state) setState(payload.state);
   };
 
-  const submitDebtSettlement = async (amount: number) => {
+  const submitDebtSettlement = async (
+    amount: number,
+    method: DebtSettlement['method'],
+  ) => {
     const response = await fetch('/api/data', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'submit-debt-settlement', amount }),
+      body: JSON.stringify({ action: 'submit-debt-settlement', amount, method }),
     });
     const payload = (await response.json()) as { state?: AppState; error?: string };
     if (!response.ok) return payload.error ?? 'Chưa thể gửi yêu cầu trả tiền.';
@@ -2063,9 +2068,13 @@ function AccountInformationDialog({
   regions: Region[];
   total: number;
   settlements: DebtSettlement[];
-  onSubmitDebt: (amount: number) => Promise<string | null>;
+  onSubmitDebt: (
+    amount: number,
+    method: DebtSettlement['method'],
+  ) => Promise<string | null>;
 }) {
   const [debtAmount, setDebtAmount] = useState('');
+  const [debtMethod, setDebtMethod] = useState<DebtSettlement['method']>('cash');
   const [debtError, setDebtError] = useState('');
   const [submittingDebt, setSubmittingDebt] = useState(false);
   const apartmentById = new Map(apartments.map((item) => [item.id, item]));
@@ -2091,7 +2100,7 @@ function AccountInformationDialog({
       return;
     }
     setSubmittingDebt(true);
-    const error = await onSubmitDebt(amount);
+    const error = await onSubmitDebt(amount, debtMethod);
     setSubmittingDebt(false);
     if (error) {
       setDebtError(error);
@@ -2150,19 +2159,77 @@ function AccountInformationDialog({
                 Có thể nộp: {money.format(availableDebt)}
               </span>
             </div>
-            <div className="mt-3 flex gap-2">
+            <div className="mt-3 flex flex-col gap-2 sm:flex-row">
               <Input
-                className="min-w-0"
+                className="min-w-0 flex-1"
                 inputMode="numeric"
                 placeholder="Số tiền trả"
                 value={debtAmount}
                 onChange={(event) => setDebtAmount(formatAmountInput(event.target.value))}
               />
+              <NativeSelect
+                className="sm:w-44"
+                value={debtMethod}
+                onChange={(event) =>
+                  setDebtMethod(event.target.value as DebtSettlement['method'])
+                }
+                aria-label="Hình thức trả tiền"
+              >
+                <NativeSelectOption value="cash">Tiền mặt</NativeSelectOption>
+                <NativeSelectOption value="transfer">Chuyển khoản</NativeSelectOption>
+              </NativeSelect>
               <Button type="button" disabled={!availableDebt || submittingDebt} onClick={submitDebt}>
                 {submittingDebt ? 'Đang gửi...' : 'Trả tiền'}
               </Button>
             </div>
             {debtError && <p className="mt-2 text-sm text-destructive">{debtError}</p>}
+            <div className="mt-4 border-t pt-3">
+              <h3 className="text-sm font-semibold">Lịch sử trả công nợ</h3>
+              {settlements.length ? (
+                <div className="mt-2 overflow-x-auto">
+                  <Table className="min-w-[720px] text-xs">
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Tổng số nợ</TableHead>
+                        <TableHead>Ngày trả</TableHead>
+                        <TableHead>Số tiền trả</TableHead>
+                        <TableHead>Hình thức</TableHead>
+                        <TableHead>Còn nợ</TableHead>
+                        <TableHead>Trạng thái</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {settlements.map((settlement) => (
+                        <TableRow key={settlement.id}>
+                          <TableCell>{money.format(settlement.debtAtSubmission)}</TableCell>
+                          <TableCell>{formatDate(settlement.submittedAt)}</TableCell>
+                          <TableCell>{money.format(settlement.amount)}</TableCell>
+                          <TableCell>
+                            {settlement.method === 'transfer'
+                              ? 'Chuyển khoản'
+                              : 'Tiền mặt'}
+                          </TableCell>
+                          <TableCell>
+                            {money.format(
+                              Math.max(0, settlement.debtAtSubmission - settlement.amount),
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {settlement.status === 'confirmed'
+                              ? 'Đã xác nhận'
+                              : 'Chờ xác nhận'}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              ) : (
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Chưa có giao dịch trả công nợ.
+                </p>
+              )}
+            </div>
           </section>
         )}
 
