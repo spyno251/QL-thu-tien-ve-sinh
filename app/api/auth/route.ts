@@ -223,10 +223,12 @@ async function adminReset(request: Request, body: Record<string, unknown>) {
     return json({ error: 'Chỉ Quản trị hoặc Admin được đặt lại mật khẩu.' }, 403);
   const { data: target } = await db
     .from('users')
-    .select('id')
+    .select('id, role')
     .eq('id', userId)
     .maybeSingle();
   if (!target) return json({ error: 'Không tìm thấy tài khoản.' }, 404);
+  if (admin.role === 'manager' && target.role !== 'staff')
+    return json({ error: 'Quản trị chỉ được đặt lại mật khẩu Nhân viên.' }, 403);
   await db
     .from('users')
     .update({

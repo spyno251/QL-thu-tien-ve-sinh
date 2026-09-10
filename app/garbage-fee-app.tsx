@@ -9,6 +9,7 @@ import {
   Lock,
   LogOut,
   Mail,
+  Pencil,
   Plus,
   Phone,
   ReceiptText,
@@ -992,7 +993,7 @@ export default function GarbageFeeApp() {
           name: newUser.name.trim(),
           phone: newUser.phone.trim(),
           email: newUser.email.trim().toLowerCase(),
-          role: newUser.role,
+          role: currentUser?.role === 'manager' ? 'staff' : newUser.role,
           mustChangePassword: true,
         },
       ],
@@ -1063,7 +1064,7 @@ export default function GarbageFeeApp() {
   };
 
   const resetUserPassword = async (userId: string) => {
-    if (!window.confirm('Đặt mật khẩu nhân viên này về 123456?')) return;
+    if (!window.confirm('Đặt mật khẩu tài khoản này về 123456?')) return;
     const response = await fetch('/api/auth', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1768,6 +1769,7 @@ export default function GarbageFeeApp() {
             {canManage ? (
               <AdminUsers
                 users={state.users}
+                currentUserRole={currentUser.role}
                 newUser={newUser}
                 setNewUser={setNewUser}
                 addUser={addUser}
@@ -3395,6 +3397,7 @@ function AdminAreas(props: {
 
 function AdminUsers(props: {
   users: User[];
+  currentUserRole: Role;
   newUser: { name: string; phone: string; email: string; role: Role };
   setNewUser: (value: {
     name: string;
@@ -3407,6 +3410,25 @@ function AdminUsers(props: {
   deleteUser: (id: string) => Promise<void>;
   resetUserPassword: (id: string) => void;
 }) {
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draft, setDraft] = useState<Pick<User, 'name' | 'phone' | 'email' | 'role'>>({
+    name: '',
+    phone: '',
+    email: '',
+    role: 'staff',
+  });
+  const isAdmin = props.currentUserRole === 'admin';
+  const canManage = (user: User) => isAdmin || user.role === 'staff';
+  const startEdit = (user: User) => {
+    setEditingId(user.id);
+    setDraft({
+      name: user.name,
+      phone: user.phone,
+      email: user.email,
+      role: user.role,
+    });
+  };
+
   return (
     <section className="rounded-lg border bg-card p-4">
       <h2 className="mb-3 text-base font-semibold">Tài khoản truy cập</h2>
@@ -3438,20 +3460,26 @@ function AdminUsers(props: {
           }
           required
         />
-        <NativeSelect
-          className="w-full"
-          value={props.newUser.role}
-          onChange={(event) =>
-            props.setNewUser({
-              ...props.newUser,
-              role: event.target.value as Role,
-            })
-          }
-        >
-          <NativeSelectOption value="staff">Nhân viên</NativeSelectOption>
-          <NativeSelectOption value="manager">Quản trị</NativeSelectOption>
-          <NativeSelectOption value="admin">Admin</NativeSelectOption>
-        </NativeSelect>
+        {isAdmin ? (
+          <NativeSelect
+            className="w-full"
+            value={props.newUser.role}
+            onChange={(event) =>
+              props.setNewUser({
+                ...props.newUser,
+                role: event.target.value as Role,
+              })
+            }
+          >
+            <NativeSelectOption value="staff">Nhân viên</NativeSelectOption>
+            <NativeSelectOption value="manager">Quản trị</NativeSelectOption>
+            <NativeSelectOption value="admin">Admin</NativeSelectOption>
+          </NativeSelect>
+        ) : (
+          <div className="flex h-10 items-center rounded-md border bg-muted/40 px-3 text-sm">
+            Nhân viên
+          </div>
+        )}
         <Button type="submit">
           <Plus className="size-4" />
           Thêm
@@ -3477,51 +3505,34 @@ function AdminUsers(props: {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {props.users.map((user) => (
+          {props.users.map((user) => {
+            const editing = editingId === user.id;
+            const editable = canManage(user);
+            return (
             <TableRow key={user.id}>
               <TableCell>
-                <Input
-                  value={user.name}
-                  onChange={(event) =>
-                    props.updateUser(user.id, { name: event.target.value })
-                  }
-                />
+                {editing ? (
+                  <Input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} />
+                ) : user.name}
               </TableCell>
               <TableCell>
-                <Input
-                  value={user.phone}
-                  inputMode="tel"
-                  onChange={(event) =>
-                    props.updateUser(user.id, { phone: event.target.value })
-                  }
-                />
+                {editing ? (
+                  <Input inputMode="tel" value={draft.phone} onChange={(event) => setDraft({ ...draft, phone: event.target.value })} />
+                ) : user.phone}
               </TableCell>
               <TableCell>
-                <Input
-                  type="email"
-                  value={user.email}
-                  placeholder="Chưa có email"
-                  onChange={(event) =>
-                    props.updateUser(user.id, { email: event.target.value })
-                  }
-                />
+                {editing ? (
+                  <Input type="email" value={draft.email} placeholder="Chưa có email" onChange={(event) => setDraft({ ...draft, email: event.target.value })} />
+                ) : user.email || '-'}
               </TableCell>
               <TableCell>
-                <NativeSelect
-                  className="w-full"
-                  value={user.role}
-                  onChange={(event) =>
-                    props.updateUser(user.id, {
-                      role: event.target.value as Role,
-                    })
-                  }
-                >
-                  <NativeSelectOption value="staff">
-                    Nhân viên
-                  </NativeSelectOption>
-                  <NativeSelectOption value="manager">Quản trị</NativeSelectOption>
-                  <NativeSelectOption value="admin">Admin</NativeSelectOption>
-                </NativeSelect>
+                {editing && isAdmin ? (
+                  <NativeSelect className="w-full" value={draft.role} onChange={(event) => setDraft({ ...draft, role: event.target.value as Role })}>
+                    <NativeSelectOption value="staff">Nhân viên</NativeSelectOption>
+                    <NativeSelectOption value="manager">Quản trị</NativeSelectOption>
+                    <NativeSelectOption value="admin">Admin</NativeSelectOption>
+                  </NativeSelect>
+                ) : user.role === 'admin' ? 'Admin' : user.role === 'manager' ? 'Quản trị' : 'Nhân viên'}
               </TableCell>
               <TableCell>
                 <Badge
@@ -3534,24 +3545,36 @@ function AdminUsers(props: {
               </TableCell>
               <TableCell>
                 <div className="flex items-center gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    aria-label="Đặt lại mật khẩu"
-                    title="Đặt lại mật khẩu về 123456"
-                    onClick={() => props.resetUserPassword(user.id)}
-                  >
-                    <RotateCcw className="size-4" />
-                  </Button>
-                  <IconButton
-                    label="Xóa tài khoản"
-                    onClick={() => void props.deleteUser(user.id)}
-                  />
+                  {editing ? (
+                    <>
+                      <Button type="button" size="sm" onClick={() => {
+                        props.updateUser(user.id, draft);
+                        setEditingId(null);
+                      }}>
+                        Lưu
+                      </Button>
+                      <Button type="button" size="sm" variant="outline" onClick={() => setEditingId(null)}>
+                        Hủy
+                      </Button>
+                    </>
+                  ) : editable ? (
+                    <>
+                      <Button type="button" variant="outline" size="icon" aria-label="Sửa tài khoản" title="Sửa tài khoản" onClick={() => startEdit(user)}>
+                        <Pencil className="size-4" />
+                      </Button>
+                      <Button type="button" variant="outline" size="icon" aria-label="Đặt lại mật khẩu" title="Đặt lại mật khẩu về 123456" onClick={() => props.resetUserPassword(user.id)}>
+                        <RotateCcw className="size-4" />
+                      </Button>
+                      <IconButton label="Xóa tài khoản" onClick={() => void props.deleteUser(user.id)} />
+                    </>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">Không có quyền</span>
+                  )}
                 </div>
               </TableCell>
             </TableRow>
-          ))}
+            );
+          })}
         </TableBody>
         </Table>
       </div>

@@ -280,6 +280,14 @@ export async function POST(request: Request) {
     }
     if (!payload.state) return json({ error: 'Missing state' }, 400);
     const existing = await readState();
+    if (
+      currentUser.role === 'manager' &&
+      !managerMayApplyUserChanges(existing.users, payload.state.users)
+    )
+      return json(
+        { error: 'Quản trị chỉ được sửa hoặc xóa tài khoản Nhân viên.' },
+        403,
+      );
     const nextState =
       currentUser.role !== 'staff'
         ? payload.state
@@ -332,6 +340,33 @@ function normalizeStaffPayments(
     .map((payment) => ({ ...payment, collectorId: currentUserId }));
   // Staff may add a payment, but existing payments are immutable for them.
   return [...additions, ...existing];
+}
+
+function managerMayApplyUserChanges(existing: User[], incoming: User[]) {
+  const incomingById = new Map(incoming.map((user) => [user.id, user]));
+  const protectedUsers = existing.filter((user) => user.role !== 'staff');
+  if (
+    protectedUsers.some((user) => {
+      const next = incomingById.get(user.id);
+      return !next || !sameUser(user, next);
+    })
+  )
+    return false;
+  return incoming.every((user) => {
+    const existingUser = existing.find((item) => item.id === user.id);
+    return user.role === 'staff' || Boolean(existingUser && sameUser(existingUser, user));
+  });
+}
+
+function sameUser(left: User, right: User) {
+  return (
+    left.id === right.id &&
+    left.phone === right.phone &&
+    left.email === right.email &&
+    left.name === right.name &&
+    left.role === right.role &&
+    left.mustChangePassword === right.mustChangePassword
+  );
 }
 
 async function readState(): Promise<AppState> {
