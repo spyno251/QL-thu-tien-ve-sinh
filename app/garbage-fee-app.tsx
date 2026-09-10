@@ -497,6 +497,15 @@ export default function GarbageFeeApp() {
     });
   };
 
+  const updatePayment = (paymentId: string, updates: Partial<Payment>) => {
+    void commit({
+      ...state,
+      payments: state.payments.map((payment) =>
+        payment.id === paymentId ? { ...payment, ...updates } : payment,
+      ),
+    });
+  };
+
   const cancelPayment = (paymentId: string) => {
     void commit({
       ...state,
@@ -1248,19 +1257,13 @@ export default function GarbageFeeApp() {
                 </Field>
               </div>
 
-              <Table>
+              <Table className="min-w-[600px]">
                 <TableHeader>
                   <TableRow>
                     <TableHead>Căn hộ</TableHead>
-                    <TableHead className="hidden sm:table-cell">
-                      Khu/Dãy
-                    </TableHead>
-                    <TableHead>Số tiền</TableHead>
-                    <TableHead>Trạng thái</TableHead>
-                    <TableHead>Người thu</TableHead>
-                    <TableHead>Ghi chú</TableHead>
+                    <TableHead>Nội dung</TableHead>
+                    <TableHead>Giá trị</TableHead>
                     <TableHead>Thanh toán</TableHead>
-                    <TableHead>Thao tác</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1277,8 +1280,8 @@ export default function GarbageFeeApp() {
                       : null;
                     const defaultFee = getFee(apartment, lookups);
                     return (
-                      <TableRow key={apartment.id}>
-                        <TableCell>
+                      <TableRow key={apartment.id} className="align-top">
+                        <TableCell className="w-[210px] min-w-[210px]">
                           <div className="flex items-center gap-1.5 font-medium">
                             <span>{apartment.code}</span>
                             {apartment.phone && (
@@ -1292,9 +1295,9 @@ export default function GarbageFeeApp() {
                               </a>
                             )}
                           </div>
-                          <div className="mt-1 space-y-1.5">
+                          <div className="mt-2 grid grid-cols-2 gap-1.5">
                             <Input
-                              className="h-7 w-36 text-sm"
+                              className="h-8 min-w-0 text-sm"
                               defaultValue={apartment.owner}
                               placeholder="Chủ hộ"
                               onBlur={(event) => {
@@ -1305,7 +1308,7 @@ export default function GarbageFeeApp() {
                               }}
                             />
                             <Input
-                              className="h-7 w-36 text-sm"
+                              className="h-8 min-w-0 text-sm"
                               defaultValue={apartment.phone}
                               inputMode="tel"
                               placeholder="SĐT"
@@ -1317,19 +1320,34 @@ export default function GarbageFeeApp() {
                               }}
                             />
                           </div>
-                          <div className="text-xs text-muted-foreground sm:hidden">
+                          <div className="mt-2 text-xs text-muted-foreground">
                             {region?.name ?? '-'} / {block?.name ?? '-'}
                           </div>
                         </TableCell>
-                        <TableCell className="hidden sm:table-cell">
-                          {region?.name ?? '-'} / {block?.name ?? '-'}
+                        <TableCell className="w-[84px] min-w-[84px] p-0">
+                          <div className="grid divide-y">
+                            <div className="flex h-10 items-center px-3 text-sm font-medium">
+                              Số tiền
+                            </div>
+                            <div className="flex h-10 items-center px-3 text-sm font-medium">
+                              Trạng thái
+                            </div>
+                            <div className="flex h-12 items-center px-3 text-sm font-medium">
+                              Người thu
+                            </div>
+                            <div className="flex h-10 items-center px-3 text-sm font-medium">
+                              Ghi chú
+                            </div>
+                          </div>
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="min-w-[160px] p-0">
+                          <div className="grid divide-y">
+                            <div className="flex h-10 items-center px-2">
                           {payment ? (
                             money.format(payment.amount)
                           ) : (
                             <Input
-                              className="w-32"
+                              className="h-8 w-full"
                               inputMode="numeric"
                               value={
                                 draftAmounts[apartment.id] ??
@@ -1345,13 +1363,13 @@ export default function GarbageFeeApp() {
                               }
                             />
                           )}
-                        </TableCell>
-                        <TableCell>
+                            </div>
+                            <div className="flex h-10 items-center px-2">
                           <Badge variant={payment ? 'default' : 'outline'}>
                             {payment ? 'Đã thu' : 'Chưa thu'}
                           </Badge>
-                        </TableCell>
-                        <TableCell>
+                            </div>
+                            <div className="flex h-12 items-center px-2">
                           {payment ? (
                             <div>
                               <div>
@@ -1364,15 +1382,23 @@ export default function GarbageFeeApp() {
                           ) : (
                             <span className="text-muted-foreground">-</span>
                           )}
-                        </TableCell>
-                        <TableCell>
+                            </div>
+                            <div className="flex h-10 items-center px-2">
                           {payment ? (
-                            <span className="text-sm text-muted-foreground">
-                              {payment.note || '-'}
-                            </span>
+                            <Input
+                              className="h-8 w-full"
+                              defaultValue={payment.note}
+                              placeholder="Ghi chú"
+                              onBlur={(event) => {
+                                const note = event.target.value.trim();
+                                if (note !== payment.note) {
+                                  updatePayment(payment.id, { note });
+                                }
+                              }}
+                            />
                           ) : (
                             <Input
-                              className="w-44"
+                              className="h-8 w-full"
                               placeholder="Ví dụ: khách hẹn lại"
                               value={draftPaymentNotes[apartment.id] ?? ''}
                               onChange={(event) =>
@@ -1383,13 +1409,20 @@ export default function GarbageFeeApp() {
                               }
                             />
                           )}
+                            </div>
+                          </div>
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="w-[120px] min-w-[120px]">
+                          <div className="flex h-full min-h-[152px] flex-col gap-2">
                           {payment ? (
-                            payment.method === 'transfer' ? 'Chuyển khoản' : 'Tiền mặt'
+                            <span className="pt-1 text-sm">
+                              {payment.method === 'transfer'
+                                ? 'Chuyển khoản'
+                                : 'Tiền mặt'}
+                            </span>
                           ) : (
                             <NativeSelect
-                              className="w-32"
+                              className="h-8 w-full"
                               value={draftPaymentMethods[apartment.id] ?? 'cash'}
                               onChange={(event) =>
                                 setDraftPaymentMethods({
@@ -1402,15 +1435,14 @@ export default function GarbageFeeApp() {
                               <NativeSelectOption value="transfer">Chuyển khoản</NativeSelectOption>
                             </NativeSelect>
                           )}
-                        </TableCell>
-                        <TableCell>
-                          {payment &&
-                          (isAdmin ||
-                            payment.collectorId === currentUser.id) ? (
+                          <div className="mt-auto">
+                            {payment &&
+                            (isAdmin ||
+                              payment.collectorId === currentUser.id) ? (
                             <Button
                               type="button"
                               variant="outline"
-                              size="sm"
+                              className="w-full"
                               onClick={() => cancelPayment(payment.id)}
                             >
                               Hủy
@@ -1418,16 +1450,18 @@ export default function GarbageFeeApp() {
                           ) : !payment ? (
                             <Button
                               type="button"
-                              size="sm"
+                              className="w-full"
                               onClick={() => recordPayment(apartment)}
                             >
-                              Thu
+                              Thu tiền
                             </Button>
                           ) : (
                             <span className="text-sm text-muted-foreground">
                               Đã ghi nhận
                             </span>
                           )}
+                          </div>
+                          </div>
                         </TableCell>
                       </TableRow>
                     );
