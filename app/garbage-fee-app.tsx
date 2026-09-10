@@ -288,7 +288,6 @@ export default function GarbageFeeApp() {
   const [remember, setRemember] = useState(false);
   const [loginError, setLoginError] = useState('');
   const [authLoading, setAuthLoading] = useState(true);
-  const [headerLoadingVisible, setHeaderLoadingVisible] = useState(false);
   const [setupRequired, setSetupRequired] = useState(false);
   const [forgotMode, setForgotMode] = useState(false);
   const [forgotEmail, setForgotEmail] = useState('');
@@ -394,13 +393,6 @@ export default function GarbageFeeApp() {
       active = false;
     };
   }, []);
-
-  useEffect(() => {
-    if (!currentUser) return;
-    setHeaderLoadingVisible(true);
-    const timer = window.setTimeout(() => setHeaderLoadingVisible(false), 1800);
-    return () => window.clearTimeout(timer);
-  }, [currentUser?.id]);
 
   const commit = async (nextState: AppState) => {
     setState(nextState);
@@ -1311,7 +1303,6 @@ export default function GarbageFeeApp() {
             </Button>
           </div>
         </div>
-        {(authLoading || headerLoadingVisible) && <HeaderLoadingScene />}
       </header>
 
       <AccountInformationDialog
@@ -2098,22 +2089,6 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
     <div className="min-w-0 space-y-1.5">
       <Label>{label}</Label>
       {children}
-    </div>
-  );
-}
-
-function HeaderLoadingScene() {
-  return (
-    <div className="header-loading-scene" role="status" aria-live="polite">
-      <div className="header-loading-track" aria-hidden="true">
-        <span className="header-loading-spark header-loading-spark-one">*</span>
-        <span className="header-loading-spark header-loading-spark-two">*</span>
-        <span className="header-loading-homeowner">🏃</span>
-        <span className="header-loading-broom">🧹</span>
-        <span className="header-loading-worker">🧑‍🔧</span>
-        <span className="header-loading-cart">🗑️</span>
-      </div>
-      <span className="header-loading-label">Đang tải dữ liệu...</span>
     </div>
   );
 }
