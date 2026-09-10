@@ -51,6 +51,7 @@ type AppSettings = {
   logoUrl: string;
   theme: 'teal' | 'blue' | 'indigo' | 'amber' | 'rose';
   showAdminInStats: boolean;
+  autoBackupEnabled: boolean;
 };
 type AppState = {
   users: User[];
@@ -288,6 +289,11 @@ export async function POST(request: Request) {
         { error: 'Quản trị chỉ được sửa hoặc xóa tài khoản Nhân viên.' },
         403,
       );
+    if (
+      currentUser.role === 'manager' &&
+      payload.state.settings.autoBackupEnabled !== existing.settings.autoBackupEnabled
+    )
+      return json({ error: 'Chỉ Admin được thay đổi chế độ sao lưu tự động.' }, 403);
     const nextState =
       currentUser.role !== 'staff'
         ? payload.state
@@ -401,7 +407,7 @@ async function readState(): Promise<AppState> {
       .order('submitted_at', { ascending: false }),
     db
       .from('app_settings')
-      .select('app_name, subtitle, logo_url, theme, show_admin_in_stats')
+      .select('app_name, subtitle, logo_url, theme, show_admin_in_stats, auto_backup_enabled')
       .eq('id', 'default')
       .maybeSingle(),
   ]);
@@ -472,6 +478,7 @@ async function readState(): Promise<AppState> {
       logoUrl: settingsResult.data?.logo_url ?? '',
       theme: (settingsResult.data?.theme ?? 'teal') as AppSettings['theme'],
       showAdminInStats: Boolean(settingsResult.data?.show_admin_in_stats),
+      autoBackupEnabled: Boolean(settingsResult.data?.auto_backup_enabled),
     },
   };
 }
@@ -606,6 +613,7 @@ async function saveState(state: AppState) {
         logo_url: state.settings.logoUrl,
         theme: state.settings.theme,
         show_admin_in_stats: state.settings.showAdminInStats,
+        auto_backup_enabled: state.settings.autoBackupEnabled,
       })
     ).error,
   );

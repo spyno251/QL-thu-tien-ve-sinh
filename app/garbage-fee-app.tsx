@@ -108,6 +108,7 @@ type AppSettings = {
   logoUrl: string;
   theme: 'teal' | 'blue' | 'indigo' | 'amber' | 'rose';
   showAdminInStats: boolean;
+  autoBackupEnabled: boolean;
 };
 
 type AppState = {
@@ -231,6 +232,7 @@ const initialState: AppState = {
     logoUrl: '',
     theme: 'teal',
     showAdminInStats: false,
+    autoBackupEnabled: false,
   },
 };
 
@@ -1378,7 +1380,7 @@ export default function GarbageFeeApp() {
                 Công nợ
               </TabsTrigger>
             )}
-            {canManage && (
+            {currentUser.role === 'admin' && (
               <TabsTrigger
                 value="settings"
                 className="min-h-9 flex-none whitespace-nowrap px-2 py-1.5 text-sm font-semibold text-foreground/75 data-active:bg-primary data-active:text-primary-foreground data-active:shadow-sm sm:flex-1 sm:px-3 sm:text-base"
@@ -1793,7 +1795,7 @@ export default function GarbageFeeApp() {
               />
             </TabsContent>
           )}
-          {canManage && (
+          {currentUser.role === 'admin' && (
             <TabsContent value="settings" className="mt-4">
               <CustomizationPanel
                 settings={state.settings}
@@ -2465,6 +2467,20 @@ function CustomizationPanel({
             }
           />
           Hiển thị Admin trong bảng thống kê nhân viên
+        </label>
+        <label className="flex min-h-11 items-start gap-2 text-sm sm:col-span-2">
+          <Checkbox
+            checked={draft.autoBackupEnabled}
+            onCheckedChange={(checked) =>
+              setDraft((current) => ({ ...current, autoBackupEnabled: checked }))
+            }
+          />
+          <span>
+            <span className="block">Tự động sao lưu hằng ngày lúc 24:00</span>
+            <span className="block text-xs text-muted-foreground">
+              Lưu điểm sao lưu dữ liệu lên hệ thống theo giờ Việt Nam.
+            </span>
+          </span>
         </label>
         <Button type="submit" className="sm:col-span-2" disabled={saving}>
           {saving ? 'Đang lưu...' : 'Lưu tùy chỉnh'}
