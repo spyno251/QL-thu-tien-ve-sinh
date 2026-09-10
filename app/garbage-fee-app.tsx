@@ -497,6 +497,7 @@ export default function GarbageFeeApp() {
       if (!response.ok || !payload.user)
         throw new Error(payload.error ?? 'Đăng nhập thất bại.');
       setCurrentUser(payload.user);
+      setPaymentFilter('unpaid');
       setLoginError('');
       await loadState();
     } catch (error) {
@@ -1409,7 +1410,7 @@ export default function GarbageFeeApp() {
                       >
                         <TableCell className="w-1/4 border-r p-0 align-top">
                           <div className="grid min-h-[168px] grid-rows-[40px_44px_44px_40px] divide-y">
-                            <div className="flex items-center gap-1.5 bg-primary/15 px-3 font-medium">
+                            <div className="flex items-center gap-1.5 bg-primary/25 px-3 font-semibold">
                             <span>
                               {apartment.code} - {region?.name ?? '-'}
                             </span>
@@ -1606,9 +1607,9 @@ export default function GarbageFeeApp() {
                               Thu tiền
                             </Button>
                           ) : (
-                            <span className="text-sm text-muted-foreground">
+                            <div className="flex h-full min-h-16 items-center justify-center text-center text-base font-semibold text-primary">
                               Đã ghi nhận
-                            </span>
+                            </div>
                           )}
                             </div>
                           </div>
