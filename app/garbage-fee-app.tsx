@@ -111,6 +111,19 @@ type AppSettings = {
   autoBackupEnabled: boolean;
 };
 
+type BackupPoint = {
+  id: string;
+  backupDate: string;
+  createdAt: string;
+  source: 'automatic' | 'manual';
+  counts: {
+    users: number;
+    apartments: number;
+    payments: number;
+    settlements: number;
+  };
+};
+
 type AppState = {
   users: User[];
   regions: Region[];
@@ -623,6 +636,54 @@ export default function GarbageFeeApp() {
     });
     const payload = (await response.json()) as { state?: AppState; error?: string };
     if (response.ok && payload.state) setState(payload.state);
+  };
+
+  const loadBackups = async () => {
+    const response = await fetch('/api/backups', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'list' }),
+    });
+    const payload = (await response.json()) as { backups?: BackupPoint[] };
+    return response.ok ? payload.backups ?? [] : [];
+  };
+
+  const createBackup = async () => {
+    const response = await fetch('/api/backups', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'create' }),
+    });
+    const payload = (await response.json()) as { error?: string };
+    return response.ok ? null : payload.error ?? 'Chưa thể tạo điểm sao lưu.';
+  };
+
+  const restoreBackup = async (backupId: string) => {
+    const response = await fetch('/api/backups', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'restore', backupId }),
+    });
+    const payload = (await response.json()) as { error?: string };
+    return response.ok ? null : payload.error ?? 'Chưa thể khôi phục sao lưu.';
+  };
+
+  const uploadLogo = async (file: File) => {
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () => reject(new Error('Không thể đọc tệp logo.'));
+      reader.readAsDataURL(file);
+    });
+    const response = await fetch('/api/logo', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dataUrl }),
+    });
+    const payload = (await response.json()) as { url?: string; error?: string };
+    if (!response.ok || !payload.url)
+      throw new Error(payload.error ?? 'Chưa thể tải logo lên.');
+    return payload.url;
   };
 
   const updateDebtSettlement = async (
@@ -1800,6 +1861,10 @@ export default function GarbageFeeApp() {
               <CustomizationPanel
                 settings={state.settings}
                 onSave={(settings) => void commit({ ...state, settings })}
+                onLoadBackups={loadBackups}
+                onCreateBackup={createBackup}
+                onRestoreBackup={restoreBackup}
+                onUploadLogo={uploadLogo}
               />
             </TabsContent>
           )}
@@ -2380,12 +2445,26 @@ function Metric({
 function CustomizationPanel({
   settings,
   onSave,
+  onLoadBackups,
+  onCreateBackup,
+  onRestoreBackup,
+  onUploadLogo,
 }: {
   settings: AppSettings;
   onSave: (settings: AppSettings) => Promise<void> | void;
+  onLoadBackups: () => Promise<BackupPoint[]>;
+  onCreateBackup: () => Promise<string | null>;
+  onRestoreBackup: (backupId: string) => Promise<string | null>;
+  onUploadLogo: (file: File) => Promise<string>;
 }) {
   const [draft, setDraft] = useState(settings);
   const [saving, setSaving] = useState(false);
+  const [backupsOpen, setBackupsOpen] = useState(false);
+  const [backups, setBackups] = useState<BackupPoint[]>([]);
+  const [loadingBackups, setLoadingBackups] = useState(false);
+  const [backupError, setBackupError] = useState('');
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [logoError, setLogoError] = useState('');
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -2398,6 +2477,58 @@ function CustomizationPanel({
       });
     } finally {
       setSaving(false);
+    }
+  };
+
+  const openBackups = async () => {
+    setBackupsOpen(true);
+    setLoadingBackups(true);
+    setBackupError('');
+    setBackups(await onLoadBackups());
+    setLoadingBackups(false);
+  };
+
+  const createPoint = async () => {
+    setBackupError('');
+    const error = await onCreateBackup();
+    if (error) {
+      setBackupError(error);
+      return;
+    }
+    setBackups(await onLoadBackups());
+  };
+
+  const restorePoint = async (backup: BackupPoint) => {
+    if (
+      !window.confirm(
+        `Khôi phục sao lưu lúc ${formatDate(backup.createdAt)}? Dữ liệu hiện tại sẽ được thay thế.`,
+      )
+    )
+      return;
+    setBackupError('');
+    const error = await onRestoreBackup(backup.id);
+    if (error) {
+      setBackupError(error);
+      return;
+    }
+    window.location.reload();
+  };
+
+  const selectLogo = async (file: File | undefined) => {
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      setLogoError('Logo cần nhỏ hơn 2 MB.');
+      return;
+    }
+    setUploadingLogo(true);
+    setLogoError('');
+    try {
+      const url = await onUploadLogo(file);
+      setDraft((current) => ({ ...current, logoUrl: url }));
+    } catch (error) {
+      setLogoError(error instanceof Error ? error.message : 'Chưa thể tải logo lên.');
+    } finally {
+      setUploadingLogo(false);
     }
   };
 
@@ -2431,16 +2562,34 @@ function CustomizationPanel({
             maxLength={100}
           />
         </Field>
-        <Field label="Logo URL (không bắt buộc)">
+        <div className="space-y-2">
+          <Field label="Logo từ URL (không bắt buộc)">
+            <Input
+              value={draft.logoUrl}
+              onChange={(event) =>
+                setDraft((current) => ({ ...current, logoUrl: event.target.value }))
+              }
+              placeholder="https://.../logo.png"
+              inputMode="url"
+            />
+          </Field>
+          <label className="block text-sm font-medium">Hoặc tải logo từ thiết bị</label>
           <Input
-            value={draft.logoUrl}
-            onChange={(event) =>
-              setDraft((current) => ({ ...current, logoUrl: event.target.value }))
-            }
-            placeholder="https://.../logo.png"
-            inputMode="url"
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/gif"
+            disabled={uploadingLogo}
+            onChange={(event) => void selectLogo(event.target.files?.[0])}
           />
-        </Field>
+          <p className="text-xs text-muted-foreground">PNG, JPG, WEBP hoặc GIF, tối đa 2 MB.</p>
+          {logoError && <p className="text-xs text-destructive">{logoError}</p>}
+          {uploadingLogo && <p className="text-xs text-primary">Đang tải logo lên...</p>}
+          {draft.logoUrl && (
+            <div className="flex items-center gap-2 rounded-md border bg-muted/30 p-2 text-xs text-muted-foreground">
+              <img src={draft.logoUrl} alt="Xem trước logo" className="size-9 rounded object-contain" />
+              Đã chọn logo. Bấm Lưu tùy chỉnh để áp dụng.
+            </div>
+          )}
+        </div>
         <Field label="Màu chủ đạo (mã căn và nút)">
           <NativeSelect
             className="w-full"
@@ -2485,7 +2634,66 @@ function CustomizationPanel({
         <Button type="submit" className="sm:col-span-2" disabled={saving}>
           {saving ? 'Đang lưu...' : 'Lưu tùy chỉnh'}
         </Button>
+        <Button type="button" variant="outline" className="sm:col-span-2" onClick={() => void openBackups()}>
+          Khôi phục từ sao lưu
+        </Button>
       </form>
+
+      <Dialog open={backupsOpen} onOpenChange={setBackupsOpen}>
+        <DialogContent className="max-h-[85vh] max-w-[calc(100%-1rem)] overflow-y-auto sm:max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>Điểm sao lưu</DialogTitle>
+            <DialogDescription>
+              Chọn một thời điểm để xem chi tiết và khôi phục dữ liệu ứng dụng.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm text-muted-foreground">Bản tự động chạy lúc 24:00 giờ Việt Nam.</p>
+            <Button type="button" size="sm" onClick={() => void createPoint()}>
+              Tạo sao lưu ngay
+            </Button>
+          </div>
+          {backupError && <p className="text-sm text-destructive">{backupError}</p>}
+          <div className="overflow-x-auto">
+            <Table className="min-w-[760px]">
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Thời điểm</TableHead>
+                  <TableHead>Nguồn</TableHead>
+                  <TableHead>Tài khoản</TableHead>
+                  <TableHead>Căn hộ</TableHead>
+                  <TableHead>Khoản thu</TableHead>
+                  <TableHead>Công nợ</TableHead>
+                  <TableHead className="text-right">Thao tác</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {backups.map((backup) => (
+                  <TableRow key={backup.id}>
+                    <TableCell>{formatDate(backup.createdAt)}</TableCell>
+                    <TableCell>{backup.source === 'automatic' ? 'Tự động' : 'Thủ công'}</TableCell>
+                    <TableCell>{formatNumber(backup.counts.users)}</TableCell>
+                    <TableCell>{formatNumber(backup.counts.apartments)}</TableCell>
+                    <TableCell>{formatNumber(backup.counts.payments)}</TableCell>
+                    <TableCell>{formatNumber(backup.counts.settlements)}</TableCell>
+                    <TableCell className="text-right">
+                      <Button type="button" size="sm" variant="destructive" onClick={() => void restorePoint(backup)}>
+                        Khôi phục
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {!loadingBackups && !backups.length && (
+                  <TableRow><TableCell colSpan={7} className="py-8 text-center text-muted-foreground">Chưa có điểm sao lưu.</TableCell></TableRow>
+                )}
+                {loadingBackups && (
+                  <TableRow><TableCell colSpan={7} className="py-8 text-center text-muted-foreground">Đang tải danh sách sao lưu...</TableCell></TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }
