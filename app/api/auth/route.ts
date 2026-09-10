@@ -20,7 +20,7 @@ type StoredUser = {
   password: string;
   email: string;
   name: string;
-  role: 'admin' | 'staff';
+  role: 'admin' | 'manager' | 'staff';
   mustChangePassword: boolean;
 };
 
@@ -145,7 +145,7 @@ async function login(request: Request, body: Record<string, unknown>) {
   }
   const mustChangePassword =
     Boolean(user.mustChangePassword) ||
-    (user.role === 'staff' && password === DEFAULT_PASSWORD);
+    (user.role !== 'admin' && password === DEFAULT_PASSWORD);
   await db
     .from('users')
     .update({ must_change_password: mustChangePassword })
@@ -219,15 +219,14 @@ async function adminReset(request: Request, body: Record<string, unknown>) {
   if (!db) return json({ error: configurationError() }, 503);
   const admin = await getSessionUser(db, request);
   const userId = String(body.userId ?? '');
-  if (!admin || admin.role !== 'admin')
-    return json({ error: 'Chỉ admin được đặt lại mật khẩu.' }, 403);
+  if (!admin || admin.role === 'staff')
+    return json({ error: 'Chỉ Quản trị hoặc Admin được đặt lại mật khẩu.' }, 403);
   const { data: target } = await db
     .from('users')
     .select('id')
     .eq('id', userId)
-    .eq('role', 'staff')
     .maybeSingle();
-  if (!target) return json({ error: 'Không tìm thấy nhân viên.' }, 404);
+  if (!target) return json({ error: 'Không tìm thấy tài khoản.' }, 404);
   await db
     .from('users')
     .update({

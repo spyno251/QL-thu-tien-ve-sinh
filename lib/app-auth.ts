@@ -10,7 +10,7 @@ export type SessionUser = {
   phone: string;
   email: string;
   name: string;
-  role: 'admin' | 'staff';
+  role: 'admin' | 'manager' | 'staff';
   mustChangePassword: boolean;
 };
 

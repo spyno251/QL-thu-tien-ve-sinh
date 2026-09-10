@@ -45,7 +45,7 @@ import {
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
-type Role = 'admin' | 'staff';
+type Role = 'admin' | 'manager' | 'staff';
 
 type User = {
   id: string;
@@ -89,11 +89,22 @@ type Payment = {
   method: 'cash' | 'transfer';
 };
 
+type DebtSettlement = {
+  id: string;
+  staffId: string;
+  amount: number;
+  submittedAt: string;
+  confirmedAt: string | null;
+  confirmedBy: string | null;
+  status: 'pending' | 'confirmed';
+};
+
 type AppSettings = {
   appName: string;
   subtitle: string;
   logoUrl: string;
   theme: 'teal' | 'blue' | 'indigo' | 'amber' | 'rose';
+  showAdminInStats: boolean;
 };
 
 type AppState = {
@@ -102,6 +113,7 @@ type AppState = {
   blocks: Block[];
   apartments: Apartment[];
   payments: Payment[];
+  debtSettlements: DebtSettlement[];
   settings: AppSettings;
 };
 
@@ -209,11 +221,13 @@ const initialState: AppState = {
       method: 'cash',
     },
   ],
+  debtSettlements: [],
   settings: {
     appName: 'Thu tiền vệ sinh',
     subtitle: 'Quản lý thu tiền vệ sinh theo từng căn hộ',
     logoUrl: '',
     theme: 'teal',
+    showAdminInStats: false,
   },
 };
 
@@ -578,6 +592,28 @@ export default function GarbageFeeApp() {
       body: JSON.stringify({ action: 'cancel-payment', paymentId }),
     });
     const payload = (await response.json()) as { state?: AppState };
+    if (response.ok && payload.state) setState(payload.state);
+  };
+
+  const submitDebtSettlement = async (amount: number) => {
+    const response = await fetch('/api/data', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'submit-debt-settlement', amount }),
+    });
+    const payload = (await response.json()) as { state?: AppState; error?: string };
+    if (!response.ok) return payload.error ?? 'Chưa thể gửi yêu cầu trả tiền.';
+    if (payload.state) setState(payload.state);
+    return null;
+  };
+
+  const confirmDebtSettlement = async (settlementId: string) => {
+    const response = await fetch('/api/data', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'confirm-debt-settlement', settlementId }),
+    });
+    const payload = (await response.json()) as { state?: AppState; error?: string };
     if (response.ok && payload.state) setState(payload.state);
   };
 
@@ -1153,7 +1189,7 @@ export default function GarbageFeeApp() {
     );
   }
 
-  const isAdmin = currentUser.role === 'admin';
+  const canManage = currentUser.role !== 'staff';
   const accountPayments = state.payments
     .filter((payment) => payment.collectorId === currentUser.id)
     .sort((a, b) => b.paidAt.localeCompare(a.paidAt));
@@ -1177,7 +1213,12 @@ export default function GarbageFeeApp() {
             <div>
               <h1 className="text-lg font-semibold">{state.settings.appName}</h1>
               <p className="text-sm text-muted-foreground">
-                {currentUser.name} · {currentUser.role === 'admin' ? 'Admin' : 'Nhân viên'}
+                {currentUser.name} ·{' '}
+                {currentUser.role === 'admin'
+                  ? 'Admin'
+                  : currentUser.role === 'manager'
+                    ? 'Quản trị'
+                    : 'Nhân viên'}
               </p>
               {state.settings.subtitle && (
                 <p className="max-w-[18rem] truncate text-xs text-muted-foreground/80">
@@ -1224,6 +1265,10 @@ export default function GarbageFeeApp() {
         blocks={state.blocks}
         regions={state.regions}
         total={accountTotal}
+        settlements={state.debtSettlements.filter(
+          (settlement) => settlement.staffId === currentUser.id,
+        )}
+        onSubmitDebt={submitDebtSettlement}
       />
 
       <div className="mx-auto max-w-7xl px-2 py-3 sm:px-4 sm:py-5">
@@ -1276,7 +1321,15 @@ export default function GarbageFeeApp() {
             >
               Nhân viên
             </TabsTrigger>
-            {isAdmin && (
+            {canManage && (
+              <TabsTrigger
+                value="debts"
+                className="min-h-9 flex-none whitespace-nowrap px-2 py-1.5 text-sm font-semibold text-foreground/75 data-active:bg-primary data-active:text-primary-foreground data-active:shadow-sm sm:flex-1 sm:px-3 sm:text-base"
+              >
+                Công nợ
+              </TabsTrigger>
+            )}
+            {canManage && (
               <TabsTrigger
                 value="settings"
                 className="min-h-9 flex-none whitespace-nowrap px-2 py-1.5 text-sm font-semibold text-foreground/75 data-active:bg-primary data-active:text-primary-foreground data-active:shadow-sm sm:flex-1 sm:px-3 sm:text-base"
@@ -1589,7 +1642,7 @@ export default function GarbageFeeApp() {
                                 Ẩn giao dịch trong {countdown} giây
                               </span>
                             </Button>
-                          ) : payment && isAdmin ? (
+                          ) : payment && canManage ? (
                             <Button
                               type="button"
                               variant="outline"
@@ -1630,11 +1683,12 @@ export default function GarbageFeeApp() {
               totalDue={totalDue}
               totalPaid={totalPaid}
               lookups={lookups}
+              settlements={state.debtSettlements}
             />
           </TabsContent>
 
           <TabsContent value="areas" className="mt-4">
-            {isAdmin ? (
+            {canManage ? (
               <AdminAreas
                 state={state}
                 newRegion={newRegion}
@@ -1663,7 +1717,7 @@ export default function GarbageFeeApp() {
           </TabsContent>
 
           <TabsContent value="users" className="mt-4">
-            {isAdmin ? (
+            {canManage ? (
               <AdminUsers
                 users={state.users}
                 currentUserId={currentUser.id}
@@ -1678,7 +1732,17 @@ export default function GarbageFeeApp() {
               <Restricted />
             )}
           </TabsContent>
-          {isAdmin && (
+          {canManage && (
+            <TabsContent value="debts" className="mt-4">
+              <DebtManagement
+                users={state.users}
+                payments={state.payments}
+                settlements={state.debtSettlements}
+                onConfirm={confirmDebtSettlement}
+              />
+            </TabsContent>
+          )}
+          {canManage && (
             <TabsContent value="settings" className="mt-4">
               <CustomizationPanel
                 settings={state.settings}
@@ -1987,6 +2051,8 @@ function AccountInformationDialog({
   blocks,
   regions,
   total,
+  settlements,
+  onSubmitDebt,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -1996,10 +2062,44 @@ function AccountInformationDialog({
   blocks: Block[];
   regions: Region[];
   total: number;
+  settlements: DebtSettlement[];
+  onSubmitDebt: (amount: number) => Promise<string | null>;
 }) {
+  const [debtAmount, setDebtAmount] = useState('');
+  const [debtError, setDebtError] = useState('');
+  const [submittingDebt, setSubmittingDebt] = useState(false);
   const apartmentById = new Map(apartments.map((item) => [item.id, item]));
   const blockById = new Map(blocks.map((item) => [item.id, item]));
   const regionById = new Map(regions.map((item) => [item.id, item]));
+  const confirmedDebt = settlements
+    .filter((item) => item.status === 'confirmed')
+    .reduce((sum, item) => sum + item.amount, 0);
+  const pendingDebt = settlements
+    .filter((item) => item.status === 'pending')
+    .reduce((sum, item) => sum + item.amount, 0);
+  const outstandingDebt = Math.max(0, total - confirmedDebt);
+  const availableDebt = Math.max(0, outstandingDebt - pendingDebt);
+
+  const submitDebt = async () => {
+    if (!debtAmount) {
+      setDebtError('Nhập số tiền muốn trả.');
+      return;
+    }
+    const amount = parseAmount(debtAmount, availableDebt);
+    if (!amount || amount > availableDebt) {
+      setDebtError('Nhập số tiền không vượt quá công nợ có thể nộp.');
+      return;
+    }
+    setSubmittingDebt(true);
+    const error = await onSubmitDebt(amount);
+    setSubmittingDebt(false);
+    if (error) {
+      setDebtError(error);
+      return;
+    }
+    setDebtAmount('');
+    setDebtError('');
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -2019,7 +2119,11 @@ function AccountInformationDialog({
           <div className="rounded-lg border bg-muted/30 p-3">
             <p className="text-xs text-muted-foreground">Vai trò</p>
             <p className="mt-1 font-semibold">
-              {user.role === 'admin' ? 'Admin' : 'Nhân viên'}
+              {user.role === 'admin'
+                ? 'Admin'
+                : user.role === 'manager'
+                  ? 'Quản trị'
+                  : 'Nhân viên'}
             </p>
           </div>
           <div className="rounded-lg border bg-muted/30 p-3">
@@ -2031,6 +2135,36 @@ function AccountInformationDialog({
             <p className="mt-1 break-all font-semibold">{user.email || '-'}</p>
           </div>
         </section>
+
+        {user.role === 'staff' && (
+          <section className="rounded-lg border bg-primary/5 p-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="font-semibold">Thanh toán công nợ</h2>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Còn nợ: {money.format(outstandingDebt)}
+                  {pendingDebt > 0 && ` · Chờ xác nhận: ${money.format(pendingDebt)}`}
+                </p>
+              </div>
+              <span className="text-sm font-semibold text-primary">
+                Có thể nộp: {money.format(availableDebt)}
+              </span>
+            </div>
+            <div className="mt-3 flex gap-2">
+              <Input
+                className="min-w-0"
+                inputMode="numeric"
+                placeholder="Số tiền trả"
+                value={debtAmount}
+                onChange={(event) => setDebtAmount(formatAmountInput(event.target.value))}
+              />
+              <Button type="button" disabled={!availableDebt || submittingDebt} onClick={submitDebt}>
+                {submittingDebt ? 'Đang gửi...' : 'Trả tiền'}
+              </Button>
+            </div>
+            {debtError && <p className="mt-2 text-sm text-destructive">{debtError}</p>}
+          </section>
+        )}
 
         <section className="rounded-lg border bg-card p-3">
           <div className="flex items-center justify-between gap-3">
@@ -2210,6 +2344,15 @@ function CustomizationPanel({
             <NativeSelectOption value="rose">Hồng đỏ</NativeSelectOption>
           </NativeSelect>
         </Field>
+        <label className="flex min-h-11 items-center gap-2 text-sm sm:col-span-2">
+          <Checkbox
+            checked={draft.showAdminInStats}
+            onCheckedChange={(checked) =>
+              setDraft((current) => ({ ...current, showAdminInStats: checked }))
+            }
+          />
+          Hiển thị Admin trong bảng thống kê nhân viên
+        </label>
         <Button type="submit" className="sm:col-span-2" disabled={saving}>
           {saving ? 'Đang lưu...' : 'Lưu tùy chỉnh'}
         </Button>
@@ -2221,7 +2364,7 @@ function CustomizationPanel({
 function Restricted() {
   return (
     <section className="rounded-lg border bg-card p-5 text-sm text-muted-foreground">
-      Chỉ tài khoản admin được thêm, sửa hoặc xóa dữ liệu quản lý.
+      Chỉ tài khoản Quản trị hoặc Admin được thêm, sửa hoặc xóa dữ liệu quản lý.
     </section>
   );
 }
@@ -2233,6 +2376,7 @@ function StatsView({
   totalDue,
   totalPaid,
   lookups,
+  settlements,
 }: {
   state: AppState;
   month: string;
@@ -2244,19 +2388,33 @@ function StatsView({
     blocks: Map<string, Block>;
     users: Map<string, User>;
   };
+  settlements: DebtSettlement[];
 }) {
   const [selectedCollectorId, setSelectedCollectorId] = useState<string | null>(
     null,
   );
   const payments = state.payments.filter((item) => item.month === month);
-  const byUser = state.users.map((user) => {
+  const byUser = state.users
+    .filter((user) => user.role !== 'admin' || state.settings.showAdminInStats)
+    .map((user) => {
     const userPayments = payments.filter(
       (item) => item.collectorId === user.id,
     );
+    const allUserPayments = state.payments.filter(
+      (item) => item.collectorId === user.id,
+    );
+    const settled = settlements
+      .filter((item) => item.staffId === user.id && item.status === 'confirmed')
+      .reduce((sum, item) => sum + item.amount, 0);
     return {
       user,
       count: userPayments.length,
       total: userPayments.reduce((sum, item) => sum + item.amount, 0),
+      settled,
+      outstanding: Math.max(
+        0,
+        allUserPayments.reduce((sum, item) => sum + item.amount, 0) - settled,
+      ),
     };
   });
   const selectedUser = state.users.find((user) => user.id === selectedCollectorId);
@@ -2300,15 +2458,19 @@ function StatsView({
               <TableHead>Nhân viên</TableHead>
               <TableHead>Số căn</TableHead>
               <TableHead>Tổng tiền</TableHead>
+              <TableHead>Đã nộp</TableHead>
+              <TableHead>Còn nợ</TableHead>
               <TableHead>Chi tiết</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {byUser.map(({ user, count, total }) => (
+            {byUser.map(({ user, count, total, settled, outstanding }) => (
               <TableRow key={user.id}>
                 <TableCell>{user.name}</TableCell>
                 <TableCell>{formatNumber(count)}</TableCell>
                 <TableCell>{money.format(total)}</TableCell>
+                <TableCell>{money.format(settled)}</TableCell>
+                <TableCell>{money.format(outstanding)}</TableCell>
                 <TableCell>
                   <Button
                     type="button"
@@ -2413,6 +2575,102 @@ function StatsView({
                   </TableCell>
                   <TableCell>{formatDate(payment.paidAt)}</TableCell>
                   <TableCell>{money.format(payment.amount)}</TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </div>
+    </section>
+  );
+}
+
+function DebtManagement({
+  users,
+  payments,
+  settlements,
+  onConfirm,
+}: {
+  users: User[];
+  payments: Payment[];
+  settlements: DebtSettlement[];
+  onConfirm: (settlementId: string) => Promise<void>;
+}) {
+  const staff = users.filter((user) => user.role === 'staff');
+  const pending = settlements.filter((settlement) => settlement.status === 'pending');
+
+  return (
+    <section className="grid gap-4 lg:grid-cols-2">
+      <div className="rounded-lg border bg-card p-4">
+        <h2 className="mb-1 text-base font-semibold">Chờ xác nhận</h2>
+        <p className="mb-3 text-sm text-muted-foreground">
+          Xác nhận khi đã nhận đủ tiền thực tế từ nhân viên.
+        </p>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Nhân viên</TableHead>
+              <TableHead>Số tiền</TableHead>
+              <TableHead>Thời điểm gửi</TableHead>
+              <TableHead>Thao tác</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {pending.map((settlement) => {
+              const user = users.find((item) => item.id === settlement.staffId);
+              return (
+                <TableRow key={settlement.id}>
+                  <TableCell>{user?.name ?? settlement.staffId}</TableCell>
+                  <TableCell>{money.format(settlement.amount)}</TableCell>
+                  <TableCell>{formatDate(settlement.submittedAt)}</TableCell>
+                  <TableCell>
+                    <Button type="button" size="sm" onClick={() => void onConfirm(settlement.id)}>
+                      Xác nhận
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+            {!pending.length && (
+              <TableRow>
+                <TableCell colSpan={4} className="py-8 text-center text-muted-foreground">
+                  Không có yêu cầu chờ xác nhận.
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </div>
+
+      <div className="rounded-lg border bg-card p-4">
+        <h2 className="mb-3 text-base font-semibold">Công nợ theo nhân viên</h2>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Nhân viên</TableHead>
+              <TableHead>Đã thu</TableHead>
+              <TableHead>Đã nộp</TableHead>
+              <TableHead>Còn nợ</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {staff.map((user) => {
+              const collected = payments
+                .filter((payment) => payment.collectorId === user.id)
+                .reduce((sum, payment) => sum + payment.amount, 0);
+              const paidBack = settlements
+                .filter(
+                  (settlement) =>
+                    settlement.staffId === user.id &&
+                    settlement.status === 'confirmed',
+                )
+                .reduce((sum, settlement) => sum + settlement.amount, 0);
+              return (
+                <TableRow key={user.id}>
+                  <TableCell>{user.name}</TableCell>
+                  <TableCell>{money.format(collected)}</TableCell>
+                  <TableCell>{money.format(paidBack)}</TableCell>
+                  <TableCell>{money.format(Math.max(0, collected - paidBack))}</TableCell>
                 </TableRow>
               );
             })}
@@ -2913,7 +3171,7 @@ function AdminUsers(props: {
         className="mb-4 grid gap-2 lg:grid-cols-[1fr_150px_1fr_130px_auto]"
       >
         <Input
-          placeholder="Tên nhân viên"
+          placeholder="Tên tài khoản"
           value={props.newUser.name}
           onChange={(event) =>
             props.setNewUser({ ...props.newUser, name: event.target.value })
@@ -2947,6 +3205,7 @@ function AdminUsers(props: {
           }
         >
           <NativeSelectOption value="staff">Nhân viên</NativeSelectOption>
+          <NativeSelectOption value="manager">Quản trị</NativeSelectOption>
           <NativeSelectOption value="admin">Admin</NativeSelectOption>
         </NativeSelect>
         <Button type="submit">
@@ -3016,6 +3275,7 @@ function AdminUsers(props: {
                   <NativeSelectOption value="staff">
                     Nhân viên
                   </NativeSelectOption>
+                  <NativeSelectOption value="manager">Quản trị</NativeSelectOption>
                   <NativeSelectOption value="admin">Admin</NativeSelectOption>
                 </NativeSelect>
               </TableCell>
@@ -3030,7 +3290,7 @@ function AdminUsers(props: {
               </TableCell>
               <TableCell>
                 <div className="flex items-center gap-2">
-                  {user.role === 'staff' && (
+                  {user.role !== 'admin' && (
                     <Button
                       type="button"
                       variant="outline"

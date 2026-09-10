@@ -9,7 +9,7 @@ type User = {
   phone: string;
   email: string;
   name: string;
-  role: 'admin' | 'staff';
+  role: 'admin' | 'manager' | 'staff';
   mustChangePassword: boolean;
 };
 type StoredUser = User & { password: string };
@@ -34,11 +34,21 @@ type Payment = {
   note: string;
   method: 'cash' | 'transfer';
 };
+type DebtSettlement = {
+  id: string;
+  staffId: string;
+  amount: number;
+  submittedAt: string;
+  confirmedAt: string | null;
+  confirmedBy: string | null;
+  status: 'pending' | 'confirmed';
+};
 type AppSettings = {
   appName: string;
   subtitle: string;
   logoUrl: string;
   theme: 'teal' | 'blue' | 'indigo' | 'amber' | 'rose';
+  showAdminInStats: boolean;
 };
 type AppState = {
   users: User[];
@@ -46,6 +56,7 @@ type AppState = {
   blocks: Block[];
   apartments: Apartment[];
   payments: Payment[];
+  debtSettlements: DebtSettlement[];
   settings: AppSettings;
 };
 
@@ -79,6 +90,8 @@ export async function POST(request: Request) {
       payment?: Partial<Payment>;
       paymentId?: string;
       note?: string;
+      amount?: number;
+      settlementId?: string;
     };
     if (payload.action === 'record-payment') {
       const payment = payload.payment;
@@ -108,8 +121,8 @@ export async function POST(request: Request) {
       });
     }
     if (payload.action === 'cancel-payment') {
-      if (currentUser.role !== 'admin')
-        return json({ error: 'Chỉ Admin được hủy khoản thu.' }, 403);
+      if (currentUser.role === 'staff')
+        return json({ error: 'Chỉ Quản trị hoặc Admin được hủy khoản thu.' }, 403);
       const paymentId = String(payload.paymentId ?? '');
       if (!paymentId) return json({ error: 'Thiếu mã giao dịch.' }, 400);
       const { error } = await db.from('payments').delete().eq('id', paymentId);
@@ -126,7 +139,7 @@ export async function POST(request: Request) {
         .from('payments')
         .update({ note: String(payload.note ?? '').trim() })
         .eq('id', paymentId);
-      if (currentUser.role !== 'admin')
+      if (currentUser.role === 'staff')
         update = update.eq('collector_id', currentUser.id);
       const { error } = await update;
       if (error) throw error;
@@ -135,10 +148,70 @@ export async function POST(request: Request) {
         state: visibleState(await readState(), currentUser),
       });
     }
+    if (payload.action === 'submit-debt-settlement') {
+      if (currentUser.role !== 'staff')
+        return json({ error: 'Chỉ nhân viên mới có thể gửi yêu cầu trả tiền.' }, 403);
+      const amount = Number(payload.amount);
+      if (!Number.isInteger(amount) || amount <= 0)
+        return json({ error: 'Số tiền nộp không hợp lệ.' }, 400);
+      const [paymentsResult, settlementsResult] = await Promise.all([
+        db.from('payments').select('amount').eq('collector_id', currentUser.id),
+        db
+          .from('debt_settlements')
+          .select('amount, status')
+          .eq('staff_id', currentUser.id),
+      ]);
+      if (paymentsResult.error || settlementsResult.error) throw new Error('Read failed');
+      const totalCollected = (paymentsResult.data ?? []).reduce(
+        (sum, payment) => sum + payment.amount,
+        0,
+      );
+      const totalSettled = (settlementsResult.data ?? []).reduce(
+        (sum, settlement) => sum + settlement.amount,
+        0,
+      );
+      if (amount > totalCollected - totalSettled)
+        return json({ error: 'Số tiền nộp vượt quá công nợ hiện có.' }, 400);
+      const { error } = await db.from('debt_settlements').insert({
+        id: crypto.randomUUID(),
+        staff_id: currentUser.id,
+        amount,
+        submitted_at: new Date().toISOString(),
+        status: 'pending',
+      });
+      if (error) throw error;
+      return json({
+        ok: true,
+        state: visibleState(await readState(), currentUser),
+      });
+    }
+    if (payload.action === 'confirm-debt-settlement') {
+      if (currentUser.role === 'staff')
+        return json({ error: 'Chỉ Quản trị hoặc Admin được xác nhận.' }, 403);
+      const settlementId = String(payload.settlementId ?? '');
+      if (!settlementId) return json({ error: 'Thiếu mã yêu cầu.' }, 400);
+      const { data, error } = await db
+        .from('debt_settlements')
+        .update({
+          status: 'confirmed',
+          confirmed_at: new Date().toISOString(),
+          confirmed_by: currentUser.id,
+        })
+        .eq('id', settlementId)
+        .eq('status', 'pending')
+        .select('id')
+        .maybeSingle();
+      if (error) throw error;
+      if (!data) return json({ error: 'Yêu cầu đã được xử lý.' }, 409);
+      return json({
+        ok: true,
+        state: visibleState(await readState(), currentUser),
+      });
+    }
     if (!payload.state) return json({ error: 'Missing state' }, 400);
     const existing = await readState();
     const nextState =
-      currentUser.role === 'admin'
+      currentUser.role !== 'staff'
         ? payload.state
         : {
             ...existing,
@@ -160,11 +233,14 @@ export async function POST(request: Request) {
 
 function visibleState(
   state: AppState,
-  currentUser: { id: string; role: 'admin' | 'staff' },
+  currentUser: { id: string; role: 'admin' | 'manager' | 'staff' },
 ) {
-  if (currentUser.role === 'admin') return state;
+  if (currentUser.role !== 'staff') return state;
   return {
     ...state,
+    debtSettlements: state.debtSettlements.filter(
+      (settlement) => settlement.staffId === currentUser.id,
+    ),
     users: state.users.map((user) => ({
       ...user,
       phone: user.id === currentUser.id ? user.phone : '',
@@ -197,6 +273,7 @@ async function readState(): Promise<AppState> {
     blocksResult,
     apartmentsResult,
     paymentsResult,
+    debtSettlementsResult,
     settingsResult,
   ] = await Promise.all([
     db
@@ -213,14 +290,24 @@ async function readState(): Promise<AppState> {
       .from('payments')
       .select('id, apartment_id, collector_id, month, paid_at, amount, note, method')
       .order('paid_at', { ascending: false }),
-    db.from('app_settings').select('app_name, subtitle, logo_url, theme').eq('id', 'default').maybeSingle(),
+    db
+      .from('debt_settlements')
+      .select('id, staff_id, amount, submitted_at, confirmed_at, confirmed_by, status')
+      .order('submitted_at', { ascending: false }),
+    db
+      .from('app_settings')
+      .select('app_name, subtitle, logo_url, theme, show_admin_in_stats')
+      .eq('id', 'default')
+      .maybeSingle(),
   ]);
   if (
     usersResult.error ||
     regionsResult.error ||
     blocksResult.error ||
     apartmentsResult.error ||
-    paymentsResult.error || settingsResult.error
+    paymentsResult.error ||
+    debtSettlementsResult.error ||
+    settingsResult.error
   )
     throw new Error('Read failed');
   return {
@@ -261,6 +348,15 @@ async function readState(): Promise<AppState> {
       note: item.note,
       method: item.method as Payment['method'],
     })),
+    debtSettlements: (debtSettlementsResult.data ?? []).map((item) => ({
+      id: item.id,
+      staffId: item.staff_id,
+      amount: item.amount,
+      submittedAt: item.submitted_at,
+      confirmedAt: item.confirmed_at,
+      confirmedBy: item.confirmed_by,
+      status: item.status as DebtSettlement['status'],
+    })),
     settings: {
       appName: settingsResult.data?.app_name ?? 'Thu tiền vệ sinh',
       subtitle:
@@ -268,6 +364,7 @@ async function readState(): Promise<AppState> {
         'Quản lý thu tiền vệ sinh theo từng căn hộ',
       logoUrl: settingsResult.data?.logo_url ?? '',
       theme: (settingsResult.data?.theme ?? 'teal') as AppSettings['theme'],
+      showAdminInStats: Boolean(settingsResult.data?.show_admin_in_stats),
     },
   };
 }
@@ -290,6 +387,7 @@ async function saveState(state: AppState) {
     if (error) throw error;
   };
 
+  fail((await db.from('debt_settlements').delete().not('id', 'is', null)).error);
   fail((await db.from('payments').delete().not('id', 'is', null)).error);
   fail((await db.from('apartments').delete().not('id', 'is', null)).error);
   fail((await db.from('blocks').delete().not('id', 'is', null)).error);
@@ -374,6 +472,22 @@ async function saveState(state: AppState) {
           )
       ).error,
     );
+  if (state.debtSettlements.length)
+    fail(
+      (
+        await db.from('debt_settlements').insert(
+          state.debtSettlements.map((item) => ({
+            id: item.id,
+            staff_id: item.staffId,
+            amount: item.amount,
+            submitted_at: item.submittedAt,
+            confirmed_at: item.confirmedAt,
+            confirmed_by: item.confirmedBy,
+            status: item.status,
+          })),
+        )
+      ).error,
+    );
   fail(
     (
       await db.from('app_settings').upsert({
@@ -382,6 +496,7 @@ async function saveState(state: AppState) {
         subtitle: state.settings.subtitle,
         logo_url: state.settings.logoUrl,
         theme: state.settings.theme,
+        show_admin_in_stats: state.settings.showAdminInStats,
       })
     ).error,
   );
