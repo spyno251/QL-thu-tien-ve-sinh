@@ -120,15 +120,11 @@ function normalizeStaffPayments(
   const existingById = new Map(
     existing.map((payment) => [payment.id, payment]),
   );
-  const incomingIds = new Set(incoming.map((payment) => payment.id));
-  const kept = existing.filter(
-    (payment) =>
-      incomingIds.has(payment.id) || payment.collectorId !== currentUserId,
-  );
   const additions = incoming
     .filter((payment) => !existingById.has(payment.id))
     .map((payment) => ({ ...payment, collectorId: currentUserId }));
-  return [...additions, ...kept];
+  // Staff may add a payment, but existing payments are immutable for them.
+  return [...additions, ...existing];
 }
 
 async function readState(): Promise<AppState> {

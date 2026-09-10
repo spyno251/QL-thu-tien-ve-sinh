@@ -1335,10 +1335,18 @@ export default function GarbageFeeApp() {
               <Table className="min-w-[640px] table-fixed">
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-1/4 border-r">Căn hộ</TableHead>
-                    <TableHead className="w-1/4 border-r">Nội dung</TableHead>
-                    <TableHead className="w-1/4 border-r">Giá trị</TableHead>
-                    <TableHead className="w-1/4">Thanh toán</TableHead>
+                    <TableHead className="sticky top-0 z-10 w-1/4 border-r bg-primary text-center text-primary-foreground">
+                      Căn hộ
+                    </TableHead>
+                    <TableHead className="sticky top-0 z-10 w-1/4 border-r bg-primary text-center text-primary-foreground">
+                      Nội dung
+                    </TableHead>
+                    <TableHead className="sticky top-0 z-10 w-1/4 border-r bg-primary text-center text-primary-foreground">
+                      Giá trị
+                    </TableHead>
+                    <TableHead className="sticky top-0 z-10 w-1/4 bg-primary text-center text-primary-foreground">
+                      Thanh toán
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1403,23 +1411,7 @@ export default function GarbageFeeApp() {
                               }}
                             />
                             </div>
-                            <div className="flex items-center px-3 text-sm font-medium">
-                              Ghi chú
-                            </div>
-                          </div>
-                        </TableCell>
-                        <TableCell className="w-1/4 border-r p-0 align-top">
-                          <div className="grid min-h-[168px] grid-rows-[40px_40px_48px_40px] divide-y">
-                            <div className="flex h-10 items-center px-3 text-sm font-medium">
-                              Số tiền
-                            </div>
-                            <div className="flex h-10 items-center px-3 text-sm font-medium">
-                              Trạng thái
-                            </div>
-                            <div className="flex h-12 items-center px-3 text-sm font-medium">
-                              Người thu
-                            </div>
-                            <div className="flex h-10 items-center px-2">
+                            <div className="flex items-center px-2">
                               {payment ? (
                                 <Input
                                   className="h-8 w-full"
@@ -1435,7 +1427,7 @@ export default function GarbageFeeApp() {
                               ) : (
                                 <Input
                                   className="h-8 w-full"
-                                  placeholder="Ví dụ: khách hẹn lại"
+                                  placeholder="Ghi chú"
                                   value={draftPaymentNotes[apartment.id] ?? ''}
                                   onChange={(event) =>
                                     setDraftPaymentNotes({
@@ -1446,6 +1438,20 @@ export default function GarbageFeeApp() {
                                 />
                               )}
                             </div>
+                          </div>
+                        </TableCell>
+                        <TableCell className="w-1/4 border-r p-0 align-top">
+                          <div className="grid min-h-[168px] grid-rows-[40px_40px_48px_40px] divide-y">
+                            <div className="flex h-10 items-center px-3 text-sm font-medium">
+                              Số tiền
+                            </div>
+                            <div className="flex h-10 items-center px-3 text-sm font-medium">
+                              Trạng thái
+                            </div>
+                            <div className="flex h-12 items-center px-3 text-sm font-medium">
+                              Người thu
+                            </div>
+                            <div className="h-10" />
                           </div>
                         </TableCell>
                         <TableCell className="w-1/4 border-r p-0 align-top">
@@ -1523,9 +1529,7 @@ export default function GarbageFeeApp() {
                           )}
                             </div>
                             <div className="p-2">
-                            {payment &&
-                            (isAdmin ||
-                              payment.collectorId === currentUser.id) ? (
+                            {payment && isAdmin ? (
                             <Button
                               type="button"
                               variant="outline"
