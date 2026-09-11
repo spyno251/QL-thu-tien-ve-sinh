@@ -343,6 +343,7 @@ export default function GarbageFeeApp() {
   const [remember, setRemember] = useState(false);
   const [loginError, setLoginError] = useState('');
   const [authLoading, setAuthLoading] = useState(true);
+  const [refreshingData, setRefreshingData] = useState(false);
   const [setupRequired, setSetupRequired] = useState(false);
   const [forgotMode, setForgotMode] = useState(false);
   const [forgotEmail, setForgotEmail] = useState('');
@@ -677,6 +678,17 @@ export default function GarbageFeeApp() {
     });
     const payload = (await response.json()) as { state?: AppState; error?: string };
     if (response.ok && payload.state) setState(payload.state);
+  };
+
+  const refreshData = async () => {
+    setRefreshingData(true);
+    try {
+      await loadState();
+    } catch {
+      setSyncStatus('local');
+    } finally {
+      setRefreshingData(false);
+    }
   };
 
   const loadBackups = async () => {
@@ -1203,6 +1215,25 @@ export default function GarbageFeeApp() {
     );
   }
 
+  if (refreshingData) {
+    return (
+      <main className="grid min-h-screen place-items-center bg-[radial-gradient(circle_at_top_left,#d9f0ef_0,#f4f7f4_31%,#f8fafc_68%)] px-4 text-foreground">
+        <section className="flex max-w-sm flex-col items-center text-center">
+          <div className="grid size-40 place-items-center overflow-hidden rounded-lg border bg-white shadow-[0_20px_60px_rgba(15,23,42,0.12)]">
+            <img
+              src={state.settings.logoUrl || '/app-icon.png'}
+              alt=""
+              className="size-32 object-contain"
+            />
+          </div>
+          <p className="mt-6 text-sm font-semibold tracking-wide text-primary">
+            Đang hoàn tất cập nhật dữ liệu...
+          </p>
+        </section>
+      </main>
+    );
+  }
+
   if (currentUser && (currentUser.mustChangePassword || showChangePassword)) {
     return (
       <PasswordChangeScreen
@@ -1414,7 +1445,15 @@ export default function GarbageFeeApp() {
               )}
             </div>
           </div>
-          <div className="grid w-full grid-cols-3 gap-2 sm:flex sm:w-auto">
+          <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void refreshData()}
+            >
+              <RotateCcw className="size-4" />
+              Cập nhật dữ liệu
+            </Button>
             <Button
               type="button"
               variant="outline"
