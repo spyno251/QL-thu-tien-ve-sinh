@@ -333,17 +333,14 @@ export async function POST(request: Request) {
       JSON.stringify(payload.state.settings) !== JSON.stringify(existing.settings)
     )
       return json({ error: 'Chỉ Admin được thay đổi chế độ sao lưu tự động.' }, 403);
+    // Payment records are append-only outside their dedicated API actions. This
+    // prevents an unrelated apartment/profile edit from overwriting a newer
+    // collection that another account just recorded.
+    const protectedPayments = existing.payments;
     const nextState =
       currentUser.role !== 'staff'
-        ? payload.state
-        : {
-            ...existing,
-            payments: normalizeStaffPayments(
-              existing.payments,
-              payload.state.payments,
-              currentUser.id,
-            ),
-          };
+        ? { ...payload.state, payments: protectedPayments }
+        : { ...existing, payments: protectedPayments };
     await saveState(nextState);
     return json({
       ok: true,
@@ -370,21 +367,6 @@ function visibleState(
       email: user.id === currentUser.id ? user.email : '',
     })),
   };
-}
-
-function normalizeStaffPayments(
-  existing: Payment[],
-  incoming: Payment[],
-  currentUserId: string,
-) {
-  const existingById = new Map(
-    existing.map((payment) => [payment.id, payment]),
-  );
-  const additions = incoming
-    .filter((payment) => !existingById.has(payment.id))
-    .map((payment) => ({ ...payment, collectorId: currentUserId }));
-  // Staff may add a payment, but existing payments are immutable for them.
-  return [...additions, ...existing];
 }
 
 function managerMayApplyUserChanges(existing: User[], incoming: User[]) {
