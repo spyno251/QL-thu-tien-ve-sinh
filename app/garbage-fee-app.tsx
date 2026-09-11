@@ -2235,6 +2235,15 @@ function AccountInformationDialog({
     .reduce((sum, item) => sum + item.amount, 0);
   const outstandingDebt = Math.max(0, total - confirmedDebt);
   const availableDebt = Math.max(0, outstandingDebt - pendingDebt);
+  const cashPayments = payments.filter((payment) => payment.method === 'cash');
+  const transferPayments = payments.filter(
+    (payment) => payment.method === 'transfer',
+  );
+  const cashTotal = cashPayments.reduce((sum, payment) => sum + payment.amount, 0);
+  const transferTotal = transferPayments.reduce(
+    (sum, payment) => sum + payment.amount,
+    0,
+  );
 
   const submitDebt = async () => {
     if (!debtAmount) {
@@ -2267,6 +2276,14 @@ function AccountInformationDialog({
           </DialogDescription>
         </DialogHeader>
 
+        <Tabs defaultValue="summary" className="w-full">
+          <TabsList className="grid w-full grid-cols-3">
+            <TabsTrigger value="summary">Tổng</TabsTrigger>
+            <TabsTrigger value="details">Chi tiết đã thu</TabsTrigger>
+            <TabsTrigger value="methods">Hình thức thanh toán</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="summary" className="mt-4 space-y-4">
         <section className="grid gap-2 sm:grid-cols-2">
           <div className="rounded-lg border bg-muted/30 p-3">
             <p className="text-xs text-muted-foreground">Họ tên</p>
@@ -2380,6 +2397,28 @@ function AccountInformationDialog({
           </section>
         )}
 
+        <section className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div className="rounded-lg border bg-card p-3">
+            <p className="text-xs text-muted-foreground">Căn đã thu</p>
+            <p className="mt-1 text-lg font-semibold tabular-nums">{payments.length}</p>
+          </div>
+          <div className="rounded-lg border bg-card p-3">
+            <p className="text-xs text-muted-foreground">Tiền mặt</p>
+            <p className="mt-1 text-lg font-semibold tabular-nums">{money.format(cashTotal)}</p>
+          </div>
+          <div className="rounded-lg border bg-card p-3">
+            <p className="text-xs text-muted-foreground">Chuyển khoản</p>
+            <p className="mt-1 text-lg font-semibold tabular-nums">{money.format(transferTotal)}</p>
+          </div>
+          <div className="rounded-lg border bg-primary/10 p-3">
+            <p className="text-xs text-muted-foreground">Tổng cuối</p>
+            <p className="mt-1 text-lg font-semibold tabular-nums text-primary">{money.format(total)}</p>
+          </div>
+        </section>
+          </TabsContent>
+
+          <TabsContent value="details" className="mt-4">
+
         <section className="rounded-lg border bg-card p-3">
           <div className="flex items-center justify-between gap-3">
             <div>
@@ -2449,6 +2488,71 @@ function AccountInformationDialog({
             </Table>
           </div>
         </section>
+          </TabsContent>
+
+          <TabsContent value="methods" className="mt-4 space-y-4">
+            <section className="rounded-lg border bg-card p-3">
+              <h2 className="font-semibold">Tổng hợp theo hình thức</h2>
+              <Table className="mt-3 min-w-[440px]">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Hình thức</TableHead>
+                    <TableHead className="text-right">Số giao dịch</TableHead>
+                    <TableHead className="text-right">Tổng tiền</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  <TableRow>
+                    <TableCell>Tiền mặt</TableCell>
+                    <TableCell className="text-right tabular-nums">{cashPayments.length}</TableCell>
+                    <TableCell className="text-right font-medium tabular-nums">{money.format(cashTotal)}</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell>Chuyển khoản</TableCell>
+                    <TableCell className="text-right tabular-nums">{transferPayments.length}</TableCell>
+                    <TableCell className="text-right font-medium tabular-nums">{money.format(transferTotal)}</TableCell>
+                  </TableRow>
+                  <TableRow className="bg-primary/10 font-semibold hover:bg-primary/10">
+                    <TableCell>Tổng cuối</TableCell>
+                    <TableCell className="text-right tabular-nums">{payments.length}</TableCell>
+                    <TableCell className="text-right tabular-nums text-primary">{money.format(total)}</TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+            </section>
+
+            <section className="rounded-lg border bg-card p-3">
+              <h2 className="font-semibold">Danh sách theo hình thức thanh toán</h2>
+              <div className="mt-3 overflow-x-auto">
+                <Table className="min-w-[620px]">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Căn hộ</TableHead>
+                      <TableHead>Ngày thu</TableHead>
+                      <TableHead>Hình thức</TableHead>
+                      <TableHead className="text-right">Số tiền</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {payments.map((payment) => (
+                      <TableRow key={payment.id}>
+                        <TableCell>{apartmentById.get(payment.apartmentId)?.code ?? '-'}</TableCell>
+                        <TableCell>{formatDate(payment.paidAt)}</TableCell>
+                        <TableCell>{payment.method === 'transfer' ? 'Chuyển khoản' : 'Tiền mặt'}</TableCell>
+                        <TableCell className="text-right tabular-nums">{money.format(payment.amount)}</TableCell>
+                      </TableRow>
+                    ))}
+                    {!payments.length && (
+                      <TableRow>
+                        <TableCell colSpan={4} className="py-8 text-center text-muted-foreground">Chưa có khoản thu nào.</TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </section>
+          </TabsContent>
+        </Tabs>
       </DialogContent>
     </Dialog>
   );
