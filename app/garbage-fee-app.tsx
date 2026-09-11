@@ -1173,6 +1173,26 @@ export default function GarbageFeeApp() {
     }));
   };
 
+  if (authLoading) {
+    return (
+      <main className="grid min-h-screen place-items-center bg-[radial-gradient(circle_at_top_left,#d9f0ef_0,#f4f7f4_31%,#f8fafc_68%)] px-4 text-foreground">
+        <section className="flex max-w-sm flex-col items-center text-center">
+          <div className="grid size-40 place-items-center overflow-hidden rounded-lg border bg-white shadow-[0_20px_60px_rgba(15,23,42,0.12)]">
+            <img
+              src={state.settings.logoUrl || '/app-icon.png'}
+              alt=""
+              className="size-32 object-contain"
+            />
+          </div>
+          <h1 className="mt-6 text-2xl font-semibold">{state.settings.appName}</h1>
+          <p className="mt-3 text-sm font-semibold tracking-wide text-primary">
+            ĐANG KIỂM TRA THÔNG TIN ĐĂNG NHẬP......
+          </p>
+        </section>
+      </main>
+    );
+  }
+
   if (currentUser && (currentUser.mustChangePassword || showChangePassword)) {
     return (
       <PasswordChangeScreen
@@ -3342,13 +3362,15 @@ function DebtManagement({
               const collected = payments
                 .filter((payment) => payment.collectorId === user.id)
                 .reduce((sum, payment) => sum + payment.amount, 0);
-              const paidBack = settlements
+              const confirmedPaidBack = settlements
                 .filter(
                   (settlement) =>
                     settlement.staffId === user.id &&
                     settlement.status === 'confirmed',
                 )
                 .reduce((sum, settlement) => sum + settlement.amount, 0);
+              const paidBack =
+                user.role === 'manager' ? collected : confirmedPaidBack;
               return (
                 <TableRow key={user.id}>
                   <TableCell>
@@ -3358,7 +3380,12 @@ function DebtManagement({
                     )}
                   </TableCell>
                   <TableCell>{money.format(collected)}</TableCell>
-                  <TableCell>{money.format(paidBack)}</TableCell>
+                  <TableCell>
+                    {money.format(paidBack)}
+                    {user.role === 'manager' && (
+                      <span className="ml-1 text-xs text-muted-foreground">(tự động)</span>
+                    )}
+                  </TableCell>
                   <TableCell>{money.format(Math.max(0, collected - paidBack))}</TableCell>
                 </TableRow>
               );
