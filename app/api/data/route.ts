@@ -508,28 +508,66 @@ async function readState(): Promise<AppState> {
 async function saveState(state: AppState) {
   const db = getSupabaseAdmin();
   if (!db) throw new Error(configurationError());
-  const { data: storedRows, error: storedError } = await db
-    .from('users')
-    .select('id, password');
-  if (storedError) throw storedError;
+  const [usersResult, regionsResult, blocksResult, apartmentsResult] =
+    await Promise.all([
+      db.from('users').select('id, password'),
+      db.from('regions').select('id'),
+      db.from('blocks').select('id'),
+      db.from('apartments').select('id'),
+    ]);
+  if (
+    usersResult.error ||
+    regionsResult.error ||
+    blocksResult.error ||
+    apartmentsResult.error
+  )
+    throw new Error('Read failed');
+  const storedRows = usersResult.data ?? [];
   const passwordById = new Map(
-    (storedRows ?? []).map((item) => [item.id, item.password]),
+    storedRows.map((item) => [item.id, item.password]),
   );
   const userIds = new Set(state.users.map((user) => user.id));
-  const removedUserIds = (storedRows ?? [])
+  const removedUserIds = storedRows
     .filter((user) => !userIds.has(user.id))
     .map((user) => user.id);
   const fail = (error: { message: string } | null) => {
     if (error) throw error;
   };
 
-  fail((await db.from('debt_settlements').delete().not('id', 'is', null)).error);
-  fail((await db.from('payments').delete().not('id', 'is', null)).error);
-  fail((await db.from('apartments').delete().not('id', 'is', null)).error);
-  fail((await db.from('blocks').delete().not('id', 'is', null)).error);
-  fail((await db.from('regions').delete().not('id', 'is', null)).error);
-  if (removedUserIds.length)
+  const regionIds = new Set(state.regions.map((item) => item.id));
+  const blockIds = new Set(state.blocks.map((item) => item.id));
+  const apartmentIds = new Set(state.apartments.map((item) => item.id));
+  const removedApartmentIds = (apartmentsResult.data ?? [])
+    .filter((item) => !apartmentIds.has(item.id))
+    .map((item) => item.id);
+  const removedBlockIds = (blocksResult.data ?? [])
+    .filter((item) => !blockIds.has(item.id))
+    .map((item) => item.id);
+  const removedRegionIds = (regionsResult.data ?? [])
+    .filter((item) => !regionIds.has(item.id))
+    .map((item) => item.id);
+  if (removedApartmentIds.length)
+    fail((await db.from('apartments').delete().in('id', removedApartmentIds)).error);
+  if (removedBlockIds.length)
+    fail((await db.from('blocks').delete().in('id', removedBlockIds)).error);
+  if (removedRegionIds.length)
+    fail((await db.from('regions').delete().in('id', removedRegionIds)).error);
+  if (removedUserIds.length) {
+    fail(
+      (
+        await db
+          .from('debt_settlements')
+          .delete()
+          .in('staff_id', removedUserIds)
+      ).error,
+    );
+    fail(
+      (
+        await db.from('payments').delete().in('collector_id', removedUserIds)
+      ).error,
+    );
     fail((await db.from('users').delete().in('id', removedUserIds)).error);
+  }
   const users = await Promise.all(
     state.users.map(async (user) => ({
       id: user.id,
@@ -548,7 +586,7 @@ async function saveState(state: AppState) {
       (
         await db
           .from('regions')
-          .insert(
+          .upsert(
             state.regions.map((item) => ({
               id: item.id,
               name: item.name,
@@ -562,7 +600,7 @@ async function saveState(state: AppState) {
       (
         await db
           .from('blocks')
-          .insert(
+          .upsert(
             state.blocks.map((item) => ({
               id: item.id,
               region_id: item.regionId,
@@ -576,7 +614,7 @@ async function saveState(state: AppState) {
       (
         await db
           .from('apartments')
-          .insert(
+          .upsert(
             state.apartments.map((item) => ({
               id: item.id,
               block_id: item.blockId,
@@ -587,43 +625,6 @@ async function saveState(state: AppState) {
               monthly_fee: item.monthlyFee,
             })),
           )
-      ).error,
-    );
-  if (state.payments.length)
-    fail(
-      (
-        await db
-          .from('payments')
-          .insert(
-            state.payments.map((item) => ({
-              id: item.id,
-              apartment_id: item.apartmentId,
-              collector_id: item.collectorId,
-              month: item.month,
-              paid_at: item.paidAt,
-              amount: item.amount,
-              note: item.note,
-              method: item.method,
-            })),
-          )
-      ).error,
-    );
-  if (state.debtSettlements.length)
-    fail(
-      (
-        await db.from('debt_settlements').insert(
-          state.debtSettlements.map((item) => ({
-            id: item.id,
-            staff_id: item.staffId,
-            amount: item.amount,
-            debt_at_submission: item.debtAtSubmission,
-            method: item.method,
-            submitted_at: item.submittedAt,
-            confirmed_at: item.confirmedAt,
-            confirmed_by: item.confirmedBy,
-            status: item.status,
-          })),
-        )
       ).error,
     );
   fail(
