@@ -55,9 +55,19 @@ type UiPreferences = {
   cornerStyle: 'sharp' | 'soft' | 'rounded';
   cardStyle: 'flat' | 'bordered' | 'soft';
   showSubtitle: boolean;
+  fontFamily: 'sans' | 'serif' | 'mono';
+  fontSize: number;
+  headerBackgroundColor: string;
+  headerTextColor: string;
+  tableHeaderBackgroundColor: string;
+  tableHeaderTextColor: string;
+  tableBorderColor: string;
+  apartmentInfoBackgroundColor: string;
+  tableTextAlign: 'left' | 'center' | 'right';
 };
 const defaultUiPreferences: UiPreferences = {
   primaryColor: '#007563', backgroundColor: '#f4fbfa', headerAlignment: 'left', fontScale: 'normal', density: 'comfortable', tableStyle: 'tinted', cornerStyle: 'soft', cardStyle: 'bordered', showSubtitle: true,
+  fontFamily: 'sans', fontSize: 16, headerBackgroundColor: '#f4fbfa', headerTextColor: '#102a30', tableHeaderBackgroundColor: '#007563', tableHeaderTextColor: '#ffffff', tableBorderColor: '#bdd9d5', apartmentInfoBackgroundColor: '#d9ece3', tableTextAlign: 'left',
 };
 const themeColors = { teal: '#007563', blue: '#1d5fd1', indigo: '#5d42c6', amber: '#b35d00', rose: '#b8325a' } as const;
 type AppSettings = {
@@ -101,6 +111,15 @@ function normalizeUiPreferences(value: unknown, theme: AppSettings['theme'] = 't
     cornerStyle: pick('cornerStyle', ['sharp', 'soft', 'rounded'], defaultUiPreferences.cornerStyle),
     cardStyle: pick('cardStyle', ['flat', 'bordered', 'soft'], defaultUiPreferences.cardStyle),
     showSubtitle: typeof source.showSubtitle === 'boolean' ? source.showSubtitle : defaultUiPreferences.showSubtitle,
+    fontFamily: pick('fontFamily', ['sans', 'serif', 'mono'], defaultUiPreferences.fontFamily),
+    fontSize: typeof source.fontSize === 'number' && source.fontSize >= 12 && source.fontSize <= 20 ? source.fontSize : defaultUiPreferences.fontSize,
+    headerBackgroundColor: color('headerBackgroundColor', defaultUiPreferences.headerBackgroundColor),
+    headerTextColor: color('headerTextColor', defaultUiPreferences.headerTextColor),
+    tableHeaderBackgroundColor: color('tableHeaderBackgroundColor', defaultUiPreferences.tableHeaderBackgroundColor),
+    tableHeaderTextColor: color('tableHeaderTextColor', defaultUiPreferences.tableHeaderTextColor),
+    tableBorderColor: color('tableBorderColor', defaultUiPreferences.tableBorderColor),
+    apartmentInfoBackgroundColor: color('apartmentInfoBackgroundColor', defaultUiPreferences.apartmentInfoBackgroundColor),
+    tableTextAlign: pick('tableTextAlign', ['left', 'center', 'right'], defaultUiPreferences.tableTextAlign),
   };
 }
 

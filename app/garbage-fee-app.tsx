@@ -121,10 +121,20 @@ type UiPreferences = {
   cornerStyle: 'sharp' | 'soft' | 'rounded';
   cardStyle: 'flat' | 'bordered' | 'soft';
   showSubtitle: boolean;
+  fontFamily: 'sans' | 'serif' | 'mono';
+  fontSize: number;
+  headerBackgroundColor: string;
+  headerTextColor: string;
+  tableHeaderBackgroundColor: string;
+  tableHeaderTextColor: string;
+  tableBorderColor: string;
+  apartmentInfoBackgroundColor: string;
+  tableTextAlign: 'left' | 'center' | 'right';
 };
 
 const defaultUiPreferences: UiPreferences = {
   primaryColor: '#007563', backgroundColor: '#f4fbfa', headerAlignment: 'left', fontScale: 'normal', density: 'comfortable', tableStyle: 'tinted', cornerStyle: 'soft', cardStyle: 'bordered', showSubtitle: true,
+  fontFamily: 'sans', fontSize: 16, headerBackgroundColor: '#f4fbfa', headerTextColor: '#102a30', tableHeaderBackgroundColor: '#007563', tableHeaderTextColor: '#ffffff', tableBorderColor: '#bdd9d5', apartmentInfoBackgroundColor: '#d9ece3', tableTextAlign: 'left',
 };
 
 const themeColors = {
@@ -1363,10 +1373,21 @@ export default function GarbageFeeApp() {
 
   return (
     <main
-      className={`min-h-screen bg-background text-foreground theme-${state.settings.theme} ui-font-${state.settings.uiPreferences.fontScale} ui-density-${state.settings.uiPreferences.density} ui-table-${state.settings.uiPreferences.tableStyle} ui-corners-${state.settings.uiPreferences.cornerStyle} ui-cards-${state.settings.uiPreferences.cardStyle} ui-header-${state.settings.uiPreferences.headerAlignment}`}
-      style={{ '--primary': state.settings.uiPreferences.primaryColor, '--ring': state.settings.uiPreferences.primaryColor, '--background': state.settings.uiPreferences.backgroundColor } as CSSProperties}
+      className={`min-h-screen bg-background text-foreground theme-${state.settings.theme} ui-font-${state.settings.uiPreferences.fontScale} ui-font-family-${state.settings.uiPreferences.fontFamily} ui-density-${state.settings.uiPreferences.density} ui-table-${state.settings.uiPreferences.tableStyle} ui-table-align-${state.settings.uiPreferences.tableTextAlign} ui-corners-${state.settings.uiPreferences.cornerStyle} ui-cards-${state.settings.uiPreferences.cardStyle} ui-header-${state.settings.uiPreferences.headerAlignment}`}
+      style={{
+        '--primary': state.settings.uiPreferences.primaryColor,
+        '--ring': state.settings.uiPreferences.primaryColor,
+        '--background': state.settings.uiPreferences.backgroundColor,
+        '--ui-font-size': `${state.settings.uiPreferences.fontSize}px`,
+        '--ui-header-background': state.settings.uiPreferences.headerBackgroundColor,
+        '--ui-header-text': state.settings.uiPreferences.headerTextColor,
+        '--ui-table-header-background': state.settings.uiPreferences.tableHeaderBackgroundColor,
+        '--ui-table-header-text': state.settings.uiPreferences.tableHeaderTextColor,
+        '--ui-table-border': state.settings.uiPreferences.tableBorderColor,
+        '--ui-apartment-background': state.settings.uiPreferences.apartmentInfoBackgroundColor,
+      } as CSSProperties}
     >
-      <header className="sticky top-0 z-20 border-b bg-background/95 px-4 py-3 backdrop-blur">
+      <header className="app-main-header sticky top-0 z-20 border-b px-4 py-3 backdrop-blur">
         <div className="ui-header-content mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <div className="grid size-10 place-items-center overflow-hidden rounded-lg bg-primary/10">
@@ -1593,16 +1614,16 @@ export default function GarbageFeeApp() {
               <Table className="min-w-[640px] table-fixed">
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="sticky top-0 z-10 w-1/4 border-r bg-primary text-center text-primary-foreground">
+                    <TableHead className="collection-table-head sticky top-0 z-10 w-1/4 border-r text-center">
                       Căn hộ
                     </TableHead>
-                    <TableHead className="sticky top-0 z-10 w-1/4 border-r bg-primary text-center text-primary-foreground">
+                    <TableHead className="collection-table-head sticky top-0 z-10 w-1/4 border-r text-center">
                       Nội dung
                     </TableHead>
-                    <TableHead className="sticky top-0 z-10 w-1/4 border-r bg-primary text-center text-primary-foreground">
+                    <TableHead className="collection-table-head sticky top-0 z-10 w-1/4 border-r text-center">
                       Giá trị
                     </TableHead>
-                    <TableHead className="sticky top-0 z-10 w-1/4 bg-primary text-center text-primary-foreground">
+                    <TableHead className="collection-table-head sticky top-0 z-10 w-1/4 text-center">
                       Thanh toán
                     </TableHead>
                   </TableRow>
@@ -1627,7 +1648,7 @@ export default function GarbageFeeApp() {
                         key={apartment.id}
                         className="align-top border-b-2 border-primary/35"
                       >
-                        <TableCell className="w-1/4 border-r p-0 align-top">
+                        <TableCell className="apartment-identity-cell w-1/4 border-r p-0 align-top">
                           <div className="grid min-h-[168px] grid-rows-[40px_44px_44px_40px] divide-y">
                             <div className="flex items-center gap-1.5 bg-primary/25 px-3 font-semibold">
                             <span>
@@ -2728,6 +2749,84 @@ function CustomizationPanel({
             }))
           }
         />
+        <div className="space-y-3 border-y py-4 sm:col-span-2">
+          <div>
+            <h3 className="font-semibold">Định dạng trực quan</h3>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Điều chỉnh trực tiếp Header, bảng thu tháng và ô thông tin căn hộ.
+            </p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <SelectPreference
+              label="Phông chữ"
+              value={draft.uiPreferences.fontFamily}
+              onChange={(fontFamily) =>
+                setDraft((current) => ({ ...current, uiPreferences: { ...current.uiPreferences, fontFamily: fontFamily as UiPreferences['fontFamily'] } }))
+              }
+              options={[['sans', 'Hiện đại'], ['serif', 'Cổ điển'], ['mono', 'Đơn cách']]}
+            />
+            <Field label="Cỡ chữ toàn giao diện">
+              <div className="flex h-10 items-center justify-between rounded-md border bg-background px-1">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label="Giảm cỡ chữ"
+                  onClick={() => setDraft((current) => ({ ...current, uiPreferences: { ...current.uiPreferences, fontSize: Math.max(12, current.uiPreferences.fontSize - 1) } }))}
+                >
+                  -
+                </Button>
+                <span className="font-semibold tabular-nums">{draft.uiPreferences.fontSize}px</span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label="Tăng cỡ chữ"
+                  onClick={() => setDraft((current) => ({ ...current, uiPreferences: { ...current.uiPreferences, fontSize: Math.min(20, current.uiPreferences.fontSize + 1) } }))}
+                >
+                  +
+                </Button>
+              </div>
+            </Field>
+            <ColorField
+              label="Nền Header"
+              value={draft.uiPreferences.headerBackgroundColor}
+              onChange={(headerBackgroundColor) => setDraft((current) => ({ ...current, uiPreferences: { ...current.uiPreferences, headerBackgroundColor } }))}
+            />
+            <ColorField
+              label="Chữ Header"
+              value={draft.uiPreferences.headerTextColor}
+              onChange={(headerTextColor) => setDraft((current) => ({ ...current, uiPreferences: { ...current.uiPreferences, headerTextColor } }))}
+            />
+            <ColorField
+              label="Nền tiêu đề bảng"
+              value={draft.uiPreferences.tableHeaderBackgroundColor}
+              onChange={(tableHeaderBackgroundColor) => setDraft((current) => ({ ...current, uiPreferences: { ...current.uiPreferences, tableHeaderBackgroundColor } }))}
+            />
+            <ColorField
+              label="Chữ tiêu đề bảng"
+              value={draft.uiPreferences.tableHeaderTextColor}
+              onChange={(tableHeaderTextColor) => setDraft((current) => ({ ...current, uiPreferences: { ...current.uiPreferences, tableHeaderTextColor } }))}
+            />
+            <ColorField
+              label="Màu viền bảng"
+              value={draft.uiPreferences.tableBorderColor}
+              onChange={(tableBorderColor) => setDraft((current) => ({ ...current, uiPreferences: { ...current.uiPreferences, tableBorderColor } }))}
+            />
+            <ColorField
+              label="Nền ô thông tin căn"
+              value={draft.uiPreferences.apartmentInfoBackgroundColor}
+              onChange={(apartmentInfoBackgroundColor) => setDraft((current) => ({ ...current, uiPreferences: { ...current.uiPreferences, apartmentInfoBackgroundColor } }))}
+            />
+            <SelectPreference
+              label="Canh chữ trong bảng"
+              value={draft.uiPreferences.tableTextAlign}
+              onChange={(tableTextAlign) => setDraft((current) => ({ ...current, uiPreferences: { ...current.uiPreferences, tableTextAlign: tableTextAlign as UiPreferences['tableTextAlign'] } }))}
+              options={[['left', 'Căn trái'], ['center', 'Căn giữa'], ['right', 'Căn phải']]}
+            />
+          </div>
+          <AppearancePreview preferences={draft.uiPreferences} />
+        </div>
         <SelectPreference
           label="Vị trí nội dung Header"
           value={draft.uiPreferences.headerAlignment}
@@ -2930,6 +3029,49 @@ function SelectPreference({
         ))}
       </NativeSelect>
     </Field>
+  );
+}
+
+function AppearancePreview({ preferences }: { preferences: UiPreferences }) {
+  const fontFamily =
+    preferences.fontFamily === 'serif'
+      ? "Georgia, 'Times New Roman', serif"
+      : preferences.fontFamily === 'mono'
+        ? 'monospace'
+        : 'Arial, sans-serif';
+  const align = preferences.tableTextAlign;
+  const border = `1px solid ${preferences.tableBorderColor}`;
+
+  return (
+    <section className="overflow-hidden rounded-lg border bg-white" style={{ borderColor: preferences.tableBorderColor, fontFamily, fontSize: `${preferences.fontSize}px` }}>
+      <div className="flex items-center gap-2 px-3 py-2" style={{ background: preferences.headerBackgroundColor, color: preferences.headerTextColor }}>
+        <div className="grid size-7 place-items-center rounded bg-white/20 text-sm font-bold">L</div>
+        <div>
+          <p className="font-semibold">Xem trước Header</p>
+          <p className="text-xs opacity-75">Thu tiền vệ sinh</p>
+        </div>
+      </div>
+      <div className="p-3">
+        <p className="mb-2 text-xs font-semibold text-muted-foreground">Xem trước bảng căn chưa thu</p>
+        <div className="overflow-hidden rounded border" style={{ borderColor: preferences.tableBorderColor }}>
+          <div className="grid grid-cols-[1.25fr_1fr_0.85fr]" style={{ background: preferences.tableHeaderBackgroundColor, color: preferences.tableHeaderTextColor }}>
+            {['Căn hộ', 'Nội dung', 'Giá trị'].map((label) => (
+              <div key={label} className="p-2 font-semibold" style={{ borderRight: border, textAlign: align }}>{label}</div>
+            ))}
+          </div>
+          <div className="grid grid-cols-[1.25fr_1fr_0.85fr] bg-white" style={{ color: '#102a30' }}>
+            <div className="p-2 font-semibold" style={{ background: preferences.apartmentInfoBackgroundColor, borderRight: border, textAlign: 'left' }}>Căn 01 - Galaxy 1</div>
+            <div className="p-2" style={{ borderRight: border, textAlign: align }}>Số tiền</div>
+            <div className="p-2" style={{ textAlign: align }}>300.000 đ</div>
+          </div>
+          <div className="grid grid-cols-[1.25fr_1fr_0.85fr] bg-white" style={{ borderTop: border, color: '#102a30' }}>
+            <div className="p-2" style={{ borderRight: border, textAlign: 'left' }}>Chủ hộ</div>
+            <div className="p-2" style={{ borderRight: border, textAlign: align }}>Trạng thái</div>
+            <div className="p-2" style={{ textAlign: align }}>Chưa thu</div>
+          </div>
+        </div>
+      </div>
+    </section>
   );
 }
 
