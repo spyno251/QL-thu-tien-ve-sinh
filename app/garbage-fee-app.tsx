@@ -598,8 +598,8 @@ export default function GarbageFeeApp() {
       };
       if (!response.ok) throw new Error(payload.error ?? 'Chưa thể ghi nhận khoản thu.');
       if (payload.state) setState(payload.state);
-      await loadState();
       setPaymentCountdown((current) => ({ ...current, [apartment.id]: 3 }));
+      await loadState();
       setDraftPaymentNotes((current) => {
         const { [apartment.id]: _removed, ...remaining } = current;
         return remaining;
