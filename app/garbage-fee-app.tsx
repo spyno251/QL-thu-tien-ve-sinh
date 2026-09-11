@@ -3247,7 +3247,9 @@ function DebtManagement({
   ) => Promise<string | null>;
   onDelete: (settlementId: string) => Promise<string | null>;
 }) {
-  const staff = users.filter((user) => user.role === 'staff');
+  const collectors = users.filter(
+    (user) => user.role === 'staff' || user.role === 'manager',
+  );
   const pending = settlements.filter((settlement) => settlement.status === 'pending');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editAmount, setEditAmount] = useState('');
@@ -3286,12 +3288,12 @@ function DebtManagement({
       <div className="rounded-lg border bg-card p-4">
         <h2 className="mb-1 text-base font-semibold">Chờ xác nhận</h2>
         <p className="mb-3 text-sm text-muted-foreground">
-          Xác nhận khi đã nhận đủ tiền thực tế từ nhân viên.
+          Xác nhận khi đã nhận đủ tiền thực tế từ người thu.
         </p>
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Nhân viên</TableHead>
+              <TableHead>Người thu</TableHead>
               <TableHead>Số tiền</TableHead>
               <TableHead>Thời điểm gửi</TableHead>
               <TableHead>Thao tác</TableHead>
@@ -3325,18 +3327,18 @@ function DebtManagement({
       </div>
 
       <div className="rounded-lg border bg-card p-4">
-        <h2 className="mb-3 text-base font-semibold">Công nợ theo nhân viên</h2>
+        <h2 className="mb-3 text-base font-semibold">Doanh thu và công nợ theo người thu</h2>
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Nhân viên</TableHead>
+              <TableHead>Người thu</TableHead>
               <TableHead>Đã thu</TableHead>
               <TableHead>Đã nộp</TableHead>
               <TableHead>Còn nợ</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {staff.map((user) => {
+            {collectors.map((user) => {
               const collected = payments
                 .filter((payment) => payment.collectorId === user.id)
                 .reduce((sum, payment) => sum + payment.amount, 0);
@@ -3349,7 +3351,12 @@ function DebtManagement({
                 .reduce((sum, settlement) => sum + settlement.amount, 0);
               return (
                 <TableRow key={user.id}>
-                  <TableCell>{user.name}</TableCell>
+                  <TableCell>
+                    {user.name}
+                    {user.role === 'manager' && (
+                      <span className="ml-1 text-xs text-muted-foreground">(Quản trị)</span>
+                    )}
+                  </TableCell>
                   <TableCell>{money.format(collected)}</TableCell>
                   <TableCell>{money.format(paidBack)}</TableCell>
                   <TableCell>{money.format(Math.max(0, collected - paidBack))}</TableCell>
