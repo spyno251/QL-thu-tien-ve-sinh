@@ -80,7 +80,10 @@ type AppState = {
 };
 
 function json(data: unknown, status = 200) {
-  return Response.json(data, { status });
+  return Response.json(data, {
+    status,
+    headers: { 'Cache-Control': 'no-store, max-age=0, must-revalidate' },
+  });
 }
 
 function normalizeUiPreferences(value: unknown, theme: AppSettings['theme'] = 'teal'): UiPreferences {
@@ -140,7 +143,7 @@ export async function POST(request: Request) {
         Number(payment.amount) <= 0
       )
         return json({ error: 'Dữ liệu thanh toán không hợp lệ.' }, 400);
-      const { error } = await db.from('payments').insert({
+      const { data: insertedPayment, error } = await db.from('payments').insert({
         id: crypto.randomUUID(),
         apartment_id: payment.apartmentId,
         collector_id: currentUser.id,
@@ -149,10 +152,12 @@ export async function POST(request: Request) {
         amount: payment.amount,
         note: String(payment.note ?? '').trim(),
         method: payment.method === 'transfer' ? 'transfer' : 'cash',
-      });
+      }).select('id').maybeSingle();
       if (error?.code === '23505')
         return json({ error: 'Căn hộ này đã được thu trong kỳ này.' }, 409);
       if (error) throw error;
+      if (!insertedPayment)
+        return json({ error: 'Chưa thể xác nhận khoản thu vừa ghi.' }, 503);
       return json({
         ok: true,
         state: visibleState(await readState(), currentUser),

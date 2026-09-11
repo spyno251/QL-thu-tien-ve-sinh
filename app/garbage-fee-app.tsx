@@ -397,7 +397,7 @@ export default function GarbageFeeApp() {
   });
 
   const loadState = async () => {
-    const response = await fetch('/api/data');
+    const response = await fetch('/api/data', { cache: 'no-store' });
     if (!response.ok) throw new Error('Unable to load shared data');
     const data = (await response.json()) as AppState;
     setState(data);
@@ -603,6 +603,7 @@ export default function GarbageFeeApp() {
       };
       if (!response.ok) throw new Error(payload.error ?? 'Chưa thể ghi nhận khoản thu.');
       if (payload.state) setState(payload.state);
+      await loadState();
       setPaymentCountdown((current) => ({ ...current, [apartment.id]: 3 }));
       setDraftPaymentNotes((current) => {
         const { [apartment.id]: _removed, ...remaining } = current;
