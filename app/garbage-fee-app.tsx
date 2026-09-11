@@ -184,7 +184,13 @@ type WebMCPDocument = Document & {
   };
 };
 
-const monthNow = new Date().toISOString().slice(0, 7);
+function previousCollectionMonth(now = new Date()) {
+  const year = now.getFullYear();
+  const month = now.getMonth();
+  return `${month === 0 ? year - 1 : year}-${String(month === 0 ? 12 : month).padStart(2, '0')}`;
+}
+
+const monthNow = previousCollectionMonth();
 
 const initialState: AppState = {
   users: [
@@ -260,18 +266,7 @@ const initialState: AppState = {
       monthlyFee: null,
     },
   ],
-  payments: [
-    {
-      id: 'p-sample-1',
-      apartmentId: 'apt-a101',
-      collectorId: 'u-lan',
-      month: monthNow,
-      paidAt: new Date().toISOString(),
-      amount: 50000,
-      note: '',
-      method: 'cash',
-    },
-  ],
+  payments: [],
   debtSettlements: [],
   settings: {
     appName: 'Thu tiền vệ sinh',
