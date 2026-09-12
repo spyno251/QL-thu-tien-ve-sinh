@@ -12,6 +12,7 @@ export type SessionUser = {
   name: string;
   role: 'admin' | 'manager' | 'staff';
   mustChangePassword: boolean;
+  impersonatedBy?: string | null;
 };
 
 type StoredUser = SessionUser & { password: string };
@@ -89,7 +90,7 @@ export async function getSessionUser(db: SupabaseClient, request: Request) {
   if (!token) return null;
   const { data: session } = await db
     .from('sessions')
-    .select('user_id')
+    .select('user_id, impersonated_by')
     .eq('id', token)
     .gt('expires_at', new Date().toISOString())
     .maybeSingle();
@@ -108,6 +109,7 @@ export async function getSessionUser(db: SupabaseClient, request: Request) {
     name: user.name,
     role: user.role,
     mustChangePassword: Boolean(user.must_change_password),
+    impersonatedBy: session.impersonated_by,
   } as StoredUser;
 }
 
@@ -115,6 +117,7 @@ export async function createSession(
   db: SupabaseClient,
   userId: string,
   remember = false,
+  impersonatedBy?: string,
 ) {
   const token = crypto.randomUUID();
   const expiresAt = new Date(
@@ -123,6 +126,7 @@ export async function createSession(
   const { error } = await db.from('sessions').insert({
     id: token,
     user_id: userId,
+    impersonated_by: impersonatedBy ?? null,
     expires_at: expiresAt.toISOString(),
   });
   if (error) throw error;
@@ -144,5 +148,6 @@ export function safeUser(user: StoredUser | SessionUser): SessionUser {
     name: user.name,
     role: user.role,
     mustChangePassword: Boolean(user.mustChangePassword),
+    impersonatedBy: user.impersonatedBy ?? null,
   };
 }

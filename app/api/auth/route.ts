@@ -22,6 +22,7 @@ type StoredUser = {
   name: string;
   role: 'admin' | 'manager' | 'staff';
   mustChangePassword: boolean;
+  impersonatedBy?: string | null;
 };
 
 function json(data: unknown, status = 200, headers?: HeadersInit) {
@@ -83,6 +84,7 @@ export async function POST(request: Request) {
     if (action === 'change-password') return changePassword(request, body);
     if (action === 'forgot-password') return forgotPassword(body);
     if (action === 'admin-reset') return adminReset(request, body);
+    if (action === 'admin-impersonate') return adminImpersonate(request, body);
   } catch {
     return json({ error: 'Chưa thể kết nối Supabase.' }, 503);
   }
@@ -238,4 +240,37 @@ async function adminReset(request: Request, body: Record<string, unknown>) {
     .eq('id', target.id);
   await db.from('sessions').delete().eq('user_id', target.id);
   return json({ ok: true });
+}
+
+async function adminImpersonate(request: Request, body: Record<string, unknown>) {
+  const db = getSupabaseAdmin();
+  if (!db) return json({ error: configurationError() }, 503);
+  const admin = await getSessionUser(db, request);
+  const userId = String(body.userId ?? '');
+  if (!admin || admin.role !== 'admin')
+    return json({ error: 'Chỉ Admin được đăng nhập hỗ trợ tài khoản khác.' }, 403);
+  if (!userId) return json({ error: 'Thiếu tài khoản cần đăng nhập.' }, 400);
+  const { data: target } = await db
+    .from('users')
+    .select('id, phone, password, email, name, role, must_change_password')
+    .eq('id', userId)
+    .maybeSingle();
+  if (!target) return json({ error: 'Không tìm thấy tài khoản.' }, 404);
+  if (target.role === 'admin')
+    return json({ error: 'Admin không thể đăng nhập thay một Admin khác.' }, 403);
+
+  const previousToken = parseCookie(request, SESSION_COOKIE);
+  if (previousToken) await db.from('sessions').delete().eq('id', previousToken);
+  const session = await createSession(db, target.id, false, admin.id);
+  const user: StoredUser = {
+    id: target.id,
+    phone: target.phone,
+    password: target.password,
+    email: target.email,
+    name: target.name,
+    role: target.role as StoredUser['role'],
+    mustChangePassword: Boolean(target.must_change_password),
+    impersonatedBy: admin.id,
+  };
+  return json({ user: safeUser(user) }, 200, { 'Set-Cookie': session.cookie });
 }

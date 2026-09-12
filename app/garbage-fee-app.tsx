@@ -8,6 +8,7 @@ import {
   FileSpreadsheet,
   FileText,
   KeyRound,
+  LogIn,
   Lock,
   LogOut,
   Mail,
@@ -64,6 +65,7 @@ type User = {
   name: string;
   role: Role;
   mustChangePassword: boolean;
+  impersonatedBy?: string | null;
 };
 
 type Region = {
@@ -1225,6 +1227,25 @@ export default function GarbageFeeApp() {
     }));
   };
 
+  const loginAsUser = async (user: User) => {
+    const roleName = user.role === 'manager' ? 'Quản trị' : 'Nhân viên';
+    if (!window.confirm(`Đăng nhập hỗ trợ với vai trò ${roleName} của ${user.name}?`)) return;
+    const response = await fetch('/api/auth', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'admin-impersonate', userId: user.id }),
+    });
+    const payload = (await response.json()) as { user?: User; error?: string };
+    if (!response.ok || !payload.user) {
+      window.alert(payload.error ?? 'Chưa thể đăng nhập hỗ trợ tài khoản này.');
+      return;
+    }
+    setCurrentUser(payload.user);
+    setPaymentFilter('unpaid');
+    setShowAccountInfo(false);
+    await loadState();
+  };
+
   if (authLoading) {
     return (
       <main className="grid min-h-screen place-items-center bg-[radial-gradient(circle_at_top_left,#d9f0ef_0,#f4f7f4_31%,#f8fafc_68%)] px-4 text-foreground">
@@ -1264,7 +1285,7 @@ export default function GarbageFeeApp() {
     );
   }
 
-  if (currentUser && (currentUser.mustChangePassword || showChangePassword)) {
+  if (currentUser && ((currentUser.mustChangePassword && !currentUser.impersonatedBy) || showChangePassword)) {
     return (
       <PasswordChangeScreen
         user={currentUser}
@@ -1983,6 +2004,7 @@ export default function GarbageFeeApp() {
                 updateUser={updateUser}
                 deleteUser={deleteUser}
                 resetUserPassword={resetUserPassword}
+                loginAsUser={loginAsUser}
               />
             ) : (
               <Restricted />
@@ -4216,6 +4238,7 @@ function AdminUsers(props: {
   updateUser: (id: string, patch: Partial<User>) => void;
   deleteUser: (id: string) => Promise<void>;
   resetUserPassword: (id: string) => void;
+  loginAsUser: (user: User) => Promise<void>;
 }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<Pick<User, 'name' | 'phone' | 'email' | 'role'>>({
@@ -4366,6 +4389,11 @@ function AdminUsers(props: {
                     </>
                   ) : editable ? (
                     <>
+                      {isAdmin && user.role !== 'admin' && (
+                        <Button type="button" variant="outline" size="icon" aria-label="Đăng nhập hỗ trợ" title="Đăng nhập theo tài khoản này" onClick={() => void props.loginAsUser(user)}>
+                          <LogIn className="size-4" />
+                        </Button>
+                      )}
                       <Button type="button" variant="outline" size="icon" aria-label="Sửa tài khoản" title="Sửa tài khoản" onClick={() => startEdit(user)}>
                         <Pencil className="size-4" />
                       </Button>
