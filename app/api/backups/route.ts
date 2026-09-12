@@ -48,10 +48,10 @@ async function createBackup(source: BackupSource) {
   }
 
   const [users, regions, blocks, apartments, payments, settlements, appSettings] = await Promise.all([
-    db.from('users').select('*'), db.from('regions').select('*'),
-    db.from('blocks').select('*'), db.from('apartments').select('*'),
-    db.from('payments').select('*'), db.from('debt_settlements').select('*'),
-    db.from('app_settings').select('*'),
+    db.from('users').select('*').order('id'), db.from('regions').select('*').order('id'),
+    db.from('blocks').select('*').order('id'), db.from('apartments').select('*').order('id'),
+    db.from('payments').select('*').order('id'), db.from('debt_settlements').select('*').order('id'),
+    db.from('app_settings').select('*').order('id'),
   ]);
   const result = [users, regions, blocks, apartments, payments, settlements, appSettings];
   if (result.some((item) => item.error)) throw new Error('Snapshot read failed');
@@ -88,7 +88,12 @@ async function restoreBackup(snapshot: Snapshot) {
   fail((await db.from('regions').delete().not('id', 'is', null)).error);
   const { data: existingUsers, error: usersError } = await db.from('users').select('id');
   if (usersError) throw usersError;
-  const snapshotIds = new Set(users.map((user) => String((user as { id?: unknown }).id ?? '')));
+  const snapshotIds = new Set(
+    users.flatMap((user) => {
+      const id = (user as { id?: unknown }).id;
+      return typeof id === 'string' ? [id] : [];
+    }),
+  );
   const removedIds = (existingUsers ?? []).map((user) => user.id).filter((id) => !snapshotIds.has(id));
   if (removedIds.length) fail((await db.from('users').delete().in('id', removedIds)).error);
 
@@ -108,11 +113,9 @@ export async function GET(request: Request) {
   try {
     const db = getSupabaseAdmin();
     if (!db) throw new Error(configurationError());
-    const { data: settings, error } = await db.from('app_settings')
-      .select('auto_backup_enabled').eq('id', 'default').maybeSingle();
+    const { error } = await db.rpc('create_automatic_daily_backup');
     if (error) throw error;
-    if (!settings?.auto_backup_enabled) return Response.json({ ok: true, skipped: 'disabled' });
-    return Response.json({ ok: true, ...(await createBackup('automatic')) });
+    return Response.json({ ok: true });
   } catch {
     return Response.json({ error: 'Không thể tạo sao lưu tự động.' }, { status: 503 });
   }

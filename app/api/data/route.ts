@@ -12,7 +12,6 @@ type User = {
   role: 'admin' | 'manager' | 'staff';
   mustChangePassword: boolean;
 };
-type StoredUser = User & { password: string };
 type Region = { id: string; name: string; defaultFee: number };
 type Block = { id: string; regionId: string; name: string };
 type Apartment = {
@@ -141,7 +140,7 @@ export async function POST(request: Request) {
   try {
     const currentUser = await getSessionUser(db, request);
     if (!currentUser) return json({ error: 'Unauthorized' }, 401);
-    if (currentUser.mustChangePassword)
+    if (currentUser.mustChangePassword && !currentUser.impersonatedBy)
       return json({ error: 'Password change required' }, 403);
     const payload = (await request.json()) as {
       state?: AppState;
@@ -152,6 +151,17 @@ export async function POST(request: Request) {
       amount?: number;
       method?: 'cash' | 'transfer';
       settlementId?: string;
+    };
+    const managerMayManage = async (userId: string) => {
+      if (currentUser.role === 'admin') return true;
+      if (currentUser.role !== 'manager') return false;
+      const { data, error } = await db
+        .from('users')
+        .select('role')
+        .eq('id', userId)
+        .maybeSingle();
+      if (error) throw error;
+      return data?.role === 'staff';
     };
     if (payload.action === 'record-payment') {
       const payment = payload.payment;
@@ -187,6 +197,15 @@ export async function POST(request: Request) {
         return json({ error: 'Chỉ Quản trị hoặc Admin được hủy khoản thu.' }, 403);
       const paymentId = String(payload.paymentId ?? '');
       if (!paymentId) return json({ error: 'Thiếu mã giao dịch.' }, 400);
+      const { data: payment, error: paymentError } = await db
+        .from('payments')
+        .select('collector_id')
+        .eq('id', paymentId)
+        .maybeSingle();
+      if (paymentError) throw paymentError;
+      if (!payment) return json({ error: 'Không tìm thấy giao dịch.' }, 404);
+      if (!(await managerMayManage(payment.collector_id)))
+        return json({ error: 'Quản trị chỉ được hủy khoản thu của Nhân viên.' }, 403);
       const { error } = await db.from('payments').delete().eq('id', paymentId);
       if (error) throw error;
       return json({
@@ -197,13 +216,21 @@ export async function POST(request: Request) {
     if (payload.action === 'update-payment-note') {
       const paymentId = String(payload.paymentId ?? '');
       if (!paymentId) return json({ error: 'Thiếu mã giao dịch.' }, 400);
-      let update = db
+      const { data: payment, error: paymentError } = await db
+        .from('payments')
+        .select('collector_id')
+        .eq('id', paymentId)
+        .maybeSingle();
+      if (paymentError) throw paymentError;
+      if (!payment) return json({ error: 'Không tìm thấy giao dịch.' }, 404);
+      if (currentUser.role === 'staff' && payment.collector_id !== currentUser.id)
+        return json({ error: 'Bạn chỉ được sửa ghi chú khoản thu của mình.' }, 403);
+      if (currentUser.role === 'manager' && !(await managerMayManage(payment.collector_id)))
+        return json({ error: 'Quản trị chỉ được sửa khoản thu của Nhân viên.' }, 403);
+      const { error } = await db
         .from('payments')
         .update({ note: String(payload.note ?? '').trim() })
         .eq('id', paymentId);
-      if (currentUser.role === 'staff')
-        update = update.eq('collector_id', currentUser.id);
-      const { error } = await update;
       if (error) throw error;
       return json({
         ok: true,
@@ -261,6 +288,15 @@ export async function POST(request: Request) {
         return json({ error: 'Chỉ Quản trị hoặc Admin được xác nhận.' }, 403);
       const settlementId = String(payload.settlementId ?? '');
       if (!settlementId) return json({ error: 'Thiếu mã yêu cầu.' }, 400);
+      const { data: settlement, error: settlementError } = await db
+        .from('debt_settlements')
+        .select('staff_id')
+        .eq('id', settlementId)
+        .maybeSingle();
+      if (settlementError) throw settlementError;
+      if (!settlement) return json({ error: 'Không tìm thấy giao dịch.' }, 404);
+      if (!(await managerMayManage(settlement.staff_id)))
+        return json({ error: 'Quản trị chỉ được xác nhận công nợ của Nhân viên.' }, 403);
       const { data, error } = await db
         .from('debt_settlements')
         .update({
@@ -293,6 +329,8 @@ export async function POST(request: Request) {
         .maybeSingle();
       if (settlementError) throw settlementError;
       if (!settlement) return json({ error: 'Không tìm thấy giao dịch.' }, 404);
+      if (!(await managerMayManage(settlement.staff_id)))
+        return json({ error: 'Quản trị chỉ được sửa công nợ của Nhân viên.' }, 403);
       const [paymentsResult, settlementsResult] = await Promise.all([
         db.from('payments').select('amount').eq('collector_id', settlement.staff_id),
         db
@@ -333,6 +371,15 @@ export async function POST(request: Request) {
         return json({ error: 'Chỉ Quản trị hoặc Admin được xóa công nợ.' }, 403);
       const settlementId = String(payload.settlementId ?? '');
       if (!settlementId) return json({ error: 'Thiếu mã giao dịch.' }, 400);
+      const { data: settlement, error: settlementError } = await db
+        .from('debt_settlements')
+        .select('staff_id')
+        .eq('id', settlementId)
+        .maybeSingle();
+      if (settlementError) throw settlementError;
+      if (!settlement) return json({ error: 'Không tìm thấy giao dịch.' }, 404);
+      if (!(await managerMayManage(settlement.staff_id)))
+        return json({ error: 'Quản trị chỉ được xóa công nợ của Nhân viên.' }, 403);
       const { error } = await db.from('debt_settlements').delete().eq('id', settlementId);
       if (error) throw error;
       return json({ ok: true, state: visibleState(await readState(), currentUser) });

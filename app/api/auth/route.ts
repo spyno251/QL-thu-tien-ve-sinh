@@ -29,6 +29,10 @@ function json(data: unknown, status = 200, headers?: HeadersInit) {
   return Response.json(data, { status, headers });
 }
 
+function text(value: unknown) {
+  return typeof value === 'string' ? value : '';
+}
+
 async function hasUsers() {
   const db = getSupabaseAdmin();
   if (!db) return null;
@@ -76,7 +80,7 @@ export async function POST(request: Request) {
   const db = getSupabaseAdmin();
   if (!db) return json({ error: configurationError() }, 503);
   const body = (await request.json()) as Record<string, unknown>;
-  const action = String(body.action ?? '');
+  const action = text(body.action);
   try {
     if (action === 'setup-admin') return setupAdmin(body);
     if (action === 'login') return login(request, body);
@@ -95,12 +99,12 @@ async function setupAdmin(body: Record<string, unknown>) {
   const db = getSupabaseAdmin();
   if (!db) return json({ error: configurationError() }, 503);
   if (await hasUsers()) return json({ error: 'Admin đã được thiết lập.' }, 409);
-  const name = String(body.name ?? '').trim();
-  const phone = String(body.phone ?? '').trim();
-  const email = String(body.email ?? '')
+  const name = text(body.name).trim();
+  const phone = text(body.phone).trim();
+  const email = text(body.email)
     .trim()
     .toLowerCase();
-  const password = String(body.password ?? '');
+  const password = text(body.password);
   if (!name || !phone || !email || password.length < 6) {
     return json(
       { error: 'Nhập đủ tên, số điện thoại, email và mật khẩu từ 6 ký tự.' },
@@ -140,8 +144,8 @@ async function setupAdmin(body: Record<string, unknown>) {
 async function login(request: Request, body: Record<string, unknown>) {
   const db = getSupabaseAdmin();
   if (!db) return json({ error: configurationError() }, 503);
-  const user = await findUser(String(body.phone ?? '').trim());
-  const password = String(body.password ?? '');
+  const user = await findUser(text(body.phone).trim());
+  const password = text(body.password);
   if (!user || !(await verifyPassword(password, user.password))) {
     return json({ error: 'Số điện thoại hoặc mật khẩu chưa đúng.' }, 401);
   }
@@ -170,8 +174,8 @@ async function changePassword(request: Request, body: Record<string, unknown>) {
   const db = getSupabaseAdmin();
   if (!db) return json({ error: configurationError() }, 503);
   const user = await getSessionUser(db, request);
-  const currentPassword = String(body.currentPassword ?? '');
-  const newPassword = String(body.newPassword ?? '');
+  const currentPassword = text(body.currentPassword);
+  const newPassword = text(body.newPassword);
   if (!user) return json({ error: 'Phiên đăng nhập đã hết hạn.' }, 401);
   if (!(await verifyPassword(currentPassword, user.password)))
     return json({ error: 'Mật khẩu hiện tại chưa đúng.' }, 400);
@@ -193,8 +197,8 @@ async function changePassword(request: Request, body: Record<string, unknown>) {
 async function forgotPassword(body: Record<string, unknown>) {
   const db = getSupabaseAdmin();
   if (!db) return json({ error: configurationError() }, 503);
-  const phone = String(body.phone ?? '').trim();
-  const email = String(body.email ?? '')
+  const phone = text(body.phone).trim();
+  const email = text(body.email)
     .trim()
     .toLowerCase();
   const { data: user } = await db
@@ -220,7 +224,7 @@ async function adminReset(request: Request, body: Record<string, unknown>) {
   const db = getSupabaseAdmin();
   if (!db) return json({ error: configurationError() }, 503);
   const admin = await getSessionUser(db, request);
-  const userId = String(body.userId ?? '');
+  const userId = text(body.userId);
   if (!admin || admin.role === 'staff')
     return json({ error: 'Chỉ Quản trị hoặc Admin được đặt lại mật khẩu.' }, 403);
   const { data: target } = await db
@@ -246,7 +250,7 @@ async function adminImpersonate(request: Request, body: Record<string, unknown>)
   const db = getSupabaseAdmin();
   if (!db) return json({ error: configurationError() }, 503);
   const admin = await getSessionUser(db, request);
-  const userId = String(body.userId ?? '');
+  const userId = text(body.userId);
   if (!admin || admin.role !== 'admin')
     return json({ error: 'Chỉ Admin được đăng nhập hỗ trợ tài khoản khác.' }, 403);
   if (!userId) return json({ error: 'Thiếu tài khoản cần đăng nhập.' }, 400);
