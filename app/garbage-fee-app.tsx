@@ -2980,7 +2980,7 @@ function CustomizationPanel({
             <span className="block">Tự động sao lưu hằng ngày lúc 24:00</span>
             <span className="block text-xs text-muted-foreground">
               Mọi khoản thu và công nợ được lưu vết ngay khi phát sinh. Khi bật,
-              hệ thống cũng tạo điểm sao lưu toàn bộ dữ liệu lúc 24:00 theo giờ Việt Nam.
+              hệ thống chỉ tạo điểm sao lưu toàn bộ lúc 24:00 theo giờ Việt Nam khi dữ liệu có thay đổi.
             </span>
           </span>
         </label>
