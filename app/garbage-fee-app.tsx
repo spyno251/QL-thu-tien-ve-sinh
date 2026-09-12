@@ -2054,6 +2054,17 @@ function getFee(
   return region?.defaultFee ?? 0;
 }
 
+function fullApartmentLabel(
+  apartment: Apartment | null | undefined,
+  blocks: ReadonlyMap<string, Block>,
+  regions: ReadonlyMap<string, Region>,
+) {
+  if (!apartment) return '-';
+  const block = blocks.get(apartment.blockId);
+  const region = block ? regions.get(block.regionId) : undefined;
+  return region?.name ? `${apartment.code} - ${region.name}` : apartment.code;
+}
+
 function AdminSetupScreen({
   onComplete,
 }: {
@@ -2595,7 +2606,7 @@ function AccountInformationDialog({
                     : null;
                   return (
                     <TableRow key={payment.id}>
-                      <TableCell>{apartment?.code ?? '-'}</TableCell>
+                      <TableCell>{fullApartmentLabel(apartment, blockById, regionById)}</TableCell>
                       <TableCell>
                         {region?.name ?? '-'} / {block?.name ?? '-'}
                       </TableCell>
@@ -3264,7 +3275,7 @@ function StatsView({
     const region = block ? lookups.regions.get(block.regionId) : undefined;
     const collector = lookups.users.get(payment.collectorId);
     return {
-      apartment: apartment?.code ?? payment.apartmentId,
+      apartment: fullApartmentLabel(apartment, lookups.blocks, lookups.regions),
       area: `${region?.name ?? '-'} / ${block?.name ?? '-'}`,
       collector: collector?.name ?? payment.collectorId,
       paidAt: formatDate(payment.paidAt),
@@ -3449,7 +3460,7 @@ function StatsView({
                   return (
                     <TableRow key={payment.id}>
                       <TableCell>
-                        {apartment?.code ?? payment.apartmentId}
+                        {fullApartmentLabel(apartment, lookups.blocks, lookups.regions)}
                       </TableCell>
                       <TableCell>{formatDate(payment.paidAt)}</TableCell>
                       <TableCell>{money.format(payment.amount)}</TableCell>
@@ -3492,7 +3503,7 @@ function StatsView({
               return (
                 <TableRow key={payment.id}>
                   <TableCell>
-                    {apartment?.code ?? payment.apartmentId}
+                    {fullApartmentLabel(apartment, lookups.blocks, lookups.regions)}
                   </TableCell>
                   <TableCell>
                     {collector?.name ?? payment.collectorId}
