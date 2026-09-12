@@ -741,6 +741,16 @@ export default function GarbageFeeApp() {
     return response.ok ? null : payload.error ?? 'Chưa thể khôi phục sao lưu.';
   };
 
+  const deleteBackup = async (backupId: string) => {
+    const response = await fetch('/api/backups', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'delete', backupId }),
+    });
+    const payload = (await response.json()) as { error?: string };
+    return response.ok ? null : payload.error ?? 'Chưa thể xóa điểm sao lưu.';
+  };
+
   const uploadLogo = async (file: File) => {
     const dataUrl = await new Promise<string>((resolve, reject) => {
       const reader = new FileReader();
@@ -1995,10 +2005,11 @@ export default function GarbageFeeApp() {
               <CustomizationPanel
                 settings={state.settings}
                 onSave={(settings) => void commit({ ...state, settings })}
-                onLoadBackups={loadBackups}
-                onCreateBackup={createBackup}
-                onRestoreBackup={restoreBackup}
-                onUploadLogo={uploadLogo}
+  onLoadBackups={loadBackups}
+  onCreateBackup={createBackup}
+  onRestoreBackup={restoreBackup}
+  onDeleteBackup={deleteBackup}
+  onUploadLogo={uploadLogo}
               />
             </TabsContent>
           )}
@@ -2624,6 +2635,7 @@ function CustomizationPanel({
   onLoadBackups,
   onCreateBackup,
   onRestoreBackup,
+  onDeleteBackup,
   onUploadLogo,
 }: {
   settings: AppSettings;
@@ -2631,6 +2643,7 @@ function CustomizationPanel({
   onLoadBackups: () => Promise<BackupPoint[]>;
   onCreateBackup: () => Promise<string | null>;
   onRestoreBackup: (backupId: string) => Promise<string | null>;
+  onDeleteBackup: (backupId: string) => Promise<string | null>;
   onUploadLogo: (file: File) => Promise<string>;
 }) {
   const [draft, setDraft] = useState(settings);
@@ -2688,6 +2701,17 @@ function CustomizationPanel({
       return;
     }
     window.location.reload();
+  };
+
+  const deletePoint = async (backup: BackupPoint) => {
+    if (!window.confirm(`Xóa vĩnh viễn điểm sao lưu lúc ${formatDate(backup.createdAt)}?`)) return;
+    setBackupError('');
+    const error = await onDeleteBackup(backup.id);
+    if (error) {
+      setBackupError(error);
+      return;
+    }
+    setBackups((current) => current.filter((item) => item.id !== backup.id));
   };
 
   const selectLogo = async (file: File | undefined) => {
@@ -3001,7 +3025,7 @@ function CustomizationPanel({
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-sm text-muted-foreground">Bản tự động chạy lúc 24:00 giờ Việt Nam.</p>
+            <p className="text-sm text-muted-foreground">Tối đa 10 bản mới nhất. Bản tự động chạy lúc 24:00 giờ Việt Nam.</p>
             <Button type="button" size="sm" onClick={() => void createPoint()}>
               Tạo sao lưu ngay
             </Button>
@@ -3030,9 +3054,21 @@ function CustomizationPanel({
                     <TableCell>{formatNumber(backup.counts.payments)}</TableCell>
                     <TableCell>{formatNumber(backup.counts.settlements)}</TableCell>
                     <TableCell className="text-right">
-                      <Button type="button" size="sm" variant="destructive" onClick={() => void restorePoint(backup)}>
-                        Khôi phục
-                      </Button>
+                      <div className="flex justify-end gap-2">
+                        <Button type="button" size="sm" variant="outline" onClick={() => void restorePoint(backup)}>
+                          Khôi phục
+                        </Button>
+                        <Button
+                          type="button"
+                          size="icon-sm"
+                          variant="destructive"
+                          aria-label="Xóa điểm sao lưu"
+                          title="Xóa điểm sao lưu"
+                          onClick={() => void deletePoint(backup)}
+                        >
+                          <Trash2 />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}

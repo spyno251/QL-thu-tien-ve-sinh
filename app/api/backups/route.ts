@@ -6,6 +6,7 @@ export const runtime = 'nodejs';
 
 type BackupSource = 'automatic' | 'manual';
 type Snapshot = Record<string, unknown>;
+const MAX_BACKUPS = 10;
 
 function bangkokDate() {
   const parts = new Intl.DateTimeFormat('en-CA', {
@@ -17,6 +18,21 @@ function bangkokDate() {
 
 function asRows(value: unknown) {
   return Array.isArray(value) ? value : [];
+}
+
+async function pruneBackups() {
+  const db = getSupabaseAdmin();
+  if (!db) throw new Error(configurationError());
+  const { data, error } = await db
+    .from('app_backups')
+    .select('id')
+    .order('created_at', { ascending: false })
+    .range(MAX_BACKUPS, 10000);
+  if (error) throw error;
+  const ids = (data ?? []).map((backup) => backup.id);
+  if (!ids.length) return;
+  const { error: deleteError } = await db.from('app_backups').delete().in('id', ids);
+  if (deleteError) throw deleteError;
 }
 
 async function createBackup(source: BackupSource) {
@@ -48,6 +64,7 @@ async function createBackup(source: BackupSource) {
     },
   });
   if (error) throw error;
+  await pruneBackups();
   return { backupDate, skipped: false };
 }
 
@@ -111,7 +128,9 @@ export async function POST(request: Request) {
     const body = (await request.json()) as { action?: string; backupId?: string };
     if (body.action === 'list') {
       const { data, error } = await db.from('app_backups')
-        .select('id, backup_date, source, created_at, snapshot').order('created_at', { ascending: false });
+        .select('id, backup_date, source, created_at, snapshot')
+        .order('created_at', { ascending: false })
+        .limit(MAX_BACKUPS);
       if (error) throw error;
       const backups = (data ?? []).map((backup) => {
         const snapshot = (backup.snapshot ?? {}) as Snapshot;
@@ -137,6 +156,13 @@ export async function POST(request: Request) {
       if (error) throw error;
       if (!backup) return Response.json({ error: 'Không tìm thấy điểm sao lưu.' }, { status: 404 });
       await restoreBackup(backup.snapshot as Snapshot);
+      return Response.json({ ok: true });
+    }
+    if (body.action === 'delete') {
+      const backupId = String(body.backupId ?? '');
+      if (!backupId) return Response.json({ error: 'Thiếu mã điểm sao lưu.' }, { status: 400 });
+      const { error } = await db.from('app_backups').delete().eq('id', backupId);
+      if (error) throw error;
       return Response.json({ ok: true });
     }
     return Response.json({ error: 'Yêu cầu không hợp lệ.' }, { status: 400 });
