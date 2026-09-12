@@ -172,6 +172,16 @@ type BackupPoint = {
   };
 };
 
+type AppVersion = {
+  id: string;
+  name: string;
+  commit: string;
+  description: string;
+  available: boolean;
+  deploymentFound: boolean;
+  deployedAt: number | null;
+};
+
 type AppState = {
   users: User[];
   regions: Region[];
@@ -751,6 +761,25 @@ export default function GarbageFeeApp() {
     });
     const payload = (await response.json()) as { error?: string };
     return response.ok ? null : payload.error ?? 'Chưa thể xóa điểm sao lưu.';
+  };
+
+  const loadAppVersions = async () => {
+    const response = await fetch('/api/versions', { cache: 'no-store' });
+    const payload = (await response.json()) as { versions?: AppVersion[]; error?: string };
+    return {
+      versions: response.ok ? payload.versions ?? [] : [],
+      error: response.ok ? '' : payload.error ?? 'Chưa thể tải danh sách phiên bản.',
+    };
+  };
+
+  const restoreAppVersion = async (versionId: string) => {
+    const response = await fetch('/api/versions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ versionId }),
+    });
+    const payload = (await response.json()) as { error?: string };
+    return response.ok ? null : payload.error ?? 'Chưa thể khôi phục phiên bản ứng dụng.';
   };
 
   const uploadLogo = async (file: File) => {
@@ -2031,6 +2060,8 @@ export default function GarbageFeeApp() {
   onCreateBackup={createBackup}
   onRestoreBackup={restoreBackup}
   onDeleteBackup={deleteBackup}
+  onLoadVersions={loadAppVersions}
+  onRestoreVersion={restoreAppVersion}
   onUploadLogo={uploadLogo}
               />
             </TabsContent>
@@ -2669,6 +2700,8 @@ function CustomizationPanel({
   onCreateBackup,
   onRestoreBackup,
   onDeleteBackup,
+  onLoadVersions,
+  onRestoreVersion,
   onUploadLogo,
 }: {
   settings: AppSettings;
@@ -2677,6 +2710,8 @@ function CustomizationPanel({
   onCreateBackup: () => Promise<string | null>;
   onRestoreBackup: (backupId: string) => Promise<string | null>;
   onDeleteBackup: (backupId: string) => Promise<string | null>;
+  onLoadVersions: () => Promise<{ versions: AppVersion[]; error: string }>;
+  onRestoreVersion: (versionId: string) => Promise<string | null>;
   onUploadLogo: (file: File) => Promise<string>;
 }) {
   const [draft, setDraft] = useState(settings);
@@ -2685,6 +2720,11 @@ function CustomizationPanel({
   const [backups, setBackups] = useState<BackupPoint[]>([]);
   const [loadingBackups, setLoadingBackups] = useState(false);
   const [backupError, setBackupError] = useState('');
+  const [versionsOpen, setVersionsOpen] = useState(false);
+  const [versions, setVersions] = useState<AppVersion[]>([]);
+  const [loadingVersions, setLoadingVersions] = useState(false);
+  const [versionError, setVersionError] = useState('');
+  const [restoringVersionId, setRestoringVersionId] = useState('');
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [logoError, setLogoError] = useState('');
 
@@ -2745,6 +2785,30 @@ function CustomizationPanel({
       return;
     }
     setBackups((current) => current.filter((item) => item.id !== backup.id));
+  };
+
+  const openVersions = async () => {
+    setVersionsOpen(true);
+    setLoadingVersions(true);
+    setVersionError('');
+    const result = await onLoadVersions();
+    setVersions(result.versions);
+    setVersionError(result.error);
+    setLoadingVersions(false);
+  };
+
+  const restoreVersion = async (version: AppVersion) => {
+    if (!window.confirm(`Khôi phục ${version.name}? Mã nguồn ứng dụng sẽ được đưa về bản này, dữ liệu đang có không thay đổi.`)) return;
+    setVersionError('');
+    setRestoringVersionId(version.id);
+    const error = await onRestoreVersion(version.id);
+    setRestoringVersionId('');
+    if (error) {
+      setVersionError(error);
+      return;
+    }
+    setVersionError('Đã gửi yêu cầu khôi phục. Ứng dụng sẽ tải lại sau ít giây.');
+    window.setTimeout(() => window.location.reload(), 4000);
   };
 
   const selectLogo = async (file: File | undefined) => {
@@ -3047,6 +3111,9 @@ function CustomizationPanel({
         <Button type="button" variant="outline" className="sm:col-span-2" onClick={() => void openBackups()}>
           Khôi phục từ sao lưu
         </Button>
+        <Button type="button" variant="outline" className="sm:col-span-2" onClick={() => void openVersions()}>
+          Phiên bản ứng dụng
+        </Button>
       </form>
 
       <Dialog open={backupsOpen} onOpenChange={setBackupsOpen}>
@@ -3113,6 +3180,39 @@ function CustomizationPanel({
                 )}
               </TableBody>
             </Table>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={versionsOpen} onOpenChange={setVersionsOpen}>
+        <DialogContent className="max-w-[calc(100%-1rem)] sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Phiên bản ứng dụng</DialogTitle>
+            <DialogDescription>Khôi phục mã nguồn đã đánh dấu ổn định. Dữ liệu hiện có không thay đổi.</DialogDescription>
+          </DialogHeader>
+          {versionError && <p className="text-sm text-destructive">{versionError}</p>}
+          <div className="space-y-2">
+            {versions.map((version) => (
+              <div key={version.id} className="flex flex-col gap-3 rounded-md border p-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <p className="font-semibold">{version.name}</p>
+                  <p className="text-sm text-muted-foreground">{version.description}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">Mã nguồn: {version.commit.slice(0, 7)}</p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={!version.available || restoringVersionId === version.id}
+                  onClick={() => void restoreVersion(version)}
+                >
+                  {restoringVersionId === version.id ? 'Đang khôi phục...' : 'Khôi phục'}
+                </Button>
+              </div>
+            ))}
+            {!loadingVersions && !versions.length && !versionError && (
+              <p className="py-6 text-center text-sm text-muted-foreground">Chưa có phiên bản ổn định.</p>
+            )}
+            {loadingVersions && <p className="py-6 text-center text-sm text-muted-foreground">Đang tải phiên bản...</p>}
           </div>
         </DialogContent>
       </Dialog>
