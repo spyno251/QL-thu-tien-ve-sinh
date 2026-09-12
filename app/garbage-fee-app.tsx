@@ -145,6 +145,8 @@ const themeColors = {
   rose: '#b8325a',
 } as const;
 
+const LOGIN_DEVICE_PREFERENCE = 'garbage-fee-login-device';
+
 type AppSettings = {
   appName: string;
   subtitle: string;
@@ -338,8 +340,8 @@ export default function GarbageFeeApp() {
   const [state, setState] = useState<AppState>(initialState);
   const commitQueue = useRef(Promise.resolve());
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [loginPhone, setLoginPhone] = useState('0909000001');
-  const [loginPassword, setLoginPassword] = useState('admin123');
+  const [loginPhone, setLoginPhone] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
   const [remember, setRemember] = useState(false);
   const [loginError, setLoginError] = useState('');
   const [authLoading, setAuthLoading] = useState(true);
@@ -424,6 +426,15 @@ export default function GarbageFeeApp() {
 
   useEffect(() => {
     let active = true;
+    try {
+      const saved = JSON.parse(
+        window.localStorage.getItem(LOGIN_DEVICE_PREFERENCE) ?? '{}',
+      ) as { phone?: unknown; remember?: unknown };
+      if (typeof saved.phone === 'string') setLoginPhone(saved.phone);
+      if (saved.remember === true) setRemember(true);
+    } catch {
+      window.localStorage.removeItem(LOGIN_DEVICE_PREFERENCE);
+    }
     fetch('/api/auth')
       .then(async (response) => {
         const payload = (await response.json()) as {
@@ -569,7 +580,16 @@ export default function GarbageFeeApp() {
       };
       if (!response.ok || !payload.user)
         throw new Error(payload.error ?? 'Đăng nhập thất bại.');
+      if (remember) {
+        window.localStorage.setItem(
+          LOGIN_DEVICE_PREFERENCE,
+          JSON.stringify({ phone: loginPhone.trim(), remember: true }),
+        );
+      } else {
+        window.localStorage.removeItem(LOGIN_DEVICE_PREFERENCE);
+      }
       setCurrentUser(payload.user);
+      setLoginPassword('');
       setPaymentFilter('unpaid');
       setLoginError('');
       await loadState();
