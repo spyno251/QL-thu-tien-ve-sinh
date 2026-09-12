@@ -339,9 +339,16 @@ export async function POST(request: Request) {
     }
     if (!payload.state) return json({ error: 'Missing state' }, 400);
     const existing = await readState();
+    const incomingState =
+      currentUser.role === 'manager'
+        ? {
+            ...payload.state,
+            users: mergeHiddenAdminUsers(existing.users, payload.state.users),
+          }
+        : payload.state;
     if (
       currentUser.role === 'manager' &&
-      !managerMayApplyUserChanges(existing.users, payload.state.users)
+      !managerMayApplyUserChanges(existing.users, incomingState.users)
     )
       return json(
         { error: 'Quản trị chỉ được sửa hoặc xóa tài khoản Nhân viên.' },
@@ -349,7 +356,7 @@ export async function POST(request: Request) {
       );
     if (
       currentUser.role === 'manager' &&
-      JSON.stringify(payload.state.settings) !== JSON.stringify(existing.settings)
+      JSON.stringify(incomingState.settings) !== JSON.stringify(existing.settings)
     )
       return json({ error: 'Chỉ Admin được thay đổi chế độ sao lưu tự động.' }, 403);
     // Payment records are append-only outside their dedicated API actions. This
@@ -358,7 +365,7 @@ export async function POST(request: Request) {
     const protectedPayments = existing.payments;
     const nextState =
       currentUser.role !== 'staff'
-        ? { ...payload.state, payments: protectedPayments }
+        ? { ...incomingState, payments: protectedPayments }
         : { ...existing, payments: protectedPayments };
     await saveState(nextState);
     return json({
@@ -370,17 +377,44 @@ export async function POST(request: Request) {
   }
 }
 
+function mergeHiddenAdminUsers(existing: User[], incoming: User[]) {
+  const incomingIds = new Set(incoming.map((user) => user.id));
+  return [
+    ...incoming,
+    ...existing.filter(
+      (user) => user.role === 'admin' && !incomingIds.has(user.id),
+    ),
+  ];
+}
+
 function visibleState(
   state: AppState,
   currentUser: { id: string; role: 'admin' | 'manager' | 'staff' },
 ) {
-  if (currentUser.role !== 'staff') return state;
+  const hideAdmin =
+    currentUser.role !== 'admin' && !state.settings.showAdminInStats;
+  const adminIds = new Set(
+    state.users
+      .filter((user) => user.role === 'admin')
+      .map((user) => user.id),
+  );
+  const visibleUsers = hideAdmin
+    ? state.users.filter((user) => user.role !== 'admin')
+    : state.users;
+  const visiblePayments = hideAdmin
+    ? state.payments.filter((payment) => !adminIds.has(payment.collectorId))
+    : state.payments;
+
+  if (currentUser.role !== 'staff') {
+    return { ...state, users: visibleUsers, payments: visiblePayments };
+  }
   return {
     ...state,
+    payments: visiblePayments,
     debtSettlements: state.debtSettlements.filter(
       (settlement) => settlement.staffId === currentUser.id,
     ),
-    users: state.users.map((user) => ({
+    users: visibleUsers.map((user) => ({
       ...user,
       phone: user.id === currentUser.id ? user.phone : '',
       email: user.id === currentUser.id ? user.email : '',

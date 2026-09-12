@@ -2947,7 +2947,7 @@ function CustomizationPanel({
               setDraft((current) => ({ ...current, showAdminInStats: checked }))
             }
           />
-          Hiển thị Admin trong bảng thống kê nhân viên
+          Hiển thị Admin với Quản trị và Nhân viên trên toàn hệ thống
         </label>
         <label className="flex min-h-11 items-start gap-2 text-sm sm:col-span-2">
           <Checkbox
@@ -3148,7 +3148,12 @@ function StatsView({
   );
   const payments = state.payments.filter((item) => item.month === month);
   const byUser = state.users
-    .filter((user) => user.role !== 'admin' || state.settings.showAdminInStats)
+    .filter(
+      (user) =>
+        user.role !== 'admin' ||
+        currentUser.role === 'admin' ||
+        state.settings.showAdminInStats,
+    )
     .map((user) => {
     const userPayments = payments.filter(
       (item) => item.collectorId === user.id,
