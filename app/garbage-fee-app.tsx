@@ -1,6 +1,14 @@
 'use client';
 
-import { CSSProperties, FormEvent, ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  CSSProperties,
+  FormEvent,
+  ReactNode,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import {
   Building2,
   CalendarDays,
@@ -58,6 +66,37 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 type Role = 'admin' | 'manager' | 'staff';
+type MainTabValue =
+  | 'collect'
+  | 'stats'
+  | 'users'
+  | 'areas'
+  | 'debts'
+  | 'access-history'
+  | 'settings';
+
+type MainTabConfig = {
+  value: MainTabValue;
+  label: string;
+  roles: readonly Role[];
+};
+
+const MAIN_TABS: readonly MainTabConfig[] = [
+  {
+    value: 'collect',
+    label: 'Thu tháng',
+    roles: ['staff', 'manager', 'admin'],
+  },
+  { value: 'stats', label: 'Thống kê', roles: ['staff', 'manager', 'admin'] },
+  { value: 'users', label: 'Nhân Viên', roles: ['manager', 'admin'] },
+  { value: 'areas', label: 'Khu vực', roles: ['manager', 'admin'] },
+  { value: 'debts', label: 'Công Nợ', roles: ['manager', 'admin'] },
+  { value: 'access-history', label: 'Lịch sử truy cập', roles: ['admin'] },
+  { value: 'settings', label: 'Tùy chỉnh', roles: ['admin'] },
+] as const;
+
+const mainTabTriggerClass =
+  'min-h-11 flex-none whitespace-nowrap rounded-xl border border-transparent px-4 py-2 text-sm font-bold text-slate-700 shadow-none transition-all hover:-translate-y-0.5 hover:bg-white/80 hover:text-primary focus-visible:ring-2 focus-visible:ring-primary/40 data-active:-translate-y-1 data-active:border-primary/40 data-active:bg-primary data-active:text-primary-foreground data-active:shadow-[0_12px_28px_rgba(15,23,42,0.24)] sm:text-base';
 
 type User = {
   id: string;
@@ -150,9 +189,36 @@ type InvoicePreferences = {
 };
 
 const defaultUiPreferences: UiPreferences = {
-  primaryColor: '#007563', backgroundColor: '#f4fbfa', headerAlignment: 'left', fontScale: 'normal', density: 'comfortable', tableStyle: 'tinted', cornerStyle: 'soft', cardStyle: 'bordered', showSubtitle: true,
-  fontFamily: 'sans', fontSize: 16, headerBackgroundColor: '#f4fbfa', headerTextColor: '#102a30', tableHeaderBackgroundColor: '#007563', tableHeaderTextColor: '#ffffff', tableBorderColor: '#bdd9d5', apartmentInfoBackgroundColor: '#d9ece3', tableTextAlign: 'left',
-  invoice: { showAppName: true, showApartment: true, showOwner: true, showPeriod: true, showPaidAt: true, showCollector: true, showAmount: true, showMethod: true, showNote: true, footer: 'Cảm ơn quý khách đã thanh toán.' },
+  primaryColor: '#007563',
+  backgroundColor: '#f4fbfa',
+  headerAlignment: 'left',
+  fontScale: 'normal',
+  density: 'comfortable',
+  tableStyle: 'tinted',
+  cornerStyle: 'soft',
+  cardStyle: 'bordered',
+  showSubtitle: true,
+  fontFamily: 'sans',
+  fontSize: 16,
+  headerBackgroundColor: '#f4fbfa',
+  headerTextColor: '#102a30',
+  tableHeaderBackgroundColor: '#007563',
+  tableHeaderTextColor: '#ffffff',
+  tableBorderColor: '#bdd9d5',
+  apartmentInfoBackgroundColor: '#d9ece3',
+  tableTextAlign: 'left',
+  invoice: {
+    showAppName: true,
+    showApartment: true,
+    showOwner: true,
+    showPeriod: true,
+    showPaidAt: true,
+    showCollector: true,
+    showAmount: true,
+    showMethod: true,
+    showNote: true,
+    footer: 'Cảm ơn quý khách đã thanh toán.',
+  },
 };
 
 const themeColors = {
@@ -220,7 +286,9 @@ type OnlineUser = Pick<User, 'id' | 'name' | 'phone' | 'role'>;
 type BrowserPdfMake = {
   vfs: unknown;
   addVirtualFileSystem?: (virtualFileSystem: unknown) => void;
-  createPdf: (definition: unknown) => { getBlob: (callback: (blob: Blob) => void) => void };
+  createPdf: (definition: unknown) => {
+    getBlob: (callback: (blob: Blob) => void) => void;
+  };
 };
 
 type AppState = {
@@ -388,7 +456,18 @@ function formatReceiptDate(value: string) {
 
 function amountInWords(value: number) {
   if (!Number.isFinite(value) || value <= 0) return 'Không đồng';
-  const digits = ['không', 'một', 'hai', 'ba', 'bốn', 'năm', 'sáu', 'bảy', 'tám', 'chín'];
+  const digits = [
+    'không',
+    'một',
+    'hai',
+    'ba',
+    'bốn',
+    'năm',
+    'sáu',
+    'bảy',
+    'tám',
+    'chín',
+  ];
   const scales = ['', 'nghìn', 'triệu', 'tỷ'];
   const readGroup = (group: number, forceFull: boolean) => {
     const hundreds = Math.floor(group / 100);
@@ -436,7 +515,10 @@ async function loadPdfImage(url: string) {
   const blob = await response.blob();
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = () => typeof reader.result === 'string' ? resolve(reader.result) : reject(new Error('Invalid logo'));
+    reader.onload = () =>
+      typeof reader.result === 'string'
+        ? resolve(reader.result)
+        : reject(new Error('Invalid logo'));
     reader.onerror = () => reject(new Error('Unable to read logo'));
     reader.readAsDataURL(blob);
   });
@@ -456,7 +538,8 @@ function formatShortAmount(value: number) {
     const millions = value / 1_000_000;
     return `${new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 1 }).format(millions)} triệu`;
   }
-  if (value >= 1_000) return `${new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 }).format(value / 1_000)} nghìn`;
+  if (value >= 1_000)
+    return `${new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 }).format(value / 1_000)} nghìn`;
   return `${formatNumber(value)} đồng`;
 }
 
@@ -491,24 +574,27 @@ export default function GarbageFeeApp() {
   const [forgotMessage, setForgotMessage] = useState('');
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [showAccountInfo, setShowAccountInfo] = useState(false);
-  const [, setSyncStatus] = useState<
-    'loading' | 'synced' | 'saving' | 'local'
-  >('loading');
+  const [, setSyncStatus] = useState<'loading' | 'synced' | 'saving' | 'local'>(
+    'loading',
+  );
   const [selectedMonth, setSelectedMonth] = useState(monthNow);
   const [selectedRegion, setSelectedRegion] = useState('all');
   const [selectedBlock, setSelectedBlock] = useState('all');
   const [query, setQuery] = useState('');
-  const [paymentFilter, setPaymentFilter] = useState<
-    'unpaid' | 'paid' | 'all'
-  >('unpaid');
+  const [paymentFilter, setPaymentFilter] = useState<'unpaid' | 'paid' | 'all'>(
+    'unpaid',
+  );
   const [draftAmounts, setDraftAmounts] = useState<Record<string, string>>({});
-  const [draftPaymentNotes, setDraftPaymentNotes] = useState<Record<string, string>>({});
+  const [draftPaymentNotes, setDraftPaymentNotes] = useState<
+    Record<string, string>
+  >({});
   const [draftPaymentMethods, setDraftPaymentMethods] = useState<
     Record<string, Payment['method']>
   >({});
   const [paymentCountdown, setPaymentCountdown] = useState<
     Record<string, number>
   >({});
+  const [activeMainTab, setActiveMainTab] = useState<MainTabValue>('collect');
   const [recordingPayments, setRecordingPayments] = useState<
     Record<string, boolean>
   >({});
@@ -620,6 +706,21 @@ export default function GarbageFeeApp() {
       window.clearInterval(timer);
     };
   }, [currentUser]);
+
+  const visibleMainTabs = useMemo(
+    () =>
+      currentUser
+        ? MAIN_TABS.filter((tab) => tab.roles.includes(currentUser.role))
+        : [],
+    [currentUser],
+  );
+  const allowedMainTabs = useMemo(
+    () => new Set(visibleMainTabs.map((tab) => tab.value)),
+    [visibleMainTabs],
+  );
+  const selectedMainTab = allowedMainTabs.has(activeMainTab)
+    ? activeMainTab
+    : 'collect';
 
   const commit = async (nextState: AppState) => {
     setState(nextState);
@@ -787,7 +888,8 @@ export default function GarbageFeeApp() {
         state?: AppState;
         error?: string;
       };
-      if (!response.ok) throw new Error(payload.error ?? 'Chưa thể ghi nhận khoản thu.');
+      if (!response.ok)
+        throw new Error(payload.error ?? 'Chưa thể ghi nhận khoản thu.');
       if (payload.state) setState(payload.state);
       setPaymentCountdown((current) => ({ ...current, [apartment.id]: 3 }));
       await loadState();
@@ -811,7 +913,10 @@ export default function GarbageFeeApp() {
     }
   };
 
-  const updatePayment = async (paymentId: string, updates: Partial<Payment>) => {
+  const updatePayment = async (
+    paymentId: string,
+    updates: Partial<Payment>,
+  ) => {
     const response = await fetch('/api/data', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -839,8 +944,10 @@ export default function GarbageFeeApp() {
         import('pdfmake/build/pdfmake'),
         import('pdfmake/build/vfs_fonts'),
       ]);
-      const pdfMake = (pdfMakeModule.default ?? pdfMakeModule) as unknown as BrowserPdfMake;
-      const pdfFonts = (pdfFontsModule.default ?? pdfFontsModule) as unknown as {
+      const pdfMake = (pdfMakeModule.default ??
+        pdfMakeModule) as unknown as BrowserPdfMake;
+      const pdfFonts = (pdfFontsModule.default ??
+        pdfFontsModule) as unknown as {
         pdfMake?: { vfs?: unknown };
         vfs?: unknown;
         [fontFile: string]: unknown;
@@ -865,7 +972,10 @@ export default function GarbageFeeApp() {
         ['Tên chủ hộ:', apartment.owner || '-'],
         ['Số điện thoại:', apartment.phone || '-'],
         ['Kỳ thanh toán:', `${month}/${year}`],
-        ['Số tiền thanh toán:', `${formatNumber(payment.amount)} (${amountInWords(payment.amount)})`],
+        [
+          'Số tiền thanh toán:',
+          `${formatNumber(payment.amount)} (${amountInWords(payment.amount)})`,
+        ],
         ['Hình thức thanh toán:', method],
         ['Người Thu:', (collector?.name ?? '-').toUpperCase()],
       ];
@@ -874,76 +984,130 @@ export default function GarbageFeeApp() {
         pageSize: 'A5',
         pageOrientation: 'landscape',
         pageMargins: [48, 42, 48, 42],
-        content: [{
-          table: {
-            widths: ['*'],
-            body: [[{
-              border: [true, true, true, true],
-              margin: [44, 34, 44, 36],
-              stack: [
-                {
-                  columns: [
-                    { width: 72, image: logo, fit: [58, 58], margin: [34, 0, 0, 0] },
-                    {
-                      width: '*',
-                      stack: [
-                        { text: 'THU TIỀN VỆ SINH', color: teal, bold: true, fontSize: 10, alignment: 'center' },
-                        { text: 'XÁC NHẬN THANH TOÁN', bold: true, fontSize: 18, alignment: 'center', margin: [0, 12, 0, 7] },
-                        { text: formatReceiptDate(payment.paidAt), color: '#974e4e', fontSize: 10, alignment: 'center' },
-                      ],
-                    },
-                    { width: 72, text: '' },
-                  ],
-                  margin: [0, 0, 0, 14],
-                },
-                {
-                  table: {
-                    widths: [150, '*'],
-                    body: rows.map(([label, value]) => [
-                      { text: label, fontSize: 10, margin: [5, 4, 4, 4] },
-                      { text: value, bold: label === 'Căn Hộ:', fontSize: 10, margin: [5, 4, 4, 4] },
-                    ]),
+        content: [
+          {
+            table: {
+              widths: ['*'],
+              body: [
+                [
+                  {
+                    border: [true, true, true, true],
+                    margin: [44, 34, 44, 36],
+                    stack: [
+                      {
+                        columns: [
+                          {
+                            width: 72,
+                            image: logo,
+                            fit: [58, 58],
+                            margin: [34, 0, 0, 0],
+                          },
+                          {
+                            width: '*',
+                            stack: [
+                              {
+                                text: 'THU TIỀN VỆ SINH',
+                                color: teal,
+                                bold: true,
+                                fontSize: 10,
+                                alignment: 'center',
+                              },
+                              {
+                                text: 'XÁC NHẬN THANH TOÁN',
+                                bold: true,
+                                fontSize: 18,
+                                alignment: 'center',
+                                margin: [0, 12, 0, 7],
+                              },
+                              {
+                                text: formatReceiptDate(payment.paidAt),
+                                color: '#974e4e',
+                                fontSize: 10,
+                                alignment: 'center',
+                              },
+                            ],
+                          },
+                          { width: 72, text: '' },
+                        ],
+                        margin: [0, 0, 0, 14],
+                      },
+                      {
+                        table: {
+                          widths: [150, '*'],
+                          body: rows.map(([label, value]) => [
+                            { text: label, fontSize: 10, margin: [5, 4, 4, 4] },
+                            {
+                              text: value,
+                              bold: label === 'Căn Hộ:',
+                              fontSize: 10,
+                              margin: [5, 4, 4, 4],
+                            },
+                          ]),
+                        },
+                        layout: {
+                          hLineWidth: () => 0.8,
+                          vLineWidth: () => 0,
+                          hLineColor: () => teal,
+                          paddingLeft: () => 0,
+                          paddingRight: () => 0,
+                          paddingTop: () => 0,
+                          paddingBottom: () => 0,
+                        },
+                      },
+                      {
+                        text: 'Cảm ơn quý khách đã thanh toán',
+                        italics: true,
+                        fontSize: 11,
+                        alignment: 'center',
+                        color: '#333333',
+                        margin: [0, 6, 0, 4],
+                      },
+                      {
+                        canvas: [
+                          {
+                            type: 'line',
+                            x1: 0,
+                            y1: 0,
+                            x2: 398,
+                            y2: 0,
+                            lineWidth: 0.8,
+                            lineColor: teal,
+                          },
+                        ],
+                      },
+                    ],
                   },
-                  layout: {
-                    hLineWidth: () => 0.8,
-                    vLineWidth: () => 0,
-                    hLineColor: () => teal,
-                    paddingLeft: () => 0,
-                    paddingRight: () => 0,
-                    paddingTop: () => 0,
-                    paddingBottom: () => 0,
-                  },
-                },
-                {
-                  text: 'Cảm ơn quý khách đã thanh toán',
-                  italics: true,
-                  fontSize: 11,
-                  alignment: 'center',
-                  color: '#333333',
-                  margin: [0, 6, 0, 4],
-                },
-                { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 398, y2: 0, lineWidth: 0.8, lineColor: teal }] },
+                ],
               ],
-            }]],
+            },
+            layout: {
+              hLineWidth: () => 0.8,
+              vLineWidth: () => 0.8,
+              hLineColor: () => '#aaaaaa',
+              vLineColor: () => '#aaaaaa',
+              paddingLeft: () => 0,
+              paddingRight: () => 0,
+              paddingTop: () => 0,
+              paddingBottom: () => 0,
+            },
           },
-          layout: {
-            hLineWidth: () => 0.8,
-            vLineWidth: () => 0.8,
-            hLineColor: () => '#aaaaaa',
-            vLineColor: () => '#aaaaaa',
-            paddingLeft: () => 0,
-            paddingRight: () => 0,
-            paddingTop: () => 0,
-            paddingBottom: () => 0,
-          },
-        }],
+        ],
         defaultStyle: { font: 'Roboto' },
       };
-      const blob = await new Promise<Blob>((resolve) => pdfMake.createPdf(documentDefinition).getBlob(resolve));
+      const blob = await new Promise<Blob>((resolve) =>
+        pdfMake.createPdf(documentDefinition).getBlob(resolve),
+      );
       const filename = `xac-nhan-thanh-toan-${apartment.code.replace(/[^a-zA-Z0-9]+/g, '-')}-${payment.month}.pdf`;
       const file = new File([blob], filename, { type: 'application/pdf' });
-      const shareData = { title: 'Xác nhận thanh toán', text: `Biên nhận ${apartment.code} - kỳ ${payment.month}`, files: [file] };
-      if (navigator.share && (!navigator.canShare || navigator.canShare(shareData))) {
+      const shareData = {
+        title: 'Xác nhận thanh toán',
+        text: `Biên nhận ${apartment.code} - kỳ ${payment.month}`,
+        files: [file],
+      };
+      if (
+        navigator.share &&
+        (!navigator.canShare || navigator.canShare(shareData))
+      ) {
         await navigator.share(shareData);
         return;
       }
@@ -953,7 +1117,9 @@ export default function GarbageFeeApp() {
       link.download = filename;
       link.click();
       URL.revokeObjectURL(url);
-      window.alert('Thiết bị chưa hỗ trợ gửi trực tiếp. File PDF đã được tải xuống để gửi qua Zalo.');
+      window.alert(
+        'Thiết bị chưa hỗ trợ gửi trực tiếp. File PDF đã được tải xuống để gửi qua Zalo.',
+      );
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') return;
       console.error('Unable to create payment receipt PDF', error);
@@ -978,9 +1144,16 @@ export default function GarbageFeeApp() {
     const response = await fetch('/api/data', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'submit-debt-settlement', amount, method }),
+      body: JSON.stringify({
+        action: 'submit-debt-settlement',
+        amount,
+        method,
+      }),
     });
-    const payload = (await response.json()) as { state?: AppState; error?: string };
+    const payload = (await response.json()) as {
+      state?: AppState;
+      error?: string;
+    };
     if (!response.ok) return payload.error ?? 'Chưa thể gửi yêu cầu trả tiền.';
     if (payload.state) setState(payload.state);
     return null;
@@ -992,7 +1165,10 @@ export default function GarbageFeeApp() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'confirm-debt-settlement', settlementId }),
     });
-    const payload = (await response.json()) as { state?: AppState; error?: string };
+    const payload = (await response.json()) as {
+      state?: AppState;
+      error?: string;
+    };
     if (response.ok && payload.state) setState(payload.state);
   };
 
@@ -1014,7 +1190,7 @@ export default function GarbageFeeApp() {
       body: JSON.stringify({ action: 'list' }),
     });
     const payload = (await response.json()) as { backups?: BackupPoint[] };
-    return response.ok ? payload.backups ?? [] : [];
+    return response.ok ? (payload.backups ?? []) : [];
   };
 
   const createBackup = async () => {
@@ -1024,7 +1200,7 @@ export default function GarbageFeeApp() {
       body: JSON.stringify({ action: 'create' }),
     });
     const payload = (await response.json()) as { error?: string };
-    return response.ok ? null : payload.error ?? 'Chưa thể tạo điểm sao lưu.';
+    return response.ok ? null : (payload.error ?? 'Chưa thể tạo điểm sao lưu.');
   };
 
   const restoreBackup = async (backupId: string) => {
@@ -1034,7 +1210,9 @@ export default function GarbageFeeApp() {
       body: JSON.stringify({ action: 'restore', backupId }),
     });
     const payload = (await response.json()) as { error?: string };
-    return response.ok ? null : payload.error ?? 'Chưa thể khôi phục sao lưu.';
+    return response.ok
+      ? null
+      : (payload.error ?? 'Chưa thể khôi phục sao lưu.');
   };
 
   const deleteBackup = async (backupId: string) => {
@@ -1044,15 +1222,20 @@ export default function GarbageFeeApp() {
       body: JSON.stringify({ action: 'delete', backupId }),
     });
     const payload = (await response.json()) as { error?: string };
-    return response.ok ? null : payload.error ?? 'Chưa thể xóa điểm sao lưu.';
+    return response.ok ? null : (payload.error ?? 'Chưa thể xóa điểm sao lưu.');
   };
 
   const loadAppVersions = async () => {
     const response = await fetch('/api/versions', { cache: 'no-store' });
-    const payload = (await response.json()) as { versions?: AppVersion[]; error?: string };
+    const payload = (await response.json()) as {
+      versions?: AppVersion[];
+      error?: string;
+    };
     return {
-      versions: response.ok ? payload.versions ?? [] : [],
-      error: response.ok ? '' : payload.error ?? 'Chưa thể tải danh sách phiên bản.',
+      versions: response.ok ? (payload.versions ?? []) : [],
+      error: response.ok
+        ? ''
+        : (payload.error ?? 'Chưa thể tải danh sách phiên bản.'),
     };
   };
 
@@ -1063,7 +1246,9 @@ export default function GarbageFeeApp() {
       body: JSON.stringify({ versionId }),
     });
     const payload = (await response.json()) as { error?: string };
-    return response.ok ? null : payload.error ?? 'Chưa thể khôi phục phiên bản ứng dụng.';
+    return response.ok
+      ? null
+      : (payload.error ?? 'Chưa thể khôi phục phiên bản ứng dụng.');
   };
 
   const uploadLogo = async (file: File) => {
@@ -1099,9 +1284,14 @@ export default function GarbageFeeApp() {
         method,
       }),
     });
-    const payload = (await response.json()) as { state?: AppState; error?: string };
+    const payload = (await response.json()) as {
+      state?: AppState;
+      error?: string;
+    };
     if (response.ok && payload.state) setState(payload.state);
-    return response.ok ? null : payload.error ?? 'Chưa thể cập nhật giao dịch.';
+    return response.ok
+      ? null
+      : (payload.error ?? 'Chưa thể cập nhật giao dịch.');
   };
 
   const deleteDebtSettlement = async (settlementId: string) => {
@@ -1110,9 +1300,12 @@ export default function GarbageFeeApp() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'delete-debt-settlement', settlementId }),
     });
-    const payload = (await response.json()) as { state?: AppState; error?: string };
+    const payload = (await response.json()) as {
+      state?: AppState;
+      error?: string;
+    };
     if (response.ok && payload.state) setState(payload.state);
-    return response.ok ? null : payload.error ?? 'Chưa thể xóa giao dịch.';
+    return response.ok ? null : (payload.error ?? 'Chưa thể xóa giao dịch.');
   };
 
   useEffect(() => {
@@ -1297,7 +1490,11 @@ export default function GarbageFeeApp() {
     let addedApartments = 0;
     const padWidth = Math.max(2, String(apartmentEnd).length);
 
-    for (let regionNumber = regionStart; regionNumber <= regionEnd; regionNumber += 1) {
+    for (
+      let regionNumber = regionStart;
+      regionNumber <= regionEnd;
+      regionNumber += 1
+    ) {
       const regionName = [prefix, suffix1, String(regionNumber)]
         .filter(Boolean)
         .join(' ');
@@ -1307,7 +1504,11 @@ export default function GarbageFeeApp() {
       regions.push({ id: regionId, name: regionName, defaultFee });
       blocks.push({ id: blockId, regionId, name: '' });
       addedRegions += 1;
-      for (let apartmentNumber = apartmentStart; apartmentNumber <= apartmentEnd; apartmentNumber += 1) {
+      for (
+        let apartmentNumber = apartmentStart;
+        apartmentNumber <= apartmentEnd;
+        apartmentNumber += 1
+      ) {
         apartments.push({
           id: uid('apt'),
           blockId,
@@ -1463,8 +1664,7 @@ export default function GarbageFeeApp() {
   };
 
   const updateUser = (id: string, patch: Partial<User>) => {
-    if (id === currentUser?.id)
-      setCurrentUser({ ...currentUser, ...patch });
+    if (id === currentUser?.id) setCurrentUser({ ...currentUser, ...patch });
     void commit({
       ...state,
       users: state.users.map((item) =>
@@ -1542,7 +1742,12 @@ export default function GarbageFeeApp() {
 
   const loginAsUser = async (user: User) => {
     const roleName = user.role === 'manager' ? 'Quản trị' : 'Nhân viên';
-    if (!window.confirm(`Đăng nhập hỗ trợ với vai trò ${roleName} của ${user.name}?`)) return;
+    if (
+      !window.confirm(
+        `Đăng nhập hỗ trợ với vai trò ${roleName} của ${user.name}?`,
+      )
+    )
+      return;
     const response = await fetch('/api/auth', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1570,7 +1775,9 @@ export default function GarbageFeeApp() {
               className="size-32 object-contain"
             />
           </div>
-          <h1 className="mt-6 text-2xl font-semibold">{state.settings.appName}</h1>
+          <h1 className="mt-6 text-2xl font-semibold">
+            {state.settings.appName}
+          </h1>
           <p className="mt-3 text-sm font-semibold tracking-wide text-primary">
             ĐANG KIỂM TRA THÔNG TIN ĐĂNG NHẬP......
           </p>
@@ -1598,7 +1805,11 @@ export default function GarbageFeeApp() {
     );
   }
 
-  if (currentUser && ((currentUser.mustChangePassword && !currentUser.impersonatedBy) || showChangePassword)) {
+  if (
+    currentUser &&
+    ((currentUser.mustChangePassword && !currentUser.impersonatedBy) ||
+      showChangePassword)
+  ) {
     return (
       <PasswordChangeScreen
         user={currentUser}
@@ -1750,7 +1961,6 @@ export default function GarbageFeeApp() {
                 </Button>
               </form>
             )}
-
           </div>
         </section>
       </main>
@@ -1769,18 +1979,24 @@ export default function GarbageFeeApp() {
   return (
     <main
       className={`min-h-screen bg-background text-foreground theme-${state.settings.theme} ui-font-${state.settings.uiPreferences.fontScale} ui-font-family-${state.settings.uiPreferences.fontFamily} ui-density-${state.settings.uiPreferences.density} ui-table-${state.settings.uiPreferences.tableStyle} ui-table-align-${state.settings.uiPreferences.tableTextAlign} ui-corners-${state.settings.uiPreferences.cornerStyle} ui-cards-${state.settings.uiPreferences.cardStyle} ui-header-${state.settings.uiPreferences.headerAlignment}`}
-      style={{
-        '--primary': state.settings.uiPreferences.primaryColor,
-        '--ring': state.settings.uiPreferences.primaryColor,
-        '--background': state.settings.uiPreferences.backgroundColor,
-        '--ui-font-size': `${state.settings.uiPreferences.fontSize}px`,
-        '--ui-header-background': state.settings.uiPreferences.headerBackgroundColor,
-        '--ui-header-text': state.settings.uiPreferences.headerTextColor,
-        '--ui-table-header-background': state.settings.uiPreferences.tableHeaderBackgroundColor,
-        '--ui-table-header-text': state.settings.uiPreferences.tableHeaderTextColor,
-        '--ui-table-border': state.settings.uiPreferences.tableBorderColor,
-        '--ui-apartment-background': state.settings.uiPreferences.apartmentInfoBackgroundColor,
-      } as CSSProperties}
+      style={
+        {
+          '--primary': state.settings.uiPreferences.primaryColor,
+          '--ring': state.settings.uiPreferences.primaryColor,
+          '--background': state.settings.uiPreferences.backgroundColor,
+          '--ui-font-size': `${state.settings.uiPreferences.fontSize}px`,
+          '--ui-header-background':
+            state.settings.uiPreferences.headerBackgroundColor,
+          '--ui-header-text': state.settings.uiPreferences.headerTextColor,
+          '--ui-table-header-background':
+            state.settings.uiPreferences.tableHeaderBackgroundColor,
+          '--ui-table-header-text':
+            state.settings.uiPreferences.tableHeaderTextColor,
+          '--ui-table-border': state.settings.uiPreferences.tableBorderColor,
+          '--ui-apartment-background':
+            state.settings.uiPreferences.apartmentInfoBackgroundColor,
+        } as CSSProperties
+      }
     >
       <header className="app-main-header sticky top-0 z-20 border-b px-4 py-3 backdrop-blur">
         <div className="ui-header-content mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3">
@@ -1793,7 +2009,9 @@ export default function GarbageFeeApp() {
               />
             </div>
             <div>
-              <h1 className="text-lg font-semibold">{state.settings.appName}</h1>
+              <h1 className="text-lg font-semibold">
+                {state.settings.appName}
+              </h1>
               <p className="text-sm text-muted-foreground">
                 {currentUser.name} ·{' '}
                 {currentUser.role === 'admin'
@@ -1802,17 +2020,20 @@ export default function GarbageFeeApp() {
                     ? 'Quản trị'
                     : 'Nhân viên'}
               </p>
-              {state.settings.uiPreferences.showSubtitle && state.settings.subtitle && (
-                <p className="max-w-[18rem] truncate text-xs text-muted-foreground/80">
-                  {state.settings.subtitle}
-                </p>
-              )}
+              {state.settings.uiPreferences.showSubtitle &&
+                state.settings.subtitle && (
+                  <p className="max-w-[18rem] truncate text-xs text-muted-foreground/80">
+                    {state.settings.subtitle}
+                  </p>
+                )}
               {currentUser.role === 'admin' && (
                 <p className="mt-1 max-w-[30rem] text-xs text-muted-foreground">
                   <span className="mr-1 inline-block size-2 rounded-full bg-emerald-500" />
                   Đang online ({onlineUsers.length}):{' '}
                   {onlineUsers.length
-                    ? onlineUsers.map((user) => `${user.name} (${user.phone})`).join(', ')
+                    ? onlineUsers
+                        .map((user) => `${user.name} (${user.phone})`)
+                        .join(', ')
                     : 'Không có tài khoản nào'}
                 </p>
               )}
@@ -1894,56 +2115,24 @@ export default function GarbageFeeApp() {
           />
         </section>
 
-        <Tabs defaultValue="collect" className="mt-5">
-          <TabsList className="h-11 w-full max-w-none justify-start gap-1 overflow-x-auto bg-primary/10 p-1 sm:h-10 sm:w-fit sm:max-w-full">
-            <TabsTrigger
-              value="collect"
-              className="min-h-9 flex-none whitespace-nowrap px-2 py-1.5 text-sm font-semibold text-foreground/75 data-active:bg-primary data-active:text-primary-foreground data-active:shadow-sm sm:flex-1 sm:px-3 sm:text-base"
-            >
-              Thu tháng
-            </TabsTrigger>
-            <TabsTrigger
-              value="stats"
-              className="min-h-9 flex-none whitespace-nowrap px-2 py-1.5 text-sm font-semibold text-foreground/75 data-active:bg-primary data-active:text-primary-foreground data-active:shadow-sm sm:flex-1 sm:px-3 sm:text-base"
-            >
-              Thống kê
-            </TabsTrigger>
-            <TabsTrigger
-              value="areas"
-              className="min-h-9 flex-none whitespace-nowrap px-2 py-1.5 text-sm font-semibold text-foreground/75 data-active:bg-primary data-active:text-primary-foreground data-active:shadow-sm sm:flex-1 sm:px-3 sm:text-base"
-            >
-              Khu vực
-            </TabsTrigger>
-            <TabsTrigger
-              value="users"
-              className="min-h-9 flex-none whitespace-nowrap px-2 py-1.5 text-sm font-semibold text-foreground/75 data-active:bg-primary data-active:text-primary-foreground data-active:shadow-sm sm:flex-1 sm:px-3 sm:text-base"
-            >
-              Nhân viên
-            </TabsTrigger>
-            {currentUser.role === 'admin' && (
+        <Tabs
+          value={selectedMainTab}
+          onValueChange={(value) => {
+            const nextTab = value as MainTabValue;
+            if (allowedMainTabs.has(nextTab)) setActiveMainTab(nextTab);
+          }}
+          className="mt-5"
+        >
+          <TabsList className="min-h-14 w-full max-w-none justify-start gap-2 overflow-x-auto rounded-2xl border border-primary/15 bg-gradient-to-b from-primary/12 to-background p-2 shadow-inner sm:w-fit sm:max-w-full">
+            {visibleMainTabs.map((tab) => (
               <TabsTrigger
-                value="access-history"
-                className="min-h-9 flex-none whitespace-nowrap px-2 py-1.5 text-sm font-semibold text-foreground/75 data-active:bg-primary data-active:text-primary-foreground data-active:shadow-sm sm:flex-1 sm:px-3 sm:text-base"
+                key={tab.value}
+                value={tab.value}
+                className={mainTabTriggerClass}
               >
-                Lịch sử truy cập
+                {tab.label}
               </TabsTrigger>
-            )}
-            {canManage && (
-              <TabsTrigger
-                value="debts"
-                className="min-h-9 flex-none whitespace-nowrap px-2 py-1.5 text-sm font-semibold text-foreground/75 data-active:bg-primary data-active:text-primary-foreground data-active:shadow-sm sm:flex-1 sm:px-3 sm:text-base"
-              >
-                Công nợ
-              </TabsTrigger>
-            )}
-            {currentUser.role === 'admin' && (
-              <TabsTrigger
-                value="settings"
-                className="min-h-9 flex-none whitespace-nowrap px-2 py-1.5 text-sm font-semibold text-foreground/75 data-active:bg-primary data-active:text-primary-foreground data-active:shadow-sm sm:flex-1 sm:px-3 sm:text-base"
-              >
-                Tùy chỉnh
-              </TabsTrigger>
-            )}
+            ))}
           </TabsList>
 
           <TabsContent value="collect" className="mt-4">
@@ -2071,46 +2260,46 @@ export default function GarbageFeeApp() {
                         <TableCell className="apartment-identity-cell w-1/4 border-r p-0 align-top">
                           <div className="grid min-h-[168px] grid-rows-[40px_44px_44px_40px] divide-y">
                             <div className="flex items-center gap-1.5 bg-primary/25 px-3 font-semibold">
-                            <span>
-                              {apartment.code} - {region?.name ?? '-'}
-                            </span>
-                            {apartment.phone && (
-                              <a
-                                href={`tel:${apartment.phone}`}
-                                className="inline-flex size-8 shrink-0 items-center justify-center rounded-md border-primary bg-primary text-primary-foreground shadow-sm hover:bg-primary/90"
-                                aria-label={`Gọi ${apartment.owner || apartment.code}`}
-                                title={`Gọi ${apartment.phone}`}
-                              >
-                                <Phone className="size-4" />
-                              </a>
-                            )}
-                            </div>
-                            <div className="flex items-center px-2">
-                            <Input
-                              className="h-8 w-full text-sm"
-                              defaultValue={apartment.owner}
-                              placeholder="Chủ hộ"
-                              onBlur={(event) => {
-                                const owner = event.target.value.trim();
-                                if (owner !== apartment.owner) {
-                                  updateApartment(apartment.id, { owner });
-                                }
-                              }}
-                            />
+                              <span>
+                                {apartment.code} - {region?.name ?? '-'}
+                              </span>
+                              {apartment.phone && (
+                                <a
+                                  href={`tel:${apartment.phone}`}
+                                  className="inline-flex size-8 shrink-0 items-center justify-center rounded-md border-primary bg-primary text-primary-foreground shadow-sm hover:bg-primary/90"
+                                  aria-label={`Gọi ${apartment.owner || apartment.code}`}
+                                  title={`Gọi ${apartment.phone}`}
+                                >
+                                  <Phone className="size-4" />
+                                </a>
+                              )}
                             </div>
                             <div className="flex items-center px-2">
                               <Input
-                              className="h-8 w-full text-sm"
-                              defaultValue={apartment.phone}
-                              inputMode="tel"
-                              placeholder="SĐT"
-                              onBlur={(event) => {
-                                const phone = event.target.value.trim();
-                                if (phone !== apartment.phone) {
-                                  updateApartment(apartment.id, { phone });
-                                }
-                              }}
-                            />
+                                className="h-8 w-full text-sm"
+                                defaultValue={apartment.owner}
+                                placeholder="Chủ hộ"
+                                onBlur={(event) => {
+                                  const owner = event.target.value.trim();
+                                  if (owner !== apartment.owner) {
+                                    updateApartment(apartment.id, { owner });
+                                  }
+                                }}
+                              />
+                            </div>
+                            <div className="flex items-center px-2">
+                              <Input
+                                className="h-8 w-full text-sm"
+                                defaultValue={apartment.phone}
+                                inputMode="tel"
+                                placeholder="SĐT"
+                                onBlur={(event) => {
+                                  const phone = event.target.value.trim();
+                                  if (phone !== apartment.phone) {
+                                    updateApartment(apartment.id, { phone });
+                                  }
+                                }}
+                              />
                             </div>
                             <div className="flex items-center px-2">
                               {payment ? (
@@ -2121,7 +2310,7 @@ export default function GarbageFeeApp() {
                                   onBlur={(event) => {
                                     const note = event.target.value.trim();
                                     if (note !== payment.note) {
-                                      updatePayment(payment.id, { note });
+                                      void updatePayment(payment.id, { note });
                                     }
                                   }}
                                 />
@@ -2159,7 +2348,13 @@ export default function GarbageFeeApp() {
                                   variant="outline"
                                   size="sm"
                                   className="w-full gap-1 text-xs"
-                                  onClick={() => void sendPaymentReceipt(apartment, payment, collector ?? null)}
+                                  onClick={() =>
+                                    void sendPaymentReceipt(
+                                      apartment,
+                                      payment,
+                                      collector ?? null,
+                                    )
+                                  }
                                 >
                                   <Send className="size-3.5" />
                                   Gửi xác nhận thanh toán
@@ -2171,45 +2366,45 @@ export default function GarbageFeeApp() {
                         <TableCell className="w-1/4 border-r p-0 align-top">
                           <div className="grid min-h-[168px] grid-rows-[40px_40px_48px_40px] divide-y">
                             <div className="flex h-10 items-center px-2">
-                          {payment ? (
-                            money.format(payment.amount)
-                          ) : (
-                            <Input
-                              className="h-8 w-full"
-                              inputMode="numeric"
-                              value={
-                                draftAmounts[apartment.id] ??
-                                formatNumber(defaultFee)
-                              }
-                              onChange={(event) =>
-                                setDraftAmounts({
-                                  ...draftAmounts,
-                                  [apartment.id]: formatAmountInput(
-                                    event.target.value,
-                                  ),
-                                })
-                              }
-                            />
-                          )}
+                              {payment ? (
+                                money.format(payment.amount)
+                              ) : (
+                                <Input
+                                  className="h-8 w-full"
+                                  inputMode="numeric"
+                                  value={
+                                    draftAmounts[apartment.id] ??
+                                    formatNumber(defaultFee)
+                                  }
+                                  onChange={(event) =>
+                                    setDraftAmounts({
+                                      ...draftAmounts,
+                                      [apartment.id]: formatAmountInput(
+                                        event.target.value,
+                                      ),
+                                    })
+                                  }
+                                />
+                              )}
                             </div>
                             <div className="flex h-10 items-center px-2">
-                          <Badge variant={payment ? 'default' : 'outline'}>
-                            {payment ? 'Đã thu' : 'Chưa thu'}
-                          </Badge>
+                              <Badge variant={payment ? 'default' : 'outline'}>
+                                {payment ? 'Đã thu' : 'Chưa thu'}
+                              </Badge>
                             </div>
                             <div className="flex h-12 items-center px-2">
-                          {payment ? (
-                            <div>
-                              <div>
-                                {collector?.name ?? payment.collectorId}
-                              </div>
-                              <div className="text-xs text-muted-foreground">
-                                {formatDate(payment.paidAt)}
-                              </div>
-                            </div>
-                          ) : (
-                            <span className="text-muted-foreground">-</span>
-                          )}
+                              {payment ? (
+                                <div>
+                                  <div>
+                                    {collector?.name ?? payment.collectorId}
+                                  </div>
+                                  <div className="text-xs text-muted-foreground">
+                                    {formatDate(payment.paidAt)}
+                                  </div>
+                                </div>
+                              ) : (
+                                <span className="text-muted-foreground">-</span>
+                              )}
                             </div>
                             <div className="h-10" />
                           </div>
@@ -2221,69 +2416,76 @@ export default function GarbageFeeApp() {
                             </div>
                             <div className="flex items-center px-2">
                               {payment ? (
-                            <span className="text-sm">
-                              {payment.method === 'transfer'
-                                ? 'Chuyển khoản'
-                                : 'Tiền mặt'}
-                            </span>
-                          ) : (
-                            <NativeSelect
-                              className="h-8 w-full"
-                              value={draftPaymentMethods[apartment.id] ?? 'cash'}
-                              onChange={(event) =>
-                                setDraftPaymentMethods({
-                                  ...draftPaymentMethods,
-                                  [apartment.id]: event.target.value as Payment['method'],
-                                })
-                              }
-                            >
-                              <NativeSelectOption value="cash">Tiền mặt</NativeSelectOption>
-                              <NativeSelectOption value="transfer">Chuyển khoản</NativeSelectOption>
-                            </NativeSelect>
-                          )}
+                                <span className="text-sm">
+                                  {payment.method === 'transfer'
+                                    ? 'Chuyển khoản'
+                                    : 'Tiền mặt'}
+                                </span>
+                              ) : (
+                                <NativeSelect
+                                  className="h-8 w-full"
+                                  value={
+                                    draftPaymentMethods[apartment.id] ?? 'cash'
+                                  }
+                                  onChange={(event) =>
+                                    setDraftPaymentMethods({
+                                      ...draftPaymentMethods,
+                                      [apartment.id]: event.target
+                                        .value as Payment['method'],
+                                    })
+                                  }
+                                >
+                                  <NativeSelectOption value="cash">
+                                    Tiền mặt
+                                  </NativeSelectOption>
+                                  <NativeSelectOption value="transfer">
+                                    Chuyển khoản
+                                  </NativeSelectOption>
+                                </NativeSelect>
+                              )}
                             </div>
                             <div className="p-2">
-                            {isRecording ? (
-                            <Button
-                              type="button"
-                              disabled
-                              className="h-full min-h-16 w-full text-base font-bold disabled:opacity-100"
-                            >
-                              Đang ghi nhận...
-                            </Button>
-                          ) : countdown !== undefined ? (
-                            <Button
-                              type="button"
-                              disabled
-                              className="h-full min-h-16 w-full flex-col gap-1 whitespace-normal text-base font-bold disabled:opacity-100"
-                            >
-                              <span>Đã thu tiền</span>
-                              <span className="text-xs font-medium">
-                                Ẩn giao dịch trong {countdown} giây
-                              </span>
-                            </Button>
-                          ) : payment && canManage ? (
-                            <Button
-                              type="button"
-                              variant="outline"
-                              className="h-full min-h-16 w-full text-base font-semibold"
-                              onClick={() => cancelPayment(payment.id)}
-                            >
-                              Hủy
-                            </Button>
-                          ) : !payment ? (
-                            <Button
-                              type="button"
-                              className="h-full min-h-16 w-full text-lg font-bold"
-                              onClick={() => recordPayment(apartment)}
-                            >
-                              Thu tiền
-                            </Button>
-                          ) : (
-                            <div className="flex h-full min-h-16 items-center justify-center text-center text-base font-semibold text-primary">
-                              Đã ghi nhận
-                            </div>
-                          )}
+                              {isRecording ? (
+                                <Button
+                                  type="button"
+                                  disabled
+                                  className="h-full min-h-16 w-full text-base font-bold disabled:opacity-100"
+                                >
+                                  Đang ghi nhận...
+                                </Button>
+                              ) : countdown !== undefined ? (
+                                <Button
+                                  type="button"
+                                  disabled
+                                  className="h-full min-h-16 w-full flex-col gap-1 whitespace-normal text-base font-bold disabled:opacity-100"
+                                >
+                                  <span>Đã thu tiền</span>
+                                  <span className="text-xs font-medium">
+                                    Ẩn giao dịch trong {countdown} giây
+                                  </span>
+                                </Button>
+                              ) : payment && canManage ? (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  className="h-full min-h-16 w-full text-base font-semibold"
+                                  onClick={() => cancelPayment(payment.id)}
+                                >
+                                  Hủy
+                                </Button>
+                              ) : !payment ? (
+                                <Button
+                                  type="button"
+                                  className="h-full min-h-16 w-full text-lg font-bold"
+                                  onClick={() => recordPayment(apartment)}
+                                >
+                                  Thu tiền
+                                </Button>
+                              ) : (
+                                <div className="flex h-full min-h-16 items-center justify-center text-center text-base font-semibold text-primary">
+                                  Đã ghi nhận
+                                </div>
+                              )}
                             </div>
                           </div>
                         </TableCell>
@@ -2307,8 +2509,24 @@ export default function GarbageFeeApp() {
             />
           </TabsContent>
 
-          <TabsContent value="areas" className="mt-4">
-            {canManage ? (
+          {canManage && (
+            <TabsContent value="users" className="mt-4">
+              <AdminUsers
+                users={state.users}
+                currentUserRole={currentUser.role}
+                newUser={newUser}
+                setNewUser={setNewUser}
+                addUser={addUser}
+                updateUser={updateUser}
+                deleteUser={deleteUser}
+                resetUserPassword={resetUserPassword}
+                loginAsUser={loginAsUser}
+              />
+            </TabsContent>
+          )}
+
+          {canManage && (
+            <TabsContent value="areas" className="mt-4">
               <AdminAreas
                 state={state}
                 newRegion={newRegion}
@@ -2331,33 +2549,9 @@ export default function GarbageFeeApp() {
                 addQuickSetup={addQuickSetup}
                 quickSetupMessage={quickSetupMessage}
               />
-            ) : (
-              <Restricted />
-            )}
-          </TabsContent>
-
-          <TabsContent value="users" className="mt-4">
-            {canManage ? (
-              <AdminUsers
-                users={state.users}
-                currentUserRole={currentUser.role}
-                newUser={newUser}
-                setNewUser={setNewUser}
-                addUser={addUser}
-                updateUser={updateUser}
-                deleteUser={deleteUser}
-                resetUserPassword={resetUserPassword}
-                loginAsUser={loginAsUser}
-              />
-            ) : (
-              <Restricted />
-            )}
-          </TabsContent>
-          {currentUser.role === 'admin' && (
-            <TabsContent value="access-history" className="mt-4">
-              <AccessHistoryPanel />
             </TabsContent>
           )}
+
           {canManage && (
             <TabsContent value="debts" className="mt-4">
               <DebtManagement
@@ -2370,18 +2564,25 @@ export default function GarbageFeeApp() {
               />
             </TabsContent>
           )}
+
+          {currentUser.role === 'admin' && (
+            <TabsContent value="access-history" className="mt-4">
+              <AccessHistoryPanel />
+            </TabsContent>
+          )}
+
           {currentUser.role === 'admin' && (
             <TabsContent value="settings" className="mt-4">
               <CustomizationPanel
                 settings={state.settings}
                 onSave={(settings) => void commit({ ...state, settings })}
-  onLoadBackups={loadBackups}
-  onCreateBackup={createBackup}
-  onRestoreBackup={restoreBackup}
-  onDeleteBackup={deleteBackup}
-  onLoadVersions={loadAppVersions}
-  onRestoreVersion={restoreAppVersion}
-  onUploadLogo={uploadLogo}
+                onLoadBackups={loadBackups}
+                onCreateBackup={createBackup}
+                onRestoreBackup={restoreBackup}
+                onDeleteBackup={deleteBackup}
+                onLoadVersions={loadAppVersions}
+                onRestoreVersion={restoreAppVersion}
+                onUploadLogo={uploadLogo}
               />
             </TabsContent>
           )}
@@ -2715,7 +2916,8 @@ function AccountInformationDialog({
   ) => Promise<string | null>;
 }) {
   const [debtAmount, setDebtAmount] = useState('');
-  const [debtMethod, setDebtMethod] = useState<DebtSettlement['method']>('cash');
+  const [debtMethod, setDebtMethod] =
+    useState<DebtSettlement['method']>('cash');
   const [paymentMethodFilter, setPaymentMethodFilter] = useState<
     'all' | Payment['method']
   >('all');
@@ -2736,7 +2938,10 @@ function AccountInformationDialog({
   const transferPayments = payments.filter(
     (payment) => payment.method === 'transfer',
   );
-  const cashTotal = cashPayments.reduce((sum, payment) => sum + payment.amount, 0);
+  const cashTotal = cashPayments.reduce(
+    (sum, payment) => sum + payment.amount,
+    0,
+  );
   const transferTotal = transferPayments.reduce(
     (sum, payment) => sum + payment.amount,
     0,
@@ -2809,7 +3014,8 @@ function AccountInformationDialog({
                 <h2 className="font-semibold">Thanh toán công nợ</h2>
                 <p className="mt-0.5 text-xs text-muted-foreground">
                   Còn nợ: {money.format(outstandingDebt)}
-                  {pendingDebt > 0 && ` · Chờ xác nhận: ${money.format(pendingDebt)}`}
+                  {pendingDebt > 0 &&
+                    ` · Chờ xác nhận: ${money.format(pendingDebt)}`}
                 </p>
               </div>
               <span className="text-sm font-semibold text-primary">
@@ -2822,7 +3028,9 @@ function AccountInformationDialog({
                 inputMode="numeric"
                 placeholder="Số tiền trả"
                 value={debtAmount}
-                onChange={(event) => setDebtAmount(formatAmountInput(event.target.value))}
+                onChange={(event) =>
+                  setDebtAmount(formatAmountInput(event.target.value))
+                }
               />
               <NativeSelect
                 className="sm:w-44"
@@ -2833,13 +3041,21 @@ function AccountInformationDialog({
                 aria-label="Hình thức trả tiền"
               >
                 <NativeSelectOption value="cash">Tiền mặt</NativeSelectOption>
-                <NativeSelectOption value="transfer">Chuyển khoản</NativeSelectOption>
+                <NativeSelectOption value="transfer">
+                  Chuyển khoản
+                </NativeSelectOption>
               </NativeSelect>
-              <Button type="button" disabled={!availableDebt || submittingDebt} onClick={submitDebt}>
+              <Button
+                type="button"
+                disabled={!availableDebt || submittingDebt}
+                onClick={submitDebt}
+              >
                 {submittingDebt ? 'Đang gửi...' : 'Trả tiền'}
               </Button>
             </div>
-            {debtError && <p className="mt-2 text-sm text-destructive">{debtError}</p>}
+            {debtError && (
+              <p className="mt-2 text-sm text-destructive">{debtError}</p>
+            )}
             <div className="mt-4 border-t pt-3">
               <h3 className="text-sm font-semibold">Lịch sử trả công nợ</h3>
               {settlements.length ? (
@@ -2858,9 +3074,15 @@ function AccountInformationDialog({
                     <TableBody>
                       {settlements.map((settlement) => (
                         <TableRow key={settlement.id}>
-                          <TableCell>{money.format(settlement.debtAtSubmission)}</TableCell>
-                          <TableCell>{formatDate(settlement.submittedAt)}</TableCell>
-                          <TableCell>{money.format(settlement.amount)}</TableCell>
+                          <TableCell>
+                            {money.format(settlement.debtAtSubmission)}
+                          </TableCell>
+                          <TableCell>
+                            {formatDate(settlement.submittedAt)}
+                          </TableCell>
+                          <TableCell>
+                            {money.format(settlement.amount)}
+                          </TableCell>
                           <TableCell>
                             {settlement.method === 'transfer'
                               ? 'Chuyển khoản'
@@ -2868,7 +3090,10 @@ function AccountInformationDialog({
                           </TableCell>
                           <TableCell>
                             {money.format(
-                              Math.max(0, settlement.debtAtSubmission - settlement.amount),
+                              Math.max(
+                                0,
+                                settlement.debtAtSubmission - settlement.amount,
+                              ),
                             )}
                           </TableCell>
                           <TableCell>
@@ -2893,19 +3118,27 @@ function AccountInformationDialog({
         <section className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <div className="rounded-lg border bg-card p-3">
             <p className="text-xs text-muted-foreground">Căn đã thu</p>
-            <p className="mt-1 text-lg font-semibold tabular-nums">{payments.length}</p>
+            <p className="mt-1 text-lg font-semibold tabular-nums">
+              {payments.length}
+            </p>
           </div>
           <div className="rounded-lg border bg-card p-3">
             <p className="text-xs text-muted-foreground">Tiền mặt</p>
-            <p className="mt-1 text-lg font-semibold tabular-nums">{money.format(cashTotal)}</p>
+            <p className="mt-1 text-lg font-semibold tabular-nums">
+              {money.format(cashTotal)}
+            </p>
           </div>
           <div className="rounded-lg border bg-card p-3">
             <p className="text-xs text-muted-foreground">Chuyển khoản</p>
-            <p className="mt-1 text-lg font-semibold tabular-nums">{money.format(transferTotal)}</p>
+            <p className="mt-1 text-lg font-semibold tabular-nums">
+              {money.format(transferTotal)}
+            </p>
           </div>
           <div className="rounded-lg border bg-primary/10 p-3">
             <p className="text-xs text-muted-foreground">Tổng cuối</p>
-            <p className="mt-1 text-lg font-semibold tabular-nums text-primary">{money.format(total)}</p>
+            <p className="mt-1 text-lg font-semibold tabular-nums text-primary">
+              {money.format(total)}
+            </p>
           </div>
         </section>
         <section className="rounded-lg border bg-card p-3">
@@ -2926,9 +3159,13 @@ function AccountInformationDialog({
               }
               aria-label="Lọc hình thức thanh toán"
             >
-              <NativeSelectOption value="all">Tất cả hình thức</NativeSelectOption>
+              <NativeSelectOption value="all">
+                Tất cả hình thức
+              </NativeSelectOption>
               <NativeSelectOption value="cash">Tiền mặt</NativeSelectOption>
-              <NativeSelectOption value="transfer">Chuyển khoản</NativeSelectOption>
+              <NativeSelectOption value="transfer">
+                Chuyển khoản
+              </NativeSelectOption>
             </NativeSelect>
           </div>
 
@@ -2951,12 +3188,12 @@ function AccountInformationDialog({
                   const block = apartment
                     ? blockById.get(apartment.blockId)
                     : null;
-                  const region = block
-                    ? regionById.get(block.regionId)
-                    : null;
+                  const region = block ? regionById.get(block.regionId) : null;
                   return (
                     <TableRow key={payment.id}>
-                      <TableCell>{fullApartmentLabel(apartment, blockById, regionById)}</TableCell>
+                      <TableCell>
+                        {fullApartmentLabel(apartment, blockById, regionById)}
+                      </TableCell>
                       <TableCell>
                         {region?.name ?? '-'} / {block?.name ?? '-'}
                       </TableCell>
@@ -2976,7 +3213,10 @@ function AccountInformationDialog({
                 })}
                 {!filteredPaymentDetails.length && (
                   <TableRow>
-                    <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
+                    <TableCell
+                      colSpan={7}
+                      className="py-8 text-center text-muted-foreground"
+                    >
                       Chưa có khoản thu nào.
                     </TableCell>
                   </TableRow>
@@ -3025,11 +3265,19 @@ function AccessHistoryPanel() {
     setError('');
     try {
       const response = await fetch('/api/access-logs', { cache: 'no-store' });
-      const payload = (await response.json()) as { logs?: AccessLog[]; error?: string };
-      if (!response.ok) throw new Error(payload.error ?? 'Chưa thể tải lịch sử truy cập.');
+      const payload = (await response.json()) as {
+        logs?: AccessLog[];
+        error?: string;
+      };
+      if (!response.ok)
+        throw new Error(payload.error ?? 'Chưa thể tải lịch sử truy cập.');
       setLogs(payload.logs ?? []);
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : 'Chưa thể tải lịch sử truy cập.');
+      setError(
+        loadError instanceof Error
+          ? loadError.message
+          : 'Chưa thể tải lịch sử truy cập.',
+      );
     } finally {
       setLoading(false);
     }
@@ -3051,7 +3299,10 @@ function AccessHistoryPanel() {
     setChanges([]);
     setChangesLoading(true);
     try {
-      const response = await fetch(`/api/record-history?actorId=${encodeURIComponent(user.id)}`, { cache: 'no-store' });
+      const response = await fetch(
+        `/api/record-history?actorId=${encodeURIComponent(user.id)}`,
+        { cache: 'no-store' },
+      );
       const payload = (await response.json()) as { changes?: RecordChange[] };
       if (response.ok) setChanges(payload.changes ?? []);
     } finally {
@@ -3062,27 +3313,45 @@ function AccessHistoryPanel() {
   const detailText = (change: RecordChange) => {
     const details = change.details ?? {};
     if (change.record_type === 'payment') {
-      const apartmentCode = typeof details.apartmentCode === 'string' ? details.apartmentCode : '';
-      const regionName = typeof details.regionName === 'string' ? details.regionName : '';
-      const amount = typeof details.amount === 'number' ? details.amount : Number(details.amount);
+      const apartmentCode =
+        typeof details.apartmentCode === 'string' ? details.apartmentCode : '';
+      const regionName =
+        typeof details.regionName === 'string' ? details.regionName : '';
+      const amount =
+        typeof details.amount === 'number'
+          ? details.amount
+          : Number(details.amount);
       const method = typeof details.method === 'string' ? details.method : '';
       const parts = [
-        apartmentCode && `Căn số ${apartmentCode.replace(/^căn\s*/i, '')}${regionName ? ` - ${regionName}` : ''}`,
-        Number.isFinite(amount) && amount > 0 && `Số tiền: ${formatShortAmount(amount)}`,
+        apartmentCode &&
+          `Căn số ${apartmentCode.replace(/^căn\s*/i, '')}${regionName ? ` - ${regionName}` : ''}`,
+        Number.isFinite(amount) &&
+          amount > 0 &&
+          `Số tiền: ${formatShortAmount(amount)}`,
         method && `Hình thức: ${method}`,
       ].filter(Boolean);
-      return parts.length ? `${parts.join('; ')}.` : 'Không còn đủ thông tin chi tiết của giao dịch cũ.';
+      return parts.length
+        ? `${parts.join('; ')}.`
+        : 'Không còn đủ thông tin chi tiết của giao dịch cũ.';
     }
     if (change.record_type === 'debt_settlement') {
-      const staffName = typeof details.staffName === 'string' ? details.staffName : '';
-      const amount = typeof details.amount === 'number' ? details.amount : Number(details.amount);
+      const staffName =
+        typeof details.staffName === 'string' ? details.staffName : '';
+      const amount =
+        typeof details.amount === 'number'
+          ? details.amount
+          : Number(details.amount);
       const method = typeof details.method === 'string' ? details.method : '';
       const parts = [
         staffName && `Nhân viên: ${staffName}`,
-        Number.isFinite(amount) && amount > 0 && `Số tiền: ${formatShortAmount(amount)}`,
+        Number.isFinite(amount) &&
+          amount > 0 &&
+          `Số tiền: ${formatShortAmount(amount)}`,
         method && `Hình thức: ${method}`,
       ].filter(Boolean);
-      return parts.length ? `${parts.join('; ')}.` : 'Yêu cầu nộp công nợ đã được xử lý.';
+      return parts.length
+        ? `${parts.join('; ')}.`
+        : 'Yêu cầu nộp công nợ đã được xử lý.';
     }
     if (change.action === 'Đã cập nhật ghi chú') {
       const note = typeof details.note === 'string' ? details.note.trim() : '';
@@ -3094,93 +3363,146 @@ function AccessHistoryPanel() {
       const userCount = Number(details.soTaiKhoan ?? details.users);
       const parts = [
         Number.isFinite(regionCount) && `Khu vực: ${formatNumber(regionCount)}`,
-        Number.isFinite(apartmentCount) && `Căn hộ: ${formatNumber(apartmentCount)}`,
+        Number.isFinite(apartmentCount) &&
+          `Căn hộ: ${formatNumber(apartmentCount)}`,
         Number.isFinite(userCount) && `Tài khoản: ${formatNumber(userCount)}`,
       ].filter(Boolean);
-      return parts.length ? `${parts.join('; ')}.` : 'Đã cập nhật dữ liệu quản trị.';
+      return parts.length
+        ? `${parts.join('; ')}.`
+        : 'Đã cập nhật dữ liệu quản trị.';
     }
     return 'Đã cập nhật dữ liệu.';
   };
 
   return (
     <>
-    <section className="rounded-lg border bg-card p-3 sm:p-5">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-semibold">Lịch sử truy cập</h2>
-          <p className="mt-1 text-sm text-muted-foreground">Ghi nhận tối đa 300 lần đăng nhập, đăng xuất và hỗ trợ tài khoản gần nhất.</p>
-        </div>
-        <Button type="button" variant="outline" size="sm" onClick={() => void loadLogs()} disabled={loading}>
-          <RotateCcw /> Làm mới
-        </Button>
-      </div>
-      {error && <p className="mb-3 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
-      <div className="overflow-x-auto">
-        <Table className="min-w-[620px]">
-          <TableHeader>
-            <TableRow>
-              <TableHead>Thời điểm</TableHead>
-              <TableHead>Tài khoản</TableHead>
-              <TableHead>Vai trò</TableHead>
-              <TableHead>Hoạt động</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {logs.map((log) => (
-              <TableRow key={log.id}>
-                <TableCell>
-                  <div>{formatDate(log.createdAt)}</div>
-                  <div className="text-xs text-muted-foreground">({formatTime(log.createdAt)})</div>
-                </TableCell>
-                <TableCell>{log.user?.name ?? 'Tài khoản đã xóa'}</TableCell>
-                <TableCell>{roleLabel(log.user?.role)}</TableCell>
-                <TableCell>
-                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                    <span>{actionLabel(log)}</span>
-                    {log.user && (
-                      <Button type="button" variant="link" className="h-auto p-0 text-xs" onClick={() => void openDetails(log.user)}>
-                        Chi tiết
-                      </Button>
-                    )}
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))}
-            {!loading && !logs.length && (
-              <TableRow><TableCell colSpan={4} className="py-8 text-center text-muted-foreground">Chưa có lịch sử truy cập.</TableCell></TableRow>
-            )}
-            {loading && (
-              <TableRow><TableCell colSpan={4} className="py-8 text-center text-muted-foreground">Đang tải lịch sử truy cập...</TableCell></TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </div>
-    </section>
-    <Dialog open={Boolean(detailUser)} onOpenChange={(open) => !open && setDetailUser(null)}>
-      <DialogContent className="max-h-[80vh] overflow-y-auto sm:max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>Lịch sử thay đổi bản ghi</DialogTitle>
-          <DialogDescription>{detailUser ? `Các thay đổi dữ liệu do ${detailUser.name} thực hiện.` : ''}</DialogDescription>
-        </DialogHeader>
-        {changesLoading ? (
-          <p className="py-6 text-sm text-muted-foreground">Đang tải lịch sử thay đổi...</p>
-        ) : changes.length ? (
-          <div className="space-y-2">
-            {changes.map((change) => (
-              <div key={change.id} className="rounded-md border p-3 text-sm">
-                <div className="flex flex-wrap justify-between gap-2 font-medium">
-                  <span>{change.action}</span>
-                  <span className="text-muted-foreground">{formatDate(change.created_at)} ({formatTime(change.created_at)})</span>
-                </div>
-                <p className="mt-1 break-words text-muted-foreground">{detailText(change)}</p>
-              </div>
-            ))}
+      <section className="rounded-lg border bg-card p-3 sm:p-5">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold">Lịch sử truy cập</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Ghi nhận tối đa 300 lần đăng nhập, đăng xuất và hỗ trợ tài khoản
+              gần nhất.
+            </p>
           </div>
-        ) : (
-          <p className="py-6 text-sm text-muted-foreground">Chưa có thay đổi dữ liệu nào được ghi nhận cho tài khoản này.</p>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => void loadLogs()}
+            disabled={loading}
+          >
+            <RotateCcw /> Làm mới
+          </Button>
+        </div>
+        {error && (
+          <p className="mb-3 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            {error}
+          </p>
         )}
-      </DialogContent>
-    </Dialog>
+        <div className="overflow-x-auto">
+          <Table className="min-w-[620px]">
+            <TableHeader>
+              <TableRow>
+                <TableHead>Thời điểm</TableHead>
+                <TableHead>Tài khoản</TableHead>
+                <TableHead>Vai trò</TableHead>
+                <TableHead>Hoạt động</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {logs.map((log) => (
+                <TableRow key={log.id}>
+                  <TableCell>
+                    <div>{formatDate(log.createdAt)}</div>
+                    <div className="text-xs text-muted-foreground">
+                      ({formatTime(log.createdAt)})
+                    </div>
+                  </TableCell>
+                  <TableCell>{log.user?.name ?? 'Tài khoản đã xóa'}</TableCell>
+                  <TableCell>{roleLabel(log.user?.role)}</TableCell>
+                  <TableCell>
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                      <span>{actionLabel(log)}</span>
+                      {log.user && (
+                        <Button
+                          type="button"
+                          variant="link"
+                          className="h-auto p-0 text-xs"
+                          onClick={() => void openDetails(log.user)}
+                        >
+                          Chi tiết
+                        </Button>
+                      )}
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+              {!loading && !logs.length && (
+                <TableRow>
+                  <TableCell
+                    colSpan={4}
+                    className="py-8 text-center text-muted-foreground"
+                  >
+                    Chưa có lịch sử truy cập.
+                  </TableCell>
+                </TableRow>
+              )}
+              {loading && (
+                <TableRow>
+                  <TableCell
+                    colSpan={4}
+                    className="py-8 text-center text-muted-foreground"
+                  >
+                    Đang tải lịch sử truy cập...
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      </section>
+      <Dialog
+        open={Boolean(detailUser)}
+        onOpenChange={(open) => !open && setDetailUser(null)}
+      >
+        <DialogContent className="max-h-[80vh] overflow-y-auto sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Lịch sử thay đổi bản ghi</DialogTitle>
+            <DialogDescription>
+              {detailUser
+                ? `Các thay đổi dữ liệu do ${detailUser.name} thực hiện.`
+                : ''}
+            </DialogDescription>
+          </DialogHeader>
+          {changesLoading ? (
+            <p className="py-6 text-sm text-muted-foreground">
+              Đang tải lịch sử thay đổi...
+            </p>
+          ) : changes.length ? (
+            <div className="space-y-2">
+              {changes.map((change) => (
+                <div key={change.id} className="rounded-md border p-3 text-sm">
+                  <div className="flex flex-wrap justify-between gap-2 font-medium">
+                    <span>{change.action}</span>
+                    <span className="text-muted-foreground">
+                      {formatDate(change.created_at)} (
+                      {formatTime(change.created_at)})
+                    </span>
+                  </div>
+                  <p className="mt-1 break-words text-muted-foreground">
+                    {detailText(change)}
+                  </p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="py-6 text-sm text-muted-foreground">
+              Chưa có thay đổi dữ liệu nào được ghi nhận cho tài khoản này.
+            </p>
+          )}
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
@@ -3276,7 +3598,12 @@ function CustomizationPanel({
   };
 
   const deletePoint = async (backup: BackupPoint) => {
-    if (!window.confirm(`Xóa vĩnh viễn điểm sao lưu lúc ${formatDate(backup.createdAt)}?`)) return;
+    if (
+      !window.confirm(
+        `Xóa vĩnh viễn điểm sao lưu lúc ${formatDate(backup.createdAt)}?`,
+      )
+    )
+      return;
     setBackupError('');
     const error = await onDeleteBackup(backup.id);
     if (error) {
@@ -3297,7 +3624,12 @@ function CustomizationPanel({
   };
 
   const restoreVersion = async (version: AppVersion) => {
-    if (!window.confirm(`Khôi phục ${version.name}? Mã nguồn ứng dụng sẽ được đưa về bản này, dữ liệu đang có không thay đổi.`)) return;
+    if (
+      !window.confirm(
+        `Khôi phục ${version.name}? Mã nguồn ứng dụng sẽ được đưa về bản này, dữ liệu đang có không thay đổi.`,
+      )
+    )
+      return;
     setVersionError('');
     setRestoringVersionId(version.id);
     const error = await onRestoreVersion(version.id);
@@ -3306,7 +3638,9 @@ function CustomizationPanel({
       setVersionError(error);
       return;
     }
-    setVersionError('Đã gửi yêu cầu khôi phục. Ứng dụng sẽ tải lại sau ít giây.');
+    setVersionError(
+      'Đã gửi yêu cầu khôi phục. Ứng dụng sẽ tải lại sau ít giây.',
+    );
     window.setTimeout(() => window.location.reload(), 4000);
   };
 
@@ -3322,7 +3656,9 @@ function CustomizationPanel({
       const url = await onUploadLogo(file);
       setDraft((current) => ({ ...current, logoUrl: url }));
     } catch (error) {
-      setLogoError(error instanceof Error ? error.message : 'Chưa thể tải logo lên.');
+      setLogoError(
+        error instanceof Error ? error.message : 'Chưa thể tải logo lên.',
+      );
     } finally {
       setUploadingLogo(false);
     }
@@ -3333,7 +3669,8 @@ function CustomizationPanel({
       <div className="mb-4">
         <h2 className="text-lg font-semibold">Tùy chỉnh ứng dụng</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Chỉ Admin có thể thay đổi nội dung nhận diện và màu giao diện. Thay đổi sẽ áp dụng cho tất cả tài khoản.
+          Chỉ Admin có thể thay đổi nội dung nhận diện và màu giao diện. Thay
+          đổi sẽ áp dụng cho tất cả tài khoản.
         </p>
       </div>
       <form onSubmit={submit} className="grid gap-4 sm:grid-cols-2">
@@ -3341,7 +3678,10 @@ function CustomizationPanel({
           <Input
             value={draft.appName}
             onChange={(event) =>
-              setDraft((current) => ({ ...current, appName: event.target.value }))
+              setDraft((current) => ({
+                ...current,
+                appName: event.target.value,
+              }))
             }
             placeholder="Thu tiền vệ sinh"
             maxLength={50}
@@ -3352,7 +3692,10 @@ function CustomizationPanel({
           <Input
             value={draft.subtitle}
             onChange={(event) =>
-              setDraft((current) => ({ ...current, subtitle: event.target.value }))
+              setDraft((current) => ({
+                ...current,
+                subtitle: event.target.value,
+              }))
             }
             placeholder="Quản lý thu tiền vệ sinh theo từng căn hộ"
             maxLength={100}
@@ -3363,25 +3706,38 @@ function CustomizationPanel({
             <Input
               value={draft.logoUrl}
               onChange={(event) =>
-                setDraft((current) => ({ ...current, logoUrl: event.target.value }))
+                setDraft((current) => ({
+                  ...current,
+                  logoUrl: event.target.value,
+                }))
               }
               placeholder="https://.../logo.png"
               inputMode="url"
             />
           </Field>
-          <label className="block text-sm font-medium">Hoặc tải logo từ thiết bị</label>
+          <label className="block text-sm font-medium">
+            Hoặc tải logo từ thiết bị
+          </label>
           <Input
             type="file"
             accept="image/png,image/jpeg,image/webp,image/gif"
             disabled={uploadingLogo}
             onChange={(event) => void selectLogo(event.target.files?.[0])}
           />
-          <p className="text-xs text-muted-foreground">PNG, JPG, WEBP hoặc GIF, tối đa 2 MB.</p>
+          <p className="text-xs text-muted-foreground">
+            PNG, JPG, WEBP hoặc GIF, tối đa 2 MB.
+          </p>
           {logoError && <p className="text-xs text-destructive">{logoError}</p>}
-          {uploadingLogo && <p className="text-xs text-primary">Đang tải logo lên...</p>}
+          {uploadingLogo && (
+            <p className="text-xs text-primary">Đang tải logo lên...</p>
+          )}
           {draft.logoUrl && (
             <div className="flex items-center gap-2 rounded-md border bg-muted/30 p-2 text-xs text-muted-foreground">
-              <img src={draft.logoUrl} alt="Xem trước logo" className="size-9 rounded object-contain" />
+              <img
+                src={draft.logoUrl}
+                alt="Xem trước logo"
+                className="size-9 rounded object-contain"
+              />
               Đã chọn logo. Bấm Lưu tùy chỉnh để áp dụng.
             </div>
           )}
@@ -3396,7 +3752,8 @@ function CustomizationPanel({
                 theme: event.target.value as AppSettings['theme'],
                 uiPreferences: {
                   ...current.uiPreferences,
-                  primaryColor: themeColors[event.target.value as AppSettings['theme']],
+                  primaryColor:
+                    themeColors[event.target.value as AppSettings['theme']],
                 },
               }))
             }
@@ -3432,7 +3789,8 @@ function CustomizationPanel({
           <div>
             <h3 className="font-semibold">Hóa đơn thanh toán</h3>
             <p className="mt-1 text-xs text-muted-foreground">
-              Biên nhận sử dụng mẫu chuẩn A5 ngang cố định. Logo lấy từ phần Logo ứng dụng ở trên.
+              Biên nhận sử dụng mẫu chuẩn A5 ngang cố định. Logo lấy từ phần
+              Logo ứng dụng ở trên.
             </p>
           </div>
         </div>
@@ -3448,9 +3806,19 @@ function CustomizationPanel({
               label="Phông chữ"
               value={draft.uiPreferences.fontFamily}
               onChange={(fontFamily) =>
-                setDraft((current) => ({ ...current, uiPreferences: { ...current.uiPreferences, fontFamily: fontFamily as UiPreferences['fontFamily'] } }))
+                setDraft((current) => ({
+                  ...current,
+                  uiPreferences: {
+                    ...current.uiPreferences,
+                    fontFamily: fontFamily as UiPreferences['fontFamily'],
+                  },
+                }))
               }
-              options={[['sans', 'Hiện đại'], ['serif', 'Cổ điển'], ['mono', 'Đơn cách']]}
+              options={[
+                ['sans', 'Hiện đại'],
+                ['serif', 'Cổ điển'],
+                ['mono', 'Đơn cách'],
+              ]}
             />
             <Field label="Cỡ chữ toàn giao diện">
               <div className="flex h-10 items-center justify-between rounded-md border bg-background px-1">
@@ -3459,17 +3827,41 @@ function CustomizationPanel({
                   variant="ghost"
                   size="icon-sm"
                   aria-label="Giảm cỡ chữ"
-                  onClick={() => setDraft((current) => ({ ...current, uiPreferences: { ...current.uiPreferences, fontSize: Math.max(12, current.uiPreferences.fontSize - 1) } }))}
+                  onClick={() =>
+                    setDraft((current) => ({
+                      ...current,
+                      uiPreferences: {
+                        ...current.uiPreferences,
+                        fontSize: Math.max(
+                          12,
+                          current.uiPreferences.fontSize - 1,
+                        ),
+                      },
+                    }))
+                  }
                 >
                   -
                 </Button>
-                <span className="font-semibold tabular-nums">{draft.uiPreferences.fontSize}px</span>
+                <span className="font-semibold tabular-nums">
+                  {draft.uiPreferences.fontSize}px
+                </span>
                 <Button
                   type="button"
                   variant="ghost"
                   size="icon-sm"
                   aria-label="Tăng cỡ chữ"
-                  onClick={() => setDraft((current) => ({ ...current, uiPreferences: { ...current.uiPreferences, fontSize: Math.min(20, current.uiPreferences.fontSize + 1) } }))}
+                  onClick={() =>
+                    setDraft((current) => ({
+                      ...current,
+                      uiPreferences: {
+                        ...current.uiPreferences,
+                        fontSize: Math.min(
+                          20,
+                          current.uiPreferences.fontSize + 1,
+                        ),
+                      },
+                    }))
+                  }
                 >
                   +
                 </Button>
@@ -3478,38 +3870,93 @@ function CustomizationPanel({
             <ColorField
               label="Nền Header"
               value={draft.uiPreferences.headerBackgroundColor}
-              onChange={(headerBackgroundColor) => setDraft((current) => ({ ...current, uiPreferences: { ...current.uiPreferences, headerBackgroundColor } }))}
+              onChange={(headerBackgroundColor) =>
+                setDraft((current) => ({
+                  ...current,
+                  uiPreferences: {
+                    ...current.uiPreferences,
+                    headerBackgroundColor,
+                  },
+                }))
+              }
             />
             <ColorField
               label="Chữ Header"
               value={draft.uiPreferences.headerTextColor}
-              onChange={(headerTextColor) => setDraft((current) => ({ ...current, uiPreferences: { ...current.uiPreferences, headerTextColor } }))}
+              onChange={(headerTextColor) =>
+                setDraft((current) => ({
+                  ...current,
+                  uiPreferences: { ...current.uiPreferences, headerTextColor },
+                }))
+              }
             />
             <ColorField
               label="Nền tiêu đề bảng"
               value={draft.uiPreferences.tableHeaderBackgroundColor}
-              onChange={(tableHeaderBackgroundColor) => setDraft((current) => ({ ...current, uiPreferences: { ...current.uiPreferences, tableHeaderBackgroundColor } }))}
+              onChange={(tableHeaderBackgroundColor) =>
+                setDraft((current) => ({
+                  ...current,
+                  uiPreferences: {
+                    ...current.uiPreferences,
+                    tableHeaderBackgroundColor,
+                  },
+                }))
+              }
             />
             <ColorField
               label="Chữ tiêu đề bảng"
               value={draft.uiPreferences.tableHeaderTextColor}
-              onChange={(tableHeaderTextColor) => setDraft((current) => ({ ...current, uiPreferences: { ...current.uiPreferences, tableHeaderTextColor } }))}
+              onChange={(tableHeaderTextColor) =>
+                setDraft((current) => ({
+                  ...current,
+                  uiPreferences: {
+                    ...current.uiPreferences,
+                    tableHeaderTextColor,
+                  },
+                }))
+              }
             />
             <ColorField
               label="Màu viền bảng"
               value={draft.uiPreferences.tableBorderColor}
-              onChange={(tableBorderColor) => setDraft((current) => ({ ...current, uiPreferences: { ...current.uiPreferences, tableBorderColor } }))}
+              onChange={(tableBorderColor) =>
+                setDraft((current) => ({
+                  ...current,
+                  uiPreferences: { ...current.uiPreferences, tableBorderColor },
+                }))
+              }
             />
             <ColorField
               label="Nền ô thông tin căn"
               value={draft.uiPreferences.apartmentInfoBackgroundColor}
-              onChange={(apartmentInfoBackgroundColor) => setDraft((current) => ({ ...current, uiPreferences: { ...current.uiPreferences, apartmentInfoBackgroundColor } }))}
+              onChange={(apartmentInfoBackgroundColor) =>
+                setDraft((current) => ({
+                  ...current,
+                  uiPreferences: {
+                    ...current.uiPreferences,
+                    apartmentInfoBackgroundColor,
+                  },
+                }))
+              }
             />
             <SelectPreference
               label="Canh chữ trong bảng"
               value={draft.uiPreferences.tableTextAlign}
-              onChange={(tableTextAlign) => setDraft((current) => ({ ...current, uiPreferences: { ...current.uiPreferences, tableTextAlign: tableTextAlign as UiPreferences['tableTextAlign'] } }))}
-              options={[['left', 'Căn trái'], ['center', 'Căn giữa'], ['right', 'Căn phải']]}
+              onChange={(tableTextAlign) =>
+                setDraft((current) => ({
+                  ...current,
+                  uiPreferences: {
+                    ...current.uiPreferences,
+                    tableTextAlign:
+                      tableTextAlign as UiPreferences['tableTextAlign'],
+                  },
+                }))
+              }
+              options={[
+                ['left', 'Căn trái'],
+                ['center', 'Căn giữa'],
+                ['right', 'Căn phải'],
+              ]}
             />
           </div>
           <AppearancePreview preferences={draft.uiPreferences} />
@@ -3518,49 +3965,109 @@ function CustomizationPanel({
           label="Vị trí nội dung Header"
           value={draft.uiPreferences.headerAlignment}
           onChange={(headerAlignment) =>
-            setDraft((current) => ({ ...current, uiPreferences: { ...current.uiPreferences, headerAlignment: headerAlignment as UiPreferences['headerAlignment'] } }))
+            setDraft((current) => ({
+              ...current,
+              uiPreferences: {
+                ...current.uiPreferences,
+                headerAlignment:
+                  headerAlignment as UiPreferences['headerAlignment'],
+              },
+            }))
           }
-          options={[['left', 'Căn trái'], ['center', 'Căn giữa']]}
+          options={[
+            ['left', 'Căn trái'],
+            ['center', 'Căn giữa'],
+          ]}
         />
         <SelectPreference
           label="Kích thước chữ"
           value={draft.uiPreferences.fontScale}
           onChange={(fontScale) =>
-            setDraft((current) => ({ ...current, uiPreferences: { ...current.uiPreferences, fontScale: fontScale as UiPreferences['fontScale'] } }))
+            setDraft((current) => ({
+              ...current,
+              uiPreferences: {
+                ...current.uiPreferences,
+                fontScale: fontScale as UiPreferences['fontScale'],
+              },
+            }))
           }
-          options={[['small', 'Gọn'], ['normal', 'Tiêu chuẩn'], ['large', 'Lớn']]}
+          options={[
+            ['small', 'Gọn'],
+            ['normal', 'Tiêu chuẩn'],
+            ['large', 'Lớn'],
+          ]}
         />
         <SelectPreference
           label="Mật độ nội dung"
           value={draft.uiPreferences.density}
           onChange={(density) =>
-            setDraft((current) => ({ ...current, uiPreferences: { ...current.uiPreferences, density: density as UiPreferences['density'] } }))
+            setDraft((current) => ({
+              ...current,
+              uiPreferences: {
+                ...current.uiPreferences,
+                density: density as UiPreferences['density'],
+              },
+            }))
           }
-          options={[['compact', 'Gọn'], ['comfortable', 'Thoải mái'], ['spacious', 'Rộng']]}
+          options={[
+            ['compact', 'Gọn'],
+            ['comfortable', 'Thoải mái'],
+            ['spacious', 'Rộng'],
+          ]}
         />
         <SelectPreference
           label="Kiểu bảng dữ liệu"
           value={draft.uiPreferences.tableStyle}
           onChange={(tableStyle) =>
-            setDraft((current) => ({ ...current, uiPreferences: { ...current.uiPreferences, tableStyle: tableStyle as UiPreferences['tableStyle'] } }))
+            setDraft((current) => ({
+              ...current,
+              uiPreferences: {
+                ...current.uiPreferences,
+                tableStyle: tableStyle as UiPreferences['tableStyle'],
+              },
+            }))
           }
-          options={[['tinted', 'Tiêu đề màu'], ['striped', 'Dòng xen kẽ'], ['plain', 'Tối giản']]}
+          options={[
+            ['tinted', 'Tiêu đề màu'],
+            ['striped', 'Dòng xen kẽ'],
+            ['plain', 'Tối giản'],
+          ]}
         />
         <SelectPreference
           label="Bo góc giao diện"
           value={draft.uiPreferences.cornerStyle}
           onChange={(cornerStyle) =>
-            setDraft((current) => ({ ...current, uiPreferences: { ...current.uiPreferences, cornerStyle: cornerStyle as UiPreferences['cornerStyle'] } }))
+            setDraft((current) => ({
+              ...current,
+              uiPreferences: {
+                ...current.uiPreferences,
+                cornerStyle: cornerStyle as UiPreferences['cornerStyle'],
+              },
+            }))
           }
-          options={[['sharp', 'Vuông'], ['soft', 'Nhẹ'], ['rounded', 'Bo nhiều']]}
+          options={[
+            ['sharp', 'Vuông'],
+            ['soft', 'Nhẹ'],
+            ['rounded', 'Bo nhiều'],
+          ]}
         />
         <SelectPreference
           label="Bề mặt khối thông tin"
           value={draft.uiPreferences.cardStyle}
           onChange={(cardStyle) =>
-            setDraft((current) => ({ ...current, uiPreferences: { ...current.uiPreferences, cardStyle: cardStyle as UiPreferences['cardStyle'] } }))
+            setDraft((current) => ({
+              ...current,
+              uiPreferences: {
+                ...current.uiPreferences,
+                cardStyle: cardStyle as UiPreferences['cardStyle'],
+              },
+            }))
           }
-          options={[['bordered', 'Có viền'], ['soft', 'Nền nhẹ'], ['flat', 'Phẳng']]}
+          options={[
+            ['bordered', 'Có viền'],
+            ['soft', 'Nền nhẹ'],
+            ['flat', 'Phẳng'],
+          ]}
         />
         <label className="flex min-h-11 items-center gap-2 text-sm sm:col-span-2">
           <Checkbox
@@ -3568,7 +4075,10 @@ function CustomizationPanel({
             onCheckedChange={(checked) =>
               setDraft((current) => ({
                 ...current,
-                uiPreferences: { ...current.uiPreferences, showSubtitle: checked },
+                uiPreferences: {
+                  ...current.uiPreferences,
+                  showSubtitle: checked,
+                },
               }))
             }
           />
@@ -3601,24 +4111,38 @@ function CustomizationPanel({
           <Checkbox
             checked={draft.autoBackupEnabled}
             onCheckedChange={(checked) =>
-              setDraft((current) => ({ ...current, autoBackupEnabled: checked }))
+              setDraft((current) => ({
+                ...current,
+                autoBackupEnabled: checked,
+              }))
             }
           />
           <span>
             <span className="block">Tự động sao lưu hằng ngày lúc 24:00</span>
             <span className="block text-xs text-muted-foreground">
               Mọi khoản thu và công nợ được lưu vết ngay khi phát sinh. Khi bật,
-              hệ thống chỉ tạo điểm sao lưu toàn bộ lúc 24:00 theo giờ Việt Nam khi dữ liệu có thay đổi.
+              hệ thống chỉ tạo điểm sao lưu toàn bộ lúc 24:00 theo giờ Việt Nam
+              khi dữ liệu có thay đổi.
             </span>
           </span>
         </label>
         <Button type="submit" className="sm:col-span-2" disabled={saving}>
           {saving ? 'Đang lưu...' : 'Lưu tùy chỉnh'}
         </Button>
-        <Button type="button" variant="outline" className="sm:col-span-2" onClick={() => void openBackups()}>
+        <Button
+          type="button"
+          variant="outline"
+          className="sm:col-span-2"
+          onClick={() => void openBackups()}
+        >
           Khôi phục từ sao lưu
         </Button>
-        <Button type="button" variant="outline" className="sm:col-span-2" onClick={() => void openVersions()}>
+        <Button
+          type="button"
+          variant="outline"
+          className="sm:col-span-2"
+          onClick={() => void openVersions()}
+        >
           Phiên bản ứng dụng
         </Button>
       </form>
@@ -3632,12 +4156,16 @@ function CustomizationPanel({
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-sm text-muted-foreground">Tối đa 10 bản mới nhất. Bản tự động chạy lúc 24:00 giờ Việt Nam.</p>
+            <p className="text-sm text-muted-foreground">
+              Tối đa 10 bản mới nhất. Bản tự động chạy lúc 24:00 giờ Việt Nam.
+            </p>
             <Button type="button" size="sm" onClick={() => void createPoint()}>
               Tạo sao lưu ngay
             </Button>
           </div>
-          {backupError && <p className="text-sm text-destructive">{backupError}</p>}
+          {backupError && (
+            <p className="text-sm text-destructive">{backupError}</p>
+          )}
           <div className="overflow-x-auto">
             <Table className="min-w-[760px]">
               <TableHeader>
@@ -3655,14 +4183,27 @@ function CustomizationPanel({
                 {backups.map((backup) => (
                   <TableRow key={backup.id}>
                     <TableCell>{formatDate(backup.createdAt)}</TableCell>
-                    <TableCell>{backup.source === 'automatic' ? 'Tự động' : 'Thủ công'}</TableCell>
+                    <TableCell>
+                      {backup.source === 'automatic' ? 'Tự động' : 'Thủ công'}
+                    </TableCell>
                     <TableCell>{formatNumber(backup.counts.users)}</TableCell>
-                    <TableCell>{formatNumber(backup.counts.apartments)}</TableCell>
-                    <TableCell>{formatNumber(backup.counts.payments)}</TableCell>
-                    <TableCell>{formatNumber(backup.counts.settlements)}</TableCell>
+                    <TableCell>
+                      {formatNumber(backup.counts.apartments)}
+                    </TableCell>
+                    <TableCell>
+                      {formatNumber(backup.counts.payments)}
+                    </TableCell>
+                    <TableCell>
+                      {formatNumber(backup.counts.settlements)}
+                    </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
-                        <Button type="button" size="sm" variant="outline" onClick={() => void restorePoint(backup)}>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => void restorePoint(backup)}
+                        >
                           Khôi phục
                         </Button>
                         <Button
@@ -3680,10 +4221,24 @@ function CustomizationPanel({
                   </TableRow>
                 ))}
                 {!loadingBackups && !backups.length && (
-                  <TableRow><TableCell colSpan={7} className="py-8 text-center text-muted-foreground">Chưa có điểm sao lưu.</TableCell></TableRow>
+                  <TableRow>
+                    <TableCell
+                      colSpan={7}
+                      className="py-8 text-center text-muted-foreground"
+                    >
+                      Chưa có điểm sao lưu.
+                    </TableCell>
+                  </TableRow>
                 )}
                 {loadingBackups && (
-                  <TableRow><TableCell colSpan={7} className="py-8 text-center text-muted-foreground">Đang tải danh sách sao lưu...</TableCell></TableRow>
+                  <TableRow>
+                    <TableCell
+                      colSpan={7}
+                      className="py-8 text-center text-muted-foreground"
+                    >
+                      Đang tải danh sách sao lưu...
+                    </TableCell>
+                  </TableRow>
                 )}
               </TableBody>
             </Table>
@@ -3695,31 +4250,53 @@ function CustomizationPanel({
         <DialogContent className="max-w-[calc(100%-1rem)] sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>Phiên bản ứng dụng</DialogTitle>
-            <DialogDescription>Khôi phục mã nguồn đã đánh dấu ổn định. Dữ liệu hiện có không thay đổi.</DialogDescription>
+            <DialogDescription>
+              Khôi phục mã nguồn đã đánh dấu ổn định. Dữ liệu hiện có không thay
+              đổi.
+            </DialogDescription>
           </DialogHeader>
-          {versionError && <p className="text-sm text-destructive">{versionError}</p>}
+          {versionError && (
+            <p className="text-sm text-destructive">{versionError}</p>
+          )}
           <div className="space-y-2">
             {versions.map((version) => (
-              <div key={version.id} className="flex flex-col gap-3 rounded-md border p-3 sm:flex-row sm:items-center sm:justify-between">
+              <div
+                key={version.id}
+                className="flex flex-col gap-3 rounded-md border p-3 sm:flex-row sm:items-center sm:justify-between"
+              >
                 <div className="min-w-0">
                   <p className="font-semibold">{version.name}</p>
-                  <p className="text-sm text-muted-foreground">{version.description}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">Mã nguồn: {version.commit.slice(0, 7)}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {version.description}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Mã nguồn: {version.commit.slice(0, 7)}
+                  </p>
                 </div>
                 <Button
                   type="button"
                   variant="outline"
-                  disabled={!version.available || restoringVersionId === version.id}
+                  disabled={
+                    !version.available || restoringVersionId === version.id
+                  }
                   onClick={() => void restoreVersion(version)}
                 >
-                  {restoringVersionId === version.id ? 'Đang khôi phục...' : 'Khôi phục'}
+                  {restoringVersionId === version.id
+                    ? 'Đang khôi phục...'
+                    : 'Khôi phục'}
                 </Button>
               </div>
             ))}
             {!loadingVersions && !versions.length && !versionError && (
-              <p className="py-6 text-center text-sm text-muted-foreground">Chưa có phiên bản ổn định.</p>
+              <p className="py-6 text-center text-sm text-muted-foreground">
+                Chưa có phiên bản ổn định.
+              </p>
             )}
-            {loadingVersions && <p className="py-6 text-center text-sm text-muted-foreground">Đang tải phiên bản...</p>}
+            {loadingVersions && (
+              <p className="py-6 text-center text-sm text-muted-foreground">
+                Đang tải phiên bản...
+              </p>
+            )}
           </div>
         </DialogContent>
       </Dialog>
@@ -3739,8 +4316,19 @@ function ColorField({
   return (
     <Field label={label}>
       <div className="flex items-center gap-2">
-        <Input type="color" className="h-10 w-14 p-1" value={value} onChange={(event) => onChange(event.target.value)} aria-label={label} />
-        <Input value={value} onChange={(event) => onChange(event.target.value)} maxLength={7} aria-label={`Mã ${label.toLowerCase()}`} />
+        <Input
+          type="color"
+          className="h-10 w-14 p-1"
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          aria-label={label}
+        />
+        <Input
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          maxLength={7}
+          aria-label={`Mã ${label.toLowerCase()}`}
+        />
       </div>
     </Field>
   );
@@ -3759,9 +4347,15 @@ function SelectPreference({
 }) {
   return (
     <Field label={label}>
-      <NativeSelect className="w-full" value={value} onChange={(event) => onChange(event.target.value)}>
+      <NativeSelect
+        className="w-full"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+      >
         {options.map(([optionValue, optionLabel]) => (
-          <NativeSelectOption key={optionValue} value={optionValue}>{optionLabel}</NativeSelectOption>
+          <NativeSelectOption key={optionValue} value={optionValue}>
+            {optionLabel}
+          </NativeSelectOption>
         ))}
       </NativeSelect>
     </Field>
@@ -3779,42 +4373,100 @@ function AppearancePreview({ preferences }: { preferences: UiPreferences }) {
   const border = `1px solid ${preferences.tableBorderColor}`;
 
   return (
-    <section className="overflow-hidden rounded-lg border bg-white" style={{ borderColor: preferences.tableBorderColor, fontFamily, fontSize: `${preferences.fontSize}px` }}>
-      <div className="flex items-center gap-2 px-3 py-2" style={{ background: preferences.headerBackgroundColor, color: preferences.headerTextColor }}>
-        <div className="grid size-7 place-items-center rounded bg-white/20 text-sm font-bold">L</div>
+    <section
+      className="overflow-hidden rounded-lg border bg-white"
+      style={{
+        borderColor: preferences.tableBorderColor,
+        fontFamily,
+        fontSize: `${preferences.fontSize}px`,
+      }}
+    >
+      <div
+        className="flex items-center gap-2 px-3 py-2"
+        style={{
+          background: preferences.headerBackgroundColor,
+          color: preferences.headerTextColor,
+        }}
+      >
+        <div className="grid size-7 place-items-center rounded bg-white/20 text-sm font-bold">
+          L
+        </div>
         <div>
           <p className="font-semibold">Xem trước Header</p>
           <p className="text-xs opacity-75">Thu tiền vệ sinh</p>
         </div>
       </div>
       <div className="p-3">
-        <p className="mb-2 text-xs font-semibold text-muted-foreground">Xem trước bảng căn chưa thu</p>
-        <div className="overflow-hidden rounded border" style={{ borderColor: preferences.tableBorderColor }}>
-          <div className="grid grid-cols-[1.25fr_1fr_0.85fr]" style={{ background: preferences.tableHeaderBackgroundColor, color: preferences.tableHeaderTextColor }}>
+        <p className="mb-2 text-xs font-semibold text-muted-foreground">
+          Xem trước bảng căn chưa thu
+        </p>
+        <div
+          className="overflow-hidden rounded border"
+          style={{ borderColor: preferences.tableBorderColor }}
+        >
+          <div
+            className="grid grid-cols-[1.25fr_1fr_0.85fr]"
+            style={{
+              background: preferences.tableHeaderBackgroundColor,
+              color: preferences.tableHeaderTextColor,
+            }}
+          >
             {['Căn hộ', 'Nội dung', 'Giá trị'].map((label) => (
-              <div key={label} className="p-2 font-semibold" style={{ borderRight: border, textAlign: align }}>{label}</div>
+              <div
+                key={label}
+                className="p-2 font-semibold"
+                style={{ borderRight: border, textAlign: align }}
+              >
+                {label}
+              </div>
             ))}
           </div>
-          <div className="grid grid-cols-[1.25fr_1fr_0.85fr] bg-white" style={{ color: '#102a30' }}>
-            <div className="p-2 font-semibold" style={{ background: preferences.apartmentInfoBackgroundColor, borderRight: border, textAlign: 'left' }}>Căn 01 - Galaxy 1</div>
-            <div className="p-2" style={{ borderRight: border, textAlign: align }}>Số tiền</div>
-            <div className="p-2" style={{ textAlign: align }}>300.000 đ</div>
+          <div
+            className="grid grid-cols-[1.25fr_1fr_0.85fr] bg-white"
+            style={{ color: '#102a30' }}
+          >
+            <div
+              className="p-2 font-semibold"
+              style={{
+                background: preferences.apartmentInfoBackgroundColor,
+                borderRight: border,
+                textAlign: 'left',
+              }}
+            >
+              Căn 01 - Galaxy 1
+            </div>
+            <div
+              className="p-2"
+              style={{ borderRight: border, textAlign: align }}
+            >
+              Số tiền
+            </div>
+            <div className="p-2" style={{ textAlign: align }}>
+              300.000 đ
+            </div>
           </div>
-          <div className="grid grid-cols-[1.25fr_1fr_0.85fr] bg-white" style={{ borderTop: border, color: '#102a30' }}>
-            <div className="p-2" style={{ borderRight: border, textAlign: 'left' }}>Chủ hộ</div>
-            <div className="p-2" style={{ borderRight: border, textAlign: align }}>Trạng thái</div>
-            <div className="p-2" style={{ textAlign: align }}>Chưa thu</div>
+          <div
+            className="grid grid-cols-[1.25fr_1fr_0.85fr] bg-white"
+            style={{ borderTop: border, color: '#102a30' }}
+          >
+            <div
+              className="p-2"
+              style={{ borderRight: border, textAlign: 'left' }}
+            >
+              Chủ hộ
+            </div>
+            <div
+              className="p-2"
+              style={{ borderRight: border, textAlign: align }}
+            >
+              Trạng thái
+            </div>
+            <div className="p-2" style={{ textAlign: align }}>
+              Chưa thu
+            </div>
           </div>
         </div>
       </div>
-    </section>
-  );
-}
-
-function Restricted() {
-  return (
-    <section className="rounded-lg border bg-card p-5 text-sm text-muted-foreground">
-      Chỉ tài khoản Quản trị hoặc Admin được thêm, sửa hoặc xóa dữ liệu quản lý.
     </section>
   );
 }
@@ -3852,32 +4504,38 @@ function StatsView({
         state.settings.showAdminInStats,
     )
     .map((user) => {
-    const userPayments = payments.filter(
-      (item) => item.collectorId === user.id,
-    );
-    const allUserPayments = state.payments.filter(
-      (item) => item.collectorId === user.id,
-    );
-    const settled = settlements
-      .filter((item) => item.staffId === user.id && item.status === 'confirmed')
-      .reduce((sum, item) => sum + item.amount, 0);
-    return {
-      user,
-      count: userPayments.length,
-      total: userPayments.reduce((sum, item) => sum + item.amount, 0),
-      settled,
-      outstanding: Math.max(
-        0,
-        allUserPayments.reduce((sum, item) => sum + item.amount, 0) - settled,
-      ),
-    };
-  });
-  const selectedUser = state.users.find((user) => user.id === selectedCollectorId);
+      const userPayments = payments.filter(
+        (item) => item.collectorId === user.id,
+      );
+      const allUserPayments = state.payments.filter(
+        (item) => item.collectorId === user.id,
+      );
+      const settled = settlements
+        .filter(
+          (item) => item.staffId === user.id && item.status === 'confirmed',
+        )
+        .reduce((sum, item) => sum + item.amount, 0);
+      return {
+        user,
+        count: userPayments.length,
+        total: userPayments.reduce((sum, item) => sum + item.amount, 0),
+        settled,
+        outstanding: Math.max(
+          0,
+          allUserPayments.reduce((sum, item) => sum + item.amount, 0) - settled,
+        ),
+      };
+    });
+  const selectedUser = state.users.find(
+    (user) => user.id === selectedCollectorId,
+  );
   const selectedPayments = payments.filter(
     (payment) => payment.collectorId === selectedCollectorId,
   );
   const detailRows = payments.map((payment) => {
-    const apartment = state.apartments.find((item) => item.id === payment.apartmentId);
+    const apartment = state.apartments.find(
+      (item) => item.id === payment.apartmentId,
+    );
     const block = apartment ? lookups.blocks.get(apartment.blockId) : undefined;
     const region = block ? lookups.regions.get(block.regionId) : undefined;
     const collector = lookups.users.get(payment.collectorId);
@@ -3894,13 +4552,15 @@ function StatsView({
 
   const exportExcel = async () => {
     const XLSX = await import('xlsx');
-    const summaryRows = byUser.map(({ user, count, total, settled, outstanding }) => ({
-      'Nhân viên': user.name,
-      'Số căn': count,
-      'Tổng tiền': total,
-      'Đã nộp': settled,
-      'Còn nợ': outstanding,
-    }));
+    const summaryRows = byUser.map(
+      ({ user, count, total, settled, outstanding }) => ({
+        'Nhân viên': user.name,
+        'Số căn': count,
+        'Tổng tiền': total,
+        'Đã nộp': settled,
+        'Còn nợ': outstanding,
+      }),
+    );
     const workbook = XLSX.utils.book_new();
     const summary = XLSX.utils.aoa_to_sheet([
       ['BÁO CÁO THỐNG KÊ THU TIỀN VỆ SINH'],
@@ -3910,7 +4570,13 @@ function StatsView({
       [],
     ]);
     XLSX.utils.sheet_add_json(summary, summaryRows, { origin: 'A7' });
-    summary['!cols'] = [{ wch: 22 }, { wch: 12 }, { wch: 18 }, { wch: 18 }, { wch: 18 }];
+    summary['!cols'] = [
+      { wch: 22 },
+      { wch: 12 },
+      { wch: 18 },
+      { wch: 18 },
+      { wch: 18 },
+    ];
     const details = XLSX.utils.json_to_sheet(
       detailRows.map((row) => ({
         'Căn hộ': row.apartment,
@@ -3922,7 +4588,15 @@ function StatsView({
         'Ghi chú': row.note,
       })),
     );
-    details['!cols'] = [{ wch: 18 }, { wch: 24 }, { wch: 20 }, { wch: 14 }, { wch: 16 }, { wch: 18 }, { wch: 32 }];
+    details['!cols'] = [
+      { wch: 18 },
+      { wch: 24 },
+      { wch: 20 },
+      { wch: 14 },
+      { wch: 16 },
+      { wch: 18 },
+      { wch: 32 },
+    ];
     XLSX.utils.book_append_sheet(workbook, summary, 'Tổng hợp');
     XLSX.utils.book_append_sheet(workbook, details, 'Chi tiết thu');
     XLSX.writeFile(workbook, `Thong-ke-thu-ve-sinh-${month}.xlsx`);
@@ -3930,22 +4604,34 @@ function StatsView({
 
   const printReport = (forPdf: boolean) => {
     const escapeHtml = (value: string) =>
-      value.replace(/[&<>'"]/g, (character) =>
-        ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#039;', '"': '&quot;' })[character] ?? character,
+      value.replace(
+        /[&<>'"]/g,
+        (character) =>
+          ({
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            "'": '&#039;',
+            '"': '&quot;',
+          })[character] ?? character,
       );
     const reportWindow = window.open('', '_blank', 'noopener,noreferrer');
     if (!reportWindow) return;
     const employeeRows = byUser
-      .map(({ user, count, total, settled, outstanding }) =>
-        `<tr><td>${escapeHtml(user.name)}</td><td>${formatNumber(count)}</td><td>${money.format(total)}</td><td>${money.format(settled)}</td><td>${money.format(outstanding)}</td></tr>`,
+      .map(
+        ({ user, count, total, settled, outstanding }) =>
+          `<tr><td>${escapeHtml(user.name)}</td><td>${formatNumber(count)}</td><td>${money.format(total)}</td><td>${money.format(settled)}</td><td>${money.format(outstanding)}</td></tr>`,
       )
       .join('');
     const paymentRows = detailRows
-      .map((row) =>
-        `<tr><td>${escapeHtml(row.apartment)}</td><td>${escapeHtml(row.area)}</td><td>${escapeHtml(row.collector)}</td><td>${escapeHtml(row.paidAt)}</td><td>${money.format(row.amount)}</td><td>${escapeHtml(row.method)}</td><td>${escapeHtml(row.note)}</td></tr>`,
+      .map(
+        (row) =>
+          `<tr><td>${escapeHtml(row.apartment)}</td><td>${escapeHtml(row.area)}</td><td>${escapeHtml(row.collector)}</td><td>${escapeHtml(row.paidAt)}</td><td>${money.format(row.amount)}</td><td>${escapeHtml(row.method)}</td><td>${escapeHtml(row.note)}</td></tr>`,
       )
       .join('');
-    reportWindow.document.write(`<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>Thống kê ${month}</title><style>body{font-family:Arial,sans-serif;color:#102a30;padding:28px}h1{margin:0 0 6px;font-size:24px}p{margin:0 0 20px;color:#547077}.summary{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-bottom:24px}.metric{border:1px solid #bdd9d5;border-radius:6px;padding:12px}.metric span{display:block;color:#587277;font-size:12px}.metric strong{font-size:19px}h2{font-size:17px;margin:24px 0 10px}table{border-collapse:collapse;width:100%;font-size:12px}th{background:#006d5a;color:#fff}th,td{border:1px solid #bdd9d5;padding:8px;text-align:left;vertical-align:top}@page{size:A4 landscape;margin:12mm}@media print{body{padding:0}}</style></head><body><h1>Báo cáo thu tiền vệ sinh</h1><p>Kỳ thu: ${month.slice(5, 7)}/${month.slice(0, 4)}${forPdf ? ' · Chọn “Lưu dưới dạng PDF” trong hộp in.' : ''}</p><div class="summary"><div class="metric"><span>Dự kiến</span><strong>${money.format(totalDue)}</strong></div><div class="metric"><span>Đã thu</span><strong>${money.format(totalPaid)}</strong></div></div><h2>Theo nhân viên</h2><table><thead><tr><th>Nhân viên</th><th>Số căn</th><th>Tổng tiền</th><th>Đã nộp</th><th>Còn nợ</th></tr></thead><tbody>${employeeRows || '<tr><td colspan="5">Chưa có dữ liệu</td></tr>'}</tbody></table><h2>Chi tiết thu trong kỳ</h2><table><thead><tr><th>Căn hộ</th><th>Khu vực</th><th>Người thu</th><th>Ngày thu</th><th>Số tiền</th><th>Thanh toán</th><th>Ghi chú</th></tr></thead><tbody>${paymentRows || '<tr><td colspan="7">Chưa có khoản thu</td></tr>'}</tbody></table></body></html>`);
+    reportWindow.document.write(
+      `<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>Thống kê ${month}</title><style>body{font-family:Arial,sans-serif;color:#102a30;padding:28px}h1{margin:0 0 6px;font-size:24px}p{margin:0 0 20px;color:#547077}.summary{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-bottom:24px}.metric{border:1px solid #bdd9d5;border-radius:6px;padding:12px}.metric span{display:block;color:#587277;font-size:12px}.metric strong{font-size:19px}h2{font-size:17px;margin:24px 0 10px}table{border-collapse:collapse;width:100%;font-size:12px}th{background:#006d5a;color:#fff}th,td{border:1px solid #bdd9d5;padding:8px;text-align:left;vertical-align:top}@page{size:A4 landscape;margin:12mm}@media print{body{padding:0}}</style></head><body><h1>Báo cáo thu tiền vệ sinh</h1><p>Kỳ thu: ${month.slice(5, 7)}/${month.slice(0, 4)}${forPdf ? ' · Chọn “Lưu dưới dạng PDF” trong hộp in.' : ''}</p><div class="summary"><div class="metric"><span>Dự kiến</span><strong>${money.format(totalDue)}</strong></div><div class="metric"><span>Đã thu</span><strong>${money.format(totalPaid)}</strong></div></div><h2>Theo nhân viên</h2><table><thead><tr><th>Nhân viên</th><th>Số căn</th><th>Tổng tiền</th><th>Đã nộp</th><th>Còn nợ</th></tr></thead><tbody>${employeeRows || '<tr><td colspan="5">Chưa có dữ liệu</td></tr>'}</tbody></table><h2>Chi tiết thu trong kỳ</h2><table><thead><tr><th>Căn hộ</th><th>Khu vực</th><th>Người thu</th><th>Ngày thu</th><th>Số tiền</th><th>Thanh toán</th><th>Ghi chú</th></tr></thead><tbody>${paymentRows || '<tr><td colspan="7">Chưa có khoản thu</td></tr>'}</tbody></table></body></html>`,
+    );
     reportWindow.document.close();
     window.setTimeout(() => reportWindow.print(), 250);
   };
@@ -3954,7 +4640,9 @@ function StatsView({
     <section className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
       <div className="flex justify-end lg:col-span-2">
         <DropdownMenu>
-          <DropdownMenuTrigger render={<Button type="button" variant="outline" />}>
+          <DropdownMenuTrigger
+            render={<Button type="button" variant="outline" />}
+          >
             Xuất dữ liệu thống kê
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
@@ -4067,13 +4755,19 @@ function StatsView({
                   return (
                     <TableRow key={payment.id}>
                       <TableCell>
-                        {fullApartmentLabel(apartment, lookups.blocks, lookups.regions)}
+                        {fullApartmentLabel(
+                          apartment,
+                          lookups.blocks,
+                          lookups.regions,
+                        )}
                       </TableCell>
                       <TableCell>{formatDate(payment.paidAt)}</TableCell>
                       <TableCell>{money.format(payment.amount)}</TableCell>
                       <TableCell>{payment.note || '-'}</TableCell>
                       <TableCell>
-                        {payment.method === 'transfer' ? 'Chuyển khoản' : 'Tiền mặt'}
+                        {payment.method === 'transfer'
+                          ? 'Chuyển khoản'
+                          : 'Tiền mặt'}
                       </TableCell>
                     </TableRow>
                   );
@@ -4110,14 +4804,20 @@ function StatsView({
               return (
                 <TableRow key={payment.id}>
                   <TableCell>
-                    {fullApartmentLabel(apartment, lookups.blocks, lookups.regions)}
+                    {fullApartmentLabel(
+                      apartment,
+                      lookups.blocks,
+                      lookups.regions,
+                    )}
                   </TableCell>
                   <TableCell>
                     {collector?.name ?? payment.collectorId}
                   </TableCell>
                   <TableCell>{payment.note || '-'}</TableCell>
                   <TableCell>
-                    {payment.method === 'transfer' ? 'Chuyển khoản' : 'Tiền mặt'}
+                    {payment.method === 'transfer'
+                      ? 'Chuyển khoản'
+                      : 'Tiền mặt'}
                   </TableCell>
                   <TableCell>{formatDate(payment.paidAt)}</TableCell>
                   <TableCell>{money.format(payment.amount)}</TableCell>
@@ -4153,10 +4853,13 @@ function DebtManagement({
   const collectors = users.filter(
     (user) => user.role === 'staff' || user.role === 'manager',
   );
-  const pending = settlements.filter((settlement) => settlement.status === 'pending');
+  const pending = settlements.filter(
+    (settlement) => settlement.status === 'pending',
+  );
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editAmount, setEditAmount] = useState('');
-  const [editMethod, setEditMethod] = useState<DebtSettlement['method']>('cash');
+  const [editMethod, setEditMethod] =
+    useState<DebtSettlement['method']>('cash');
   const [actionError, setActionError] = useState('');
 
   const beginEdit = (settlement: DebtSettlement) => {
@@ -4211,7 +4914,11 @@ function DebtManagement({
                   <TableCell>{money.format(settlement.amount)}</TableCell>
                   <TableCell>{formatDate(settlement.submittedAt)}</TableCell>
                   <TableCell>
-                    <Button type="button" size="sm" onClick={() => void onConfirm(settlement.id)}>
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => void onConfirm(settlement.id)}
+                    >
                       Xác nhận
                     </Button>
                   </TableCell>
@@ -4220,7 +4927,10 @@ function DebtManagement({
             })}
             {!pending.length && (
               <TableRow>
-                <TableCell colSpan={4} className="py-8 text-center text-muted-foreground">
+                <TableCell
+                  colSpan={4}
+                  className="py-8 text-center text-muted-foreground"
+                >
                   Không có yêu cầu chờ xác nhận.
                 </TableCell>
               </TableRow>
@@ -4230,7 +4940,9 @@ function DebtManagement({
       </div>
 
       <div className="rounded-lg border bg-card p-4">
-        <h2 className="mb-3 text-base font-semibold">Doanh thu và công nợ theo người thu</h2>
+        <h2 className="mb-3 text-base font-semibold">
+          Doanh thu và công nợ theo người thu
+        </h2>
         <Table>
           <TableHeader>
             <TableRow>
@@ -4259,17 +4971,23 @@ function DebtManagement({
                   <TableCell>
                     {user.name}
                     {user.role === 'manager' && (
-                      <span className="ml-1 text-xs text-muted-foreground">(Quản trị)</span>
+                      <span className="ml-1 text-xs text-muted-foreground">
+                        (Quản trị)
+                      </span>
                     )}
                   </TableCell>
                   <TableCell>{money.format(collected)}</TableCell>
                   <TableCell>
                     {money.format(paidBack)}
                     {user.role === 'manager' && (
-                      <span className="ml-1 text-xs text-muted-foreground">(tự động)</span>
+                      <span className="ml-1 text-xs text-muted-foreground">
+                        (tự động)
+                      </span>
                     )}
                   </TableCell>
-                  <TableCell>{money.format(Math.max(0, collected - paidBack))}</TableCell>
+                  <TableCell>
+                    {money.format(Math.max(0, collected - paidBack))}
+                  </TableCell>
                 </TableRow>
               );
             })}
@@ -4280,9 +4998,12 @@ function DebtManagement({
       <div className="rounded-lg border bg-card p-4 lg:col-span-2">
         <h2 className="mb-1 text-base font-semibold">Lịch sử công nợ</h2>
         <p className="mb-3 text-sm text-muted-foreground">
-          Admin và Quản trị có thể điều chỉnh hoặc xóa giao dịch khi cần đối soát.
+          Admin và Quản trị có thể điều chỉnh hoặc xóa giao dịch khi cần đối
+          soát.
         </p>
-        {actionError && <p className="mb-3 text-sm text-destructive">{actionError}</p>}
+        {actionError && (
+          <p className="mb-3 text-sm text-destructive">{actionError}</p>
+        )}
         <div className="overflow-x-auto">
           <Table className="min-w-[850px]">
             <TableHeader>
@@ -4297,7 +5018,9 @@ function DebtManagement({
             </TableHeader>
             <TableBody>
               {settlements.map((settlement) => {
-                const user = users.find((item) => item.id === settlement.staffId);
+                const user = users.find(
+                  (item) => item.id === settlement.staffId,
+                );
                 const editing = editingId === settlement.id;
                 return (
                   <TableRow key={settlement.id}>
@@ -4309,7 +5032,9 @@ function DebtManagement({
                           className="h-8 w-32"
                           inputMode="numeric"
                           value={editAmount}
-                          onChange={(event) => setEditAmount(formatAmountInput(event.target.value))}
+                          onChange={(event) =>
+                            setEditAmount(formatAmountInput(event.target.value))
+                          }
                         />
                       ) : (
                         money.format(settlement.amount)
@@ -4321,11 +5046,17 @@ function DebtManagement({
                           className="h-8 w-36"
                           value={editMethod}
                           onChange={(event) =>
-                            setEditMethod(event.target.value as DebtSettlement['method'])
+                            setEditMethod(
+                              event.target.value as DebtSettlement['method'],
+                            )
                           }
                         >
-                          <NativeSelectOption value="cash">Tiền mặt</NativeSelectOption>
-                          <NativeSelectOption value="transfer">Chuyển khoản</NativeSelectOption>
+                          <NativeSelectOption value="cash">
+                            Tiền mặt
+                          </NativeSelectOption>
+                          <NativeSelectOption value="transfer">
+                            Chuyển khoản
+                          </NativeSelectOption>
                         </NativeSelect>
                       ) : settlement.method === 'transfer' ? (
                         'Chuyển khoản'
@@ -4334,24 +5065,46 @@ function DebtManagement({
                       )}
                     </TableCell>
                     <TableCell>
-                      {settlement.status === 'confirmed' ? 'Đã xác nhận' : 'Chờ xác nhận'}
+                      {settlement.status === 'confirmed'
+                        ? 'Đã xác nhận'
+                        : 'Chờ xác nhận'}
                     </TableCell>
                     <TableCell className="text-right">
                       {editing ? (
                         <span className="inline-flex gap-2">
-                          <Button type="button" size="sm" onClick={() => void saveEdit(settlement)}>
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={() => void saveEdit(settlement)}
+                          >
                             Lưu
                           </Button>
-                          <Button type="button" size="sm" variant="outline" onClick={() => setEditingId(null)}>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setEditingId(null)}
+                          >
                             Hủy
                           </Button>
                         </span>
                       ) : (
                         <span className="inline-flex gap-2">
-                          <Button type="button" size="sm" variant="outline" onClick={() => beginEdit(settlement)}>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => beginEdit(settlement)}
+                          >
                             Sửa
                           </Button>
-                          <Button type="button" size="icon-sm" variant="destructive" onClick={() => void remove(settlement.id)} aria-label="Xóa giao dịch công nợ">
+                          <Button
+                            type="button"
+                            size="icon-sm"
+                            variant="destructive"
+                            onClick={() => void remove(settlement.id)}
+                            aria-label="Xóa giao dịch công nợ"
+                          >
                             <Trash2 className="size-4" />
                           </Button>
                         </span>
@@ -4362,7 +5115,10 @@ function DebtManagement({
               })}
               {!settlements.length && (
                 <TableRow>
-                  <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
+                  <TableCell
+                    colSpan={6}
+                    className="py-8 text-center text-muted-foreground"
+                  >
                     Chưa có giao dịch công nợ.
                   </TableCell>
                 </TableRow>
@@ -4431,7 +5187,9 @@ function AdminAreas(props: {
   const regionName = (id: string) =>
     state.regions.find((item) => item.id === id)?.name ?? '-';
   const blockLabel = (block: Block) =>
-    block.name ? `${regionName(block.regionId)} / ${block.name}` : regionName(block.regionId);
+    block.name
+      ? `${regionName(block.regionId)} / ${block.name}`
+      : regionName(block.regionId);
   const defaultFeeForBlock = (blockId: string) =>
     getBlockDefaultFee(blockId, state.regions, state.blocks);
 
@@ -4441,15 +5199,22 @@ function AdminAreas(props: {
         <div className="mb-3">
           <h2 className="text-base font-semibold">Thêm nhanh khu và căn hộ</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Ví dụ: Vạn phúc + Galaxy 1 đến 8, mỗi khu có Căn 01 đến 40. Tên chủ hộ có thể bổ sung sau.
+            Ví dụ: Vạn phúc + Galaxy 1 đến 8, mỗi khu có Căn 01 đến 40. Tên chủ
+            hộ có thể bổ sung sau.
           </p>
         </div>
-        <form onSubmit={props.addQuickSetup} className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+        <form
+          onSubmit={props.addQuickSetup}
+          className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4"
+        >
           <Field label="Tiền tố (không bắt buộc)">
             <Input
               value={props.quickSetup.prefix}
               onChange={(event) =>
-                props.setQuickSetup({ ...props.quickSetup, prefix: event.target.value })
+                props.setQuickSetup({
+                  ...props.quickSetup,
+                  prefix: event.target.value,
+                })
               }
               placeholder="Vạn phúc"
             />
@@ -4458,7 +5223,10 @@ function AdminAreas(props: {
             <Input
               value={props.quickSetup.suffix1}
               onChange={(event) =>
-                props.setQuickSetup({ ...props.quickSetup, suffix1: event.target.value })
+                props.setQuickSetup({
+                  ...props.quickSetup,
+                  suffix1: event.target.value,
+                })
               }
               placeholder="Galaxy"
               required
@@ -4471,7 +5239,10 @@ function AdminAreas(props: {
                 aria-label="Khu bắt đầu"
                 value={props.quickSetup.regionStart}
                 onChange={(event) =>
-                  props.setQuickSetup({ ...props.quickSetup, regionStart: event.target.value })
+                  props.setQuickSetup({
+                    ...props.quickSetup,
+                    regionStart: event.target.value,
+                  })
                 }
                 placeholder="1"
               />
@@ -4480,7 +5251,10 @@ function AdminAreas(props: {
                 aria-label="Khu kết thúc"
                 value={props.quickSetup.regionEnd}
                 onChange={(event) =>
-                  props.setQuickSetup({ ...props.quickSetup, regionEnd: event.target.value })
+                  props.setQuickSetup({
+                    ...props.quickSetup,
+                    regionEnd: event.target.value,
+                  })
                 }
                 placeholder="8"
               />
@@ -4490,7 +5264,10 @@ function AdminAreas(props: {
             <Input
               value={props.quickSetup.suffix2}
               onChange={(event) =>
-                props.setQuickSetup({ ...props.quickSetup, suffix2: event.target.value })
+                props.setQuickSetup({
+                  ...props.quickSetup,
+                  suffix2: event.target.value,
+                })
               }
               placeholder="Căn"
               required
@@ -4516,7 +5293,10 @@ function AdminAreas(props: {
                 aria-label="Căn bắt đầu"
                 value={props.quickSetup.apartmentStart}
                 onChange={(event) =>
-                  props.setQuickSetup({ ...props.quickSetup, apartmentStart: event.target.value })
+                  props.setQuickSetup({
+                    ...props.quickSetup,
+                    apartmentStart: event.target.value,
+                  })
                 }
                 placeholder="1"
               />
@@ -4525,7 +5305,10 @@ function AdminAreas(props: {
                 aria-label="Căn kết thúc"
                 value={props.quickSetup.apartmentEnd}
                 onChange={(event) =>
-                  props.setQuickSetup({ ...props.quickSetup, apartmentEnd: event.target.value })
+                  props.setQuickSetup({
+                    ...props.quickSetup,
+                    apartmentEnd: event.target.value,
+                  })
                 }
                 placeholder="40"
               />
@@ -4649,37 +5432,41 @@ function AdminAreas(props: {
           </Button>
         </form>
         <div className="space-y-1.5">
-          {state.blocks.filter((block) => block.name.trim()).map((block) => (
-            <div
-              key={block.id}
-              className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_38px] gap-1.5 rounded-md border p-1.5"
-            >
-              <NativeSelect
-                className="h-8 min-w-0"
-                value={block.regionId}
-                onChange={(event) =>
-                  props.updateBlock(block.id, { regionId: event.target.value })
-                }
+          {state.blocks
+            .filter((block) => block.name.trim())
+            .map((block) => (
+              <div
+                key={block.id}
+                className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_38px] gap-1.5 rounded-md border p-1.5"
               >
-                {state.regions.map((region) => (
-                  <NativeSelectOption key={region.id} value={region.id}>
-                    {region.name}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
-              <Input
-                className="h-8 min-w-0"
-                value={block.name}
-                onChange={(event) =>
-                  props.updateBlock(block.id, { name: event.target.value })
-                }
-              />
-              <IconButton
-                label="Xóa dãy"
-                onClick={() => props.deleteBlock(block.id)}
-              />
-            </div>
-          ))}
+                <NativeSelect
+                  className="h-8 min-w-0"
+                  value={block.regionId}
+                  onChange={(event) =>
+                    props.updateBlock(block.id, {
+                      regionId: event.target.value,
+                    })
+                  }
+                >
+                  {state.regions.map((region) => (
+                    <NativeSelectOption key={region.id} value={region.id}>
+                      {region.name}
+                    </NativeSelectOption>
+                  ))}
+                </NativeSelect>
+                <Input
+                  className="h-8 min-w-0"
+                  value={block.name}
+                  onChange={(event) =>
+                    props.updateBlock(block.id, { name: event.target.value })
+                  }
+                />
+                <IconButton
+                  label="Xóa dãy"
+                  onClick={() => props.deleteBlock(block.id)}
+                />
+              </div>
+            ))}
         </div>
       </div>
 
@@ -4859,7 +5646,9 @@ function AdminUsers(props: {
   loginAsUser: (user: User) => Promise<void>;
 }) {
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [draft, setDraft] = useState<Pick<User, 'name' | 'phone' | 'email' | 'role'>>({
+  const [draft, setDraft] = useState<
+    Pick<User, 'name' | 'phone' | 'email' | 'role'>
+  >({
     name: '',
     phone: '',
     email: '',
@@ -4942,93 +5731,175 @@ function AdminUsers(props: {
 
       <div className="overflow-x-auto">
         <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Tên</TableHead>
-            <TableHead>ID điện thoại</TableHead>
-            <TableHead>Email</TableHead>
-            <TableHead>Vai trò</TableHead>
-            <TableHead>Trạng thái</TableHead>
-            <TableHead>Thao tác</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {props.users.map((user) => {
-            const editing = editingId === user.id;
-            const editable = canManage(user);
-            return (
-            <TableRow key={user.id}>
-              <TableCell>
-                {editing ? (
-                  <Input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} />
-                ) : user.name}
-              </TableCell>
-              <TableCell>
-                {editing ? (
-                  <Input inputMode="tel" value={draft.phone} onChange={(event) => setDraft({ ...draft, phone: event.target.value })} />
-                ) : user.phone}
-              </TableCell>
-              <TableCell>
-                {editing ? (
-                  <Input type="email" value={draft.email} placeholder="Chưa có email" onChange={(event) => setDraft({ ...draft, email: event.target.value })} />
-                ) : user.email || '-'}
-              </TableCell>
-              <TableCell>
-                {editing && isAdmin ? (
-                  <NativeSelect className="w-full" value={draft.role} onChange={(event) => setDraft({ ...draft, role: event.target.value as Role })}>
-                    <NativeSelectOption value="staff">Nhân viên</NativeSelectOption>
-                    <NativeSelectOption value="manager">Quản trị</NativeSelectOption>
-                    <NativeSelectOption value="admin">Admin</NativeSelectOption>
-                  </NativeSelect>
-                ) : user.role === 'admin' ? 'Admin' : user.role === 'manager' ? 'Quản trị' : 'Nhân viên'}
-              </TableCell>
-              <TableCell>
-                <Badge
-                  variant={user.mustChangePassword ? 'outline' : 'secondary'}
-                >
-                  {user.mustChangePassword
-                    ? 'Chờ đổi mật khẩu'
-                    : 'Đã kích hoạt'}
-                </Badge>
-              </TableCell>
-              <TableCell>
-                <div className="flex items-center gap-2">
-                  {editing ? (
-                    <>
-                      <Button type="button" size="sm" onClick={() => {
-                        props.updateUser(user.id, draft);
-                        setEditingId(null);
-                      }}>
-                        Lưu
-                      </Button>
-                      <Button type="button" size="sm" variant="outline" onClick={() => setEditingId(null)}>
-                        Hủy
-                      </Button>
-                    </>
-                  ) : editable ? (
-                    <>
-                      {isAdmin && user.role !== 'admin' && (
-                        <Button type="button" variant="outline" size="icon" aria-label="Đăng nhập hỗ trợ" title="Đăng nhập theo tài khoản này" onClick={() => void props.loginAsUser(user)}>
-                          <LogIn className="size-4" />
-                        </Button>
-                      )}
-                      <Button type="button" variant="outline" size="icon" aria-label="Sửa tài khoản" title="Sửa tài khoản" onClick={() => startEdit(user)}>
-                        <Pencil className="size-4" />
-                      </Button>
-                      <Button type="button" variant="outline" size="icon" aria-label="Đặt lại mật khẩu" title="Đặt lại mật khẩu về 123456" onClick={() => props.resetUserPassword(user.id)}>
-                        <RotateCcw className="size-4" />
-                      </Button>
-                      <IconButton label="Xóa tài khoản" onClick={() => void props.deleteUser(user.id)} />
-                    </>
-                  ) : (
-                    <span className="text-xs text-muted-foreground">Không có quyền</span>
-                  )}
-                </div>
-              </TableCell>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Tên</TableHead>
+              <TableHead>ID điện thoại</TableHead>
+              <TableHead>Email</TableHead>
+              <TableHead>Vai trò</TableHead>
+              <TableHead>Trạng thái</TableHead>
+              <TableHead>Thao tác</TableHead>
             </TableRow>
-            );
-          })}
-        </TableBody>
+          </TableHeader>
+          <TableBody>
+            {props.users.map((user) => {
+              const editing = editingId === user.id;
+              const editable = canManage(user);
+              return (
+                <TableRow key={user.id}>
+                  <TableCell>
+                    {editing ? (
+                      <Input
+                        value={draft.name}
+                        onChange={(event) =>
+                          setDraft({ ...draft, name: event.target.value })
+                        }
+                      />
+                    ) : (
+                      user.name
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {editing ? (
+                      <Input
+                        inputMode="tel"
+                        value={draft.phone}
+                        onChange={(event) =>
+                          setDraft({ ...draft, phone: event.target.value })
+                        }
+                      />
+                    ) : (
+                      user.phone
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {editing ? (
+                      <Input
+                        type="email"
+                        value={draft.email}
+                        placeholder="Chưa có email"
+                        onChange={(event) =>
+                          setDraft({ ...draft, email: event.target.value })
+                        }
+                      />
+                    ) : (
+                      user.email || '-'
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {editing && isAdmin ? (
+                      <NativeSelect
+                        className="w-full"
+                        value={draft.role}
+                        onChange={(event) =>
+                          setDraft({
+                            ...draft,
+                            role: event.target.value as Role,
+                          })
+                        }
+                      >
+                        <NativeSelectOption value="staff">
+                          Nhân viên
+                        </NativeSelectOption>
+                        <NativeSelectOption value="manager">
+                          Quản trị
+                        </NativeSelectOption>
+                        <NativeSelectOption value="admin">
+                          Admin
+                        </NativeSelectOption>
+                      </NativeSelect>
+                    ) : user.role === 'admin' ? (
+                      'Admin'
+                    ) : user.role === 'manager' ? (
+                      'Quản trị'
+                    ) : (
+                      'Nhân viên'
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <Badge
+                      variant={
+                        user.mustChangePassword ? 'outline' : 'secondary'
+                      }
+                    >
+                      {user.mustChangePassword
+                        ? 'Chờ đổi mật khẩu'
+                        : 'Đã kích hoạt'}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      {editing ? (
+                        <>
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={() => {
+                              props.updateUser(user.id, draft);
+                              setEditingId(null);
+                            }}
+                          >
+                            Lưu
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setEditingId(null)}
+                          >
+                            Hủy
+                          </Button>
+                        </>
+                      ) : editable ? (
+                        <>
+                          {isAdmin && user.role !== 'admin' && (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="icon"
+                              aria-label="Đăng nhập hỗ trợ"
+                              title="Đăng nhập theo tài khoản này"
+                              onClick={() => void props.loginAsUser(user)}
+                            >
+                              <LogIn className="size-4" />
+                            </Button>
+                          )}
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            aria-label="Sửa tài khoản"
+                            title="Sửa tài khoản"
+                            onClick={() => startEdit(user)}
+                          >
+                            <Pencil className="size-4" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            aria-label="Đặt lại mật khẩu"
+                            title="Đặt lại mật khẩu về 123456"
+                            onClick={() => props.resetUserPassword(user.id)}
+                          >
+                            <RotateCcw className="size-4" />
+                          </Button>
+                          <IconButton
+                            label="Xóa tài khoản"
+                            onClick={() => void props.deleteUser(user.id)}
+                          />
+                        </>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">
+                          Không có quyền
+                        </span>
+                      )}
+                    </div>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
         </Table>
       </div>
     </section>
