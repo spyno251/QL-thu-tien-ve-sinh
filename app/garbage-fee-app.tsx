@@ -731,9 +731,14 @@ export default function GarbageFeeApp() {
         import('pdfmake/build/pdfmake'),
         import('pdfmake/build/vfs_fonts'),
       ]);
-      const pdfMake = pdfMakeModule.default as unknown as BrowserPdfMake;
-      const pdfFonts = pdfFontsModule.default as unknown as { pdfMake: { vfs: unknown } };
-      pdfMake.vfs = pdfFonts.pdfMake.vfs;
+      const pdfMake = (pdfMakeModule.default ?? pdfMakeModule) as unknown as BrowserPdfMake;
+      const pdfFonts = (pdfFontsModule.default ?? pdfFontsModule) as unknown as {
+        pdfMake?: { vfs?: unknown };
+        vfs?: unknown;
+      };
+      const virtualFonts = pdfFonts.pdfMake?.vfs ?? pdfFonts.vfs;
+      if (!virtualFonts) throw new Error('PDF fonts are unavailable');
+      pdfMake.vfs = virtualFonts;
       const documentDefinition = {
         content: [
           { text: invoice.showAppName ? state.settings.appName : 'XÁC NHẬN THANH TOÁN', style: 'appName' },
@@ -768,6 +773,7 @@ export default function GarbageFeeApp() {
       window.alert('Thiết bị chưa hỗ trợ gửi trực tiếp. File PDF đã được tải xuống để gửi qua Zalo.');
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') return;
+      console.error('Unable to create payment receipt PDF', error);
       window.alert('Chưa thể tạo biên nhận PDF. Vui lòng thử lại.');
     }
   };
