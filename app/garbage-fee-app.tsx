@@ -262,6 +262,11 @@ type AppVersion = {
   available: boolean;
   deploymentFound: boolean;
   deployedAt: number | null;
+  restoreStatus:
+    | 'ready'
+    | 'current'
+    | 'not-rollback-candidate'
+    | 'deployment-not-found';
 };
 
 type AccessLog = {
@@ -440,6 +445,15 @@ function formatTime(value: string) {
     minute: '2-digit',
     hour12: false,
   }).format(new Date(value));
+}
+
+function versionRestoreMessage(version: AppVersion) {
+  if (version.restoreStatus === 'ready')
+    return 'Có thể khôi phục phiên bản này.';
+  if (version.restoreStatus === 'current') return 'Đây là phiên bản đang chạy.';
+  if (version.restoreStatus === 'deployment-not-found')
+    return 'Chưa tìm thấy deployment tương ứng trên Vercel.';
+  return 'Vercel chưa đánh dấu phiên bản này là bản có thể rollback.';
 }
 
 function formatReceiptDate(value: string) {
@@ -4271,6 +4285,9 @@ function CustomizationPanel({
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground">
                     Mã nguồn: {version.commit.slice(0, 7)}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {versionRestoreMessage(version)}
                   </p>
                 </div>
                 <Button

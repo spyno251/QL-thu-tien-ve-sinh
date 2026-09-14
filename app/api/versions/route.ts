@@ -4,10 +4,19 @@ import { configurationError, getSupabaseAdmin } from '@/lib/supabase-admin';
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-const VERCEL_PROJECT_ID = process.env.VERCEL_PROJECT_ID ?? 'prj_8iGNAP63ibPNdGtkE9zWnj1wN9rO';
-const VERCEL_TEAM_ID = process.env.VERCEL_TEAM_ID ?? 'team_UPNw767CyDxHdQ4dWt0wqsSB';
+const VERCEL_PROJECT_ID =
+  process.env.VERCEL_PROJECT_ID ?? 'prj_8iGNAP63ibPNdGtkE9zWnj1wN9rO';
+const VERCEL_TEAM_ID =
+  process.env.VERCEL_TEAM_ID ?? 'team_UPNw767CyDxHdQ4dWt0wqsSB';
 
 const APP_VERSIONS = [
+  {
+    id: 'v1.1.0-stable',
+    name: 'v1.1.0-stable',
+    commit: 'dfaf3a850264c5ef32d0b799e3ea42a5994be956',
+    description:
+      'Bản ổn định với menu chính theo quyền, tab nổi và giao diện v1.1.',
+  },
   {
     id: 'v1.0.0-stable',
     name: 'v1.0.0-stable',
@@ -30,7 +39,10 @@ type Deployment = {
 function vercelHeaders() {
   const token = process.env.VERCEL_TOKEN;
   if (!token) return null;
-  return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+  return {
+    Authorization: `Bearer ${token}`,
+    'Content-Type': 'application/json',
+  };
 }
 
 function deploymentCommit(deployment: Deployment) {
@@ -46,32 +58,66 @@ async function getVersionDeployments(headers: Record<string, string>) {
     state: 'READY',
     limit: '100',
   });
-  const response = await fetch(`https://api.vercel.com/v7/deployments?${params}`, {
-    headers,
-    cache: 'no-store',
-  });
+  const response = await fetch(
+    `https://api.vercel.com/v7/deployments?${params}`,
+    {
+      headers,
+      cache: 'no-store',
+    },
+  );
   if (!response.ok) throw new Error('Vercel deployment lookup failed');
   const payload = (await response.json()) as { deployments?: Deployment[] };
   return payload.deployments ?? [];
 }
 
-function toVersion(version: (typeof APP_VERSIONS)[number], deployments: Deployment[]) {
-  const deployment = deployments.find((item) => deploymentCommit(item) === version.commit);
-  const ready = deployment?.state === 'READY' || deployment?.readyState === 'READY';
+function toVersion(
+  version: (typeof APP_VERSIONS)[number],
+  deployments: Deployment[],
+) {
+  const deployment = deployments.find(
+    (item) => deploymentCommit(item) === version.commit,
+  );
+  const currentProductionCommit = deployments[0]
+    ? deploymentCommit(deployments[0])
+    : '';
+  const versionDeploymentCommit = deployment
+    ? deploymentCommit(deployment)
+    : '';
+  const isCurrent = versionDeploymentCommit === currentProductionCommit;
+  const ready =
+    deployment?.state === 'READY' || deployment?.readyState === 'READY';
+  const available = Boolean(
+    ready && deployment?.isRollbackCandidate && !isCurrent,
+  );
   return {
     ...version,
-    available: Boolean(ready && deployment?.isRollbackCandidate),
+    available,
     deploymentFound: Boolean(deployment),
     deployedAt: deployment?.ready ?? deployment?.createdAt ?? null,
+    restoreStatus: available
+      ? 'ready'
+      : isCurrent
+        ? 'current'
+        : deployment
+          ? 'not-rollback-candidate'
+          : 'deployment-not-found',
   };
 }
 
 async function requireAdmin(request: Request) {
   const db = getSupabaseAdmin();
-  if (!db) return { error: Response.json({ error: configurationError() }, { status: 503 }) };
+  if (!db)
+    return {
+      error: Response.json({ error: configurationError() }, { status: 503 }),
+    };
   const user = await getSessionUser(db, request);
   if (!user || user.role !== 'admin' || user.impersonatedBy)
-    return { error: Response.json({ error: 'Chỉ Admin được quản lý phiên bản ứng dụng.' }, { status: 403 }) };
+    return {
+      error: Response.json(
+        { error: 'Chỉ Admin được quản lý phiên bản ứng dụng.' },
+        { status: 403 },
+      ),
+    };
   return { db };
 }
 
@@ -80,12 +126,20 @@ export async function GET(request: Request) {
   if ('error' in access) return access.error;
   const headers = vercelHeaders();
   if (!headers)
-    return Response.json({ error: 'Chưa cấu hình quyền khôi phục phiên bản.' }, { status: 503 });
+    return Response.json(
+      { error: 'Chưa cấu hình quyền khôi phục phiên bản.' },
+      { status: 503 },
+    );
   try {
     const deployments = await getVersionDeployments(headers);
-    return Response.json({ versions: APP_VERSIONS.map((version) => toVersion(version, deployments)) });
+    return Response.json({
+      versions: APP_VERSIONS.map((version) => toVersion(version, deployments)),
+    });
   } catch {
-    return Response.json({ error: 'Chưa thể tải danh sách phiên bản.' }, { status: 503 });
+    return Response.json(
+      { error: 'Chưa thể tải danh sách phiên bản.' },
+      { status: 503 },
+    );
   }
 }
 
@@ -94,20 +148,33 @@ export async function POST(request: Request) {
   if ('error' in access) return access.error;
   const headers = vercelHeaders();
   if (!headers)
-    return Response.json({ error: 'Chưa cấu hình quyền khôi phục phiên bản.' }, { status: 503 });
+    return Response.json(
+      { error: 'Chưa cấu hình quyền khôi phục phiên bản.' },
+      { status: 503 },
+    );
   try {
     const body = (await request.json()) as { versionId?: string };
     const version = APP_VERSIONS.find((item) => item.id === body.versionId);
-    if (!version) return Response.json({ error: 'Phiên bản không hợp lệ.' }, { status: 400 });
+    if (!version)
+      return Response.json(
+        { error: 'Phiên bản không hợp lệ.' },
+        { status: 400 },
+      );
 
     const deployments = await getVersionDeployments(headers);
     const deployment = deployments.find(
-      (item) => deploymentCommit(item) === version.commit
-        && (item.state === 'READY' || item.readyState === 'READY')
-        && item.isRollbackCandidate,
+      (item) =>
+        deploymentCommit(item) === version.commit &&
+        (item.state === 'READY' || item.readyState === 'READY') &&
+        item.isRollbackCandidate,
     );
     if (!deployment)
-      return Response.json({ error: 'Phiên bản này hiện chưa đủ điều kiện khôi phục trên Vercel.' }, { status: 409 });
+      return Response.json(
+        {
+          error: 'Phiên bản này hiện chưa đủ điều kiện khôi phục trên Vercel.',
+        },
+        { status: 409 },
+      );
 
     const params = new URLSearchParams({
       teamId: VERCEL_TEAM_ID,
@@ -120,6 +187,9 @@ export async function POST(request: Request) {
     if (!response.ok) throw new Error('Vercel rollback failed');
     return Response.json({ ok: true });
   } catch {
-    return Response.json({ error: 'Chưa thể khôi phục phiên bản ứng dụng.' }, { status: 503 });
+    return Response.json(
+      { error: 'Chưa thể khôi phục phiên bản ứng dụng.' },
+      { status: 503 },
+    );
   }
 }
