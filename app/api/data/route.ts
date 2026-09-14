@@ -33,18 +33,6 @@ type Payment = {
   note: string;
   method: 'cash' | 'transfer';
 };
-type InvoicePreferences = {
-  showAppName: boolean;
-  showApartment: boolean;
-  showOwner: boolean;
-  showPeriod: boolean;
-  showPaidAt: boolean;
-  showCollector: boolean;
-  showAmount: boolean;
-  showMethod: boolean;
-  showNote: boolean;
-  footer: string;
-};
 type DebtSettlement = {
   id: string;
   staffId: string;
@@ -75,16 +63,10 @@ type UiPreferences = {
   tableBorderColor: string;
   apartmentInfoBackgroundColor: string;
   tableTextAlign: 'left' | 'center' | 'right';
-  invoice: InvoicePreferences;
 };
 const defaultUiPreferences: UiPreferences = {
   primaryColor: '#007563', backgroundColor: '#f4fbfa', headerAlignment: 'left', fontScale: 'normal', density: 'comfortable', tableStyle: 'tinted', cornerStyle: 'soft', cardStyle: 'bordered', showSubtitle: true,
   fontFamily: 'sans', fontSize: 16, headerBackgroundColor: '#f4fbfa', headerTextColor: '#102a30', tableHeaderBackgroundColor: '#007563', tableHeaderTextColor: '#ffffff', tableBorderColor: '#bdd9d5', apartmentInfoBackgroundColor: '#d9ece3', tableTextAlign: 'left',
-  invoice: {
-    showAppName: true, showApartment: true, showOwner: true, showPeriod: true,
-    showPaidAt: true, showCollector: true, showAmount: true, showMethod: true,
-    showNote: true, footer: 'Cảm ơn quý khách đã thanh toán.',
-  },
 };
 const themeColors = { teal: '#007563', blue: '#1d5fd1', indigo: '#5d42c6', amber: '#b35d00', rose: '#b8325a' } as const;
 type AppSettings = {
@@ -119,11 +101,6 @@ function normalizeUiPreferences(value: unknown, theme: AppSettings['theme'] = 't
     typeof source[key] === 'string' && options.includes(source[key] as T) ? source[key] as T : fallback;
   const color = (key: string, fallback: string) =>
     typeof source[key] === 'string' && /^#[0-9a-fA-F]{6}$/.test(source[key] as string) ? source[key] as string : fallback;
-  const invoiceSource = source.invoice && typeof source.invoice === 'object'
-    ? source.invoice as Record<string, unknown>
-    : {};
-  const invoiceFlag = (key: keyof Omit<InvoicePreferences, 'footer'>) =>
-    typeof invoiceSource[key] === 'boolean' ? invoiceSource[key] : defaultUiPreferences.invoice[key];
   return {
     primaryColor: color('primaryColor', themeColors[theme]), backgroundColor: color('backgroundColor', defaultUiPreferences.backgroundColor),
     headerAlignment: pick('headerAlignment', ['left', 'center'], defaultUiPreferences.headerAlignment),
@@ -142,16 +119,6 @@ function normalizeUiPreferences(value: unknown, theme: AppSettings['theme'] = 't
     tableBorderColor: color('tableBorderColor', defaultUiPreferences.tableBorderColor),
     apartmentInfoBackgroundColor: color('apartmentInfoBackgroundColor', defaultUiPreferences.apartmentInfoBackgroundColor),
     tableTextAlign: pick('tableTextAlign', ['left', 'center', 'right'], defaultUiPreferences.tableTextAlign),
-    invoice: {
-      showAppName: invoiceFlag('showAppName'), showApartment: invoiceFlag('showApartment'),
-      showOwner: invoiceFlag('showOwner'), showPeriod: invoiceFlag('showPeriod'),
-      showPaidAt: invoiceFlag('showPaidAt'), showCollector: invoiceFlag('showCollector'),
-      showAmount: invoiceFlag('showAmount'), showMethod: invoiceFlag('showMethod'),
-      showNote: invoiceFlag('showNote'),
-      footer: typeof invoiceSource.footer === 'string'
-        ? invoiceSource.footer.slice(0, 160)
-        : defaultUiPreferences.invoice.footer,
-    },
   };
 }
 

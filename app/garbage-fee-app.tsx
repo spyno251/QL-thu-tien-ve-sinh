@@ -55,7 +55,6 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import type { TDocumentDefinitions } from 'pdfmake/interfaces';
 
 type Role = 'admin' | 'manager' | 'staff';
 
@@ -102,19 +101,6 @@ type Payment = {
   method: 'cash' | 'transfer';
 };
 
-type InvoicePreferences = {
-  showAppName: boolean;
-  showApartment: boolean;
-  showOwner: boolean;
-  showPeriod: boolean;
-  showPaidAt: boolean;
-  showCollector: boolean;
-  showAmount: boolean;
-  showMethod: boolean;
-  showNote: boolean;
-  footer: string;
-};
-
 type DebtSettlement = {
   id: string;
   staffId: string;
@@ -146,33 +132,12 @@ type UiPreferences = {
   tableBorderColor: string;
   apartmentInfoBackgroundColor: string;
   tableTextAlign: 'left' | 'center' | 'right';
-  invoice: InvoicePreferences;
 };
 
 const defaultUiPreferences: UiPreferences = {
   primaryColor: '#007563', backgroundColor: '#f4fbfa', headerAlignment: 'left', fontScale: 'normal', density: 'comfortable', tableStyle: 'tinted', cornerStyle: 'soft', cardStyle: 'bordered', showSubtitle: true,
   fontFamily: 'sans', fontSize: 16, headerBackgroundColor: '#f4fbfa', headerTextColor: '#102a30', tableHeaderBackgroundColor: '#007563', tableHeaderTextColor: '#ffffff', tableBorderColor: '#bdd9d5', apartmentInfoBackgroundColor: '#d9ece3', tableTextAlign: 'left',
-  invoice: {
-    showAppName: true, showApartment: true, showOwner: true, showPeriod: true,
-    showPaidAt: true, showCollector: true, showAmount: true, showMethod: true,
-    showNote: true, footer: 'Cảm ơn quý khách đã thanh toán.',
-  },
 };
-
-const invoiceOptionLabels: Array<{
-  key: keyof Omit<InvoicePreferences, 'footer'>;
-  label: string;
-}> = [
-  { key: 'showAppName', label: 'Tên ứng dụng' },
-  { key: 'showApartment', label: 'Số căn' },
-  { key: 'showOwner', label: 'Chủ hộ' },
-  { key: 'showPeriod', label: 'Kỳ thu' },
-  { key: 'showPaidAt', label: 'Ngày thu' },
-  { key: 'showCollector', label: 'Người thu' },
-  { key: 'showAmount', label: 'Số tiền' },
-  { key: 'showMethod', label: 'Hình thức thanh toán' },
-  { key: 'showNote', label: 'Ghi chú' },
-];
 
 const themeColors = {
   teal: '#007563',
@@ -720,30 +685,6 @@ export default function GarbageFeeApp() {
     });
     const payload = (await response.json()) as { state?: AppState };
     if (response.ok && payload.state) setState(payload.state);
-  };
-
-  const sendPaymentConfirmation = async (apartment: Apartment, payment: Payment) => {
-    const region = lookups.regions.get(lookups.blocks.get(apartment.blockId)?.regionId ?? '');
-    const collector = lookups.users.get(payment.collectorId);
-    try {
-      const result = await sharePaymentReceipt({
-        appName: state.settings.appName,
-        apartment: region?.name ? `${apartment.code} - ${region.name}` : apartment.code,
-        owner: apartment.owner,
-        month: payment.month,
-        paidAt: payment.paidAt,
-        collector: collector?.name ?? payment.collectorId,
-        amount: payment.amount,
-        method: payment.method,
-        note: payment.note,
-        preferences: state.settings.uiPreferences.invoice,
-      });
-      if (result === 'downloaded')
-        setPaymentError('Đã tải biên nhận PDF. Hãy gửi tệp này qua Zalo.');
-    } catch (error) {
-      if (error instanceof DOMException && error.name === 'AbortError') return;
-      setPaymentError('Chưa thể tạo biên nhận PDF. Vui lòng thử lại.');
-    }
   };
 
   const submitDebtSettlement = async (
@@ -1910,20 +1851,7 @@ export default function GarbageFeeApp() {
                             <div className="flex h-12 items-center px-3 text-sm font-medium">
                               Người thu
                             </div>
-                            <div className="flex h-10 items-center p-1">
-                              {payment && paymentFilter === 'paid' && (
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="outline"
-                                  className="h-8 w-full text-xs"
-                                  onClick={() => void sendPaymentConfirmation(apartment, payment)}
-                                >
-                                  <ReceiptText className="size-3.5" />
-                                  Gửi xác nhận thanh toán
-                                </Button>
-                              )}
-                            </div>
+                            <div className="h-10" />
                           </div>
                         </TableCell>
                         <TableCell className="w-1/4 border-r p-0 align-top">
@@ -2166,89 +2094,6 @@ function fullApartmentLabel(
   const block = blocks.get(apartment.blockId);
   const region = block ? regions.get(block.regionId) : undefined;
   return region?.name ? `${apartment.code} - ${region.name}` : apartment.code;
-}
-
-type PaymentReceipt = {
-  appName: string;
-  apartment: string;
-  owner: string;
-  month: string;
-  paidAt: string;
-  collector: string;
-  amount: number;
-  method: Payment['method'];
-  note: string;
-  preferences: InvoicePreferences;
-};
-
-async function createPaymentReceiptPdf(receipt: PaymentReceipt) {
-  const [pdfMakeModule, fontsModule] = await Promise.all([
-    import('pdfmake/build/pdfmake.js'),
-    import('pdfmake/build/vfs_fonts.js'),
-  ]);
-  const pdfMake = pdfMakeModule.default;
-  pdfMake.addVirtualFileSystem(fontsModule.default);
-  const { preferences } = receipt;
-  const rows = [
-    preferences.showApartment ? ['Số căn', receipt.apartment] : null,
-    preferences.showOwner ? ['Chủ hộ', receipt.owner || '-'] : null,
-    preferences.showPeriod ? ['Kỳ thu', `${receipt.month.slice(5, 7)}/${receipt.month.slice(0, 4)}`] : null,
-    preferences.showPaidAt ? ['Ngày thu', formatDate(receipt.paidAt)] : null,
-    preferences.showCollector ? ['Người thu', receipt.collector] : null,
-    preferences.showAmount ? ['Số tiền', money.format(receipt.amount)] : null,
-    preferences.showMethod ? ['Hình thức', receipt.method === 'transfer' ? 'Chuyển khoản' : 'Tiền mặt'] : null,
-    preferences.showNote ? ['Ghi chú', receipt.note || '-'] : null,
-  ].filter((row): row is [string, string] => row !== null);
-  const documentDefinition: TDocumentDefinitions = {
-    pageSize: 'A5',
-    pageMargins: [36, 42, 36, 42],
-    info: { title: `Xác nhận thanh toán ${receipt.apartment}` },
-    defaultStyle: { font: 'Roboto', fontSize: 11, color: '#102a30' },
-    content: [
-      ...(preferences.showAppName ? [{ text: receipt.appName, style: 'appName' }] : []),
-      { text: 'XÁC NHẬN THANH TOÁN', style: 'title' },
-      { text: 'Thu tiền vệ sinh', style: 'subtitle' },
-      {
-        margin: [0, 18, 0, 0],
-        table: { widths: ['36%', '*'], body: rows },
-        layout: {
-          hLineColor: () => '#bdd9d5',
-          vLineColor: () => '#bdd9d5',
-          paddingLeft: () => 9,
-          paddingRight: () => 9,
-          paddingTop: () => 8,
-          paddingBottom: () => 8,
-        },
-      },
-      ...(preferences.footer.trim()
-        ? [{ text: preferences.footer.trim(), style: 'footer' }]
-        : []),
-    ],
-    styles: {
-      appName: { fontSize: 13, bold: true, color: '#007563', alignment: 'center', margin: [0, 0, 0, 9] },
-      title: { fontSize: 19, bold: true, alignment: 'center' },
-      subtitle: { fontSize: 10, color: '#547077', alignment: 'center', margin: [0, 5, 0, 0] },
-      footer: { fontSize: 10, color: '#547077', alignment: 'center', margin: [0, 22, 0, 0] },
-    },
-  };
-  return pdfMake.createPdf(documentDefinition).getBlob();
-}
-
-async function sharePaymentReceipt(receipt: PaymentReceipt) {
-  const blob = await createPaymentReceiptPdf(receipt);
-  const fileName = `xac-nhan-thanh-toan-${receipt.apartment.replace(/[^a-zA-Z0-9]+/g, '-').toLowerCase()}.pdf`;
-  const file = new File([blob], fileName, { type: 'application/pdf' });
-  if (navigator.canShare?.({ files: [file] })) {
-    await navigator.share({ files: [file], title: 'Xác nhận thanh toán' });
-    return 'shared';
-  }
-  const url = URL.createObjectURL(file);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = fileName;
-  link.click();
-  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-  return 'downloaded';
 }
 
 function AdminSetupScreen({
@@ -3260,46 +3105,6 @@ function CustomizationPanel({
             </span>
           </span>
         </label>
-        <div className="space-y-3 border-t pt-4 sm:col-span-2">
-          <div>
-            <h3 className="font-semibold">Hóa đơn thanh toán</h3>
-            <p className="mt-1 text-xs text-muted-foreground">Chọn các thông tin xuất hiện trên biên nhận PDF.</p>
-          </div>
-          <div className="grid gap-2 sm:grid-cols-2">
-            {invoiceOptionLabels.map((option) => (
-              <label key={option.key} className="flex min-h-10 items-center gap-2 text-sm">
-                <Checkbox
-                  checked={draft.uiPreferences.invoice[option.key]}
-                  onCheckedChange={(checked) =>
-                    setDraft((current) => ({
-                      ...current,
-                      uiPreferences: {
-                        ...current.uiPreferences,
-                        invoice: { ...current.uiPreferences.invoice, [option.key]: checked },
-                      },
-                    }))
-                  }
-                />
-                {option.label}
-              </label>
-            ))}
-          </div>
-          <Field label="Nội dung cuối biên nhận">
-            <Input
-              value={draft.uiPreferences.invoice.footer}
-              maxLength={160}
-              onChange={(event) =>
-                setDraft((current) => ({
-                  ...current,
-                  uiPreferences: {
-                    ...current.uiPreferences,
-                    invoice: { ...current.uiPreferences.invoice, footer: event.target.value },
-                  },
-                }))
-              }
-            />
-          </Field>
-        </div>
         <Button type="submit" className="sm:col-span-2" disabled={saving}>
           {saving ? 'Đang lưu...' : 'Lưu tùy chỉnh'}
         </Button>
