@@ -374,6 +374,74 @@ function formatTime(value: string) {
   }).format(new Date(value));
 }
 
+function formatReceiptDate(value: string) {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Ho_Chi_Minh',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  }).formatToParts(new Date(value));
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((item) => item.type === type)?.value ?? '';
+  return `Ngày ${part('day')} tháng ${part('month')} Năm ${part('year')}`;
+}
+
+function amountInWords(value: number) {
+  if (!Number.isFinite(value) || value <= 0) return 'Không đồng';
+  const digits = ['không', 'một', 'hai', 'ba', 'bốn', 'năm', 'sáu', 'bảy', 'tám', 'chín'];
+  const scales = ['', 'nghìn', 'triệu', 'tỷ'];
+  const readGroup = (group: number, forceFull: boolean) => {
+    const hundreds = Math.floor(group / 100);
+    const tens = Math.floor((group % 100) / 10);
+    const units = group % 10;
+    const words: string[] = [];
+    if (hundreds || forceFull) words.push(digits[hundreds], 'trăm');
+    if (tens > 1) {
+      words.push(digits[tens], 'mươi');
+      if (units === 1) words.push('mốt');
+      else if (units === 5) words.push('lăm');
+      else if (units) words.push(digits[units]);
+    } else if (tens === 1) {
+      words.push('mười');
+      if (units === 5) words.push('lăm');
+      else if (units) words.push(digits[units]);
+    } else if (units) {
+      if (hundreds || forceFull) words.push('lẻ');
+      words.push(digits[units]);
+    }
+    return words.join(' ');
+  };
+  const groups: number[] = [];
+  let remaining = Math.floor(value);
+  while (remaining) {
+    groups.push(remaining % 1000);
+    remaining = Math.floor(remaining / 1000);
+  }
+  const words: string[] = [];
+  for (let index = groups.length - 1; index >= 0; index -= 1) {
+    const group = groups[index];
+    if (!group) continue;
+    const lowerGroupExists = groups.slice(0, index).some(Boolean);
+    words.push(readGroup(group, false));
+    if (scales[index]) words.push(scales[index]);
+    if (!lowerGroupExists) continue;
+  }
+  const result = words.join(' ').replace(/\s+/g, ' ').trim();
+  return `${result.charAt(0).toUpperCase()}${result.slice(1)} đồng`;
+}
+
+async function loadPdfImage(url: string) {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error('Logo is unavailable');
+  const blob = await response.blob();
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => typeof reader.result === 'string' ? resolve(reader.result) : reject(new Error('Invalid logo'));
+    reader.onerror = () => reject(new Error('Unable to read logo'));
+    reader.readAsDataURL(blob);
+  });
+}
+
 function parseAmount(value: string, fallback: number) {
   const amount = Number(value.replaceAll('.', '').replaceAll(',', ''));
   return Number.isFinite(amount) && amount > 0 ? Math.round(amount) : fallback;
@@ -753,20 +821,9 @@ export default function GarbageFeeApp() {
     payment: Payment,
     collector: User | null,
   ) => {
-    const invoice = state.settings.uiPreferences.invoice;
     const block = lookups.blocks.get(apartment.blockId);
     const region = block ? lookups.regions.get(block.regionId) : null;
     const method = payment.method === 'transfer' ? 'Chuyển khoản' : 'Tiền mặt';
-    const rows = [
-      invoice.showApartment && ['Số căn', `${apartment.code} - ${region?.name ?? '-'}`],
-      invoice.showOwner && ['Chủ hộ', apartment.owner || '-'],
-      invoice.showPeriod && ['Kỳ thu', payment.month],
-      invoice.showPaidAt && ['Ngày thu', formatDate(payment.paidAt)],
-      invoice.showCollector && ['Người thu', collector?.name ?? '-'],
-      invoice.showAmount && ['Số tiền', money.format(payment.amount)],
-      invoice.showMethod && ['Hình thức', method],
-      invoice.showNote && ['Ghi chú', payment.note || '-'],
-    ].filter(Boolean) as [string, string][];
 
     try {
       const [pdfMakeModule, pdfFontsModule] = await Promise.all([
@@ -787,22 +844,91 @@ export default function GarbageFeeApp() {
       } else {
         pdfMake.vfs = virtualFonts;
       }
+      let logo: string | null = null;
+      try {
+        logo = await loadPdfImage(state.settings.logoUrl || '/app-icon.png');
+      } catch {
+        logo = await loadPdfImage('/app-icon.png');
+      }
+      const [year, month] = payment.month.split('-');
+      const rows = [
+        ['Căn Hộ:', `${apartment.code}-${region?.name ?? '-'}`],
+        ['Tên chủ hộ:', apartment.owner || '-'],
+        ['Số điện thoại:', apartment.phone || '-'],
+        ['Kỳ thanh toán:', `${month}/${year}`],
+        ['Số tiền thanh toán:', `${formatNumber(payment.amount)} (${amountInWords(payment.amount)})`],
+        ['Hình thức thanh toán:', method],
+        ['Người Thu:', (collector?.name ?? '-').toUpperCase()],
+      ];
+      const teal = '#007f88';
       const documentDefinition = {
-        content: [
-          { text: invoice.showAppName ? state.settings.appName : 'XÁC NHẬN THANH TOÁN', style: 'appName' },
-          { text: 'XÁC NHẬN THANH TOÁN', style: 'title' },
-          { text: 'Biên nhận đã được lập từ ứng dụng.', style: 'subtitle' },
-          { table: { widths: ['40%', '60%'], body: rows }, layout: 'lightHorizontalLines', margin: [0, 18, 0, 18] },
-          ...(invoice.footer.trim() ? [{ text: invoice.footer.trim(), style: 'footer' }] : []),
-        ],
-        styles: {
-          appName: { color: state.settings.uiPreferences.primaryColor, bold: true, fontSize: 16, alignment: 'center' as const },
-          title: { bold: true, fontSize: 19, alignment: 'center' as const, margin: [0, 8, 0, 4] },
-          subtitle: { color: '#52646a', fontSize: 10, alignment: 'center' as const },
-          footer: { color: '#52646a', italics: true, alignment: 'center' as const, margin: [0, 12, 0, 0] },
-        },
-        defaultStyle: { font: 'Roboto', fontSize: 11 },
-        pageMargins: [42, 48, 42, 48],
+        pageSize: 'A5',
+        pageOrientation: 'landscape',
+        pageMargins: [48, 42, 48, 42],
+        content: [{
+          table: {
+            widths: ['*'],
+            body: [[{
+              border: [true, true, true, true],
+              margin: [44, 34, 44, 36],
+              stack: [
+                {
+                  columns: [
+                    { width: 72, image: logo, fit: [58, 58], margin: [34, 0, 0, 0] },
+                    {
+                      width: '*',
+                      stack: [
+                        { text: 'THU TIỀN VỆ SINH', color: teal, bold: true, fontSize: 10, alignment: 'center' },
+                        { text: 'XÁC NHẬN THANH TOÁN', bold: true, fontSize: 18, alignment: 'center', margin: [0, 12, 0, 7] },
+                        { text: formatReceiptDate(payment.paidAt), color: '#974e4e', fontSize: 10, alignment: 'center' },
+                      ],
+                    },
+                    { width: 72, text: '' },
+                  ],
+                  margin: [0, 0, 0, 14],
+                },
+                {
+                  table: {
+                    widths: [150, '*'],
+                    body: rows.map(([label, value]) => [
+                      { text: label, fontSize: 10, margin: [5, 4, 4, 4] },
+                      { text: value, bold: label === 'Căn Hộ:', fontSize: 10, margin: [5, 4, 4, 4] },
+                    ]),
+                  },
+                  layout: {
+                    hLineWidth: () => 0.8,
+                    vLineWidth: () => 0,
+                    hLineColor: () => teal,
+                    paddingLeft: () => 0,
+                    paddingRight: () => 0,
+                    paddingTop: () => 0,
+                    paddingBottom: () => 0,
+                  },
+                },
+                {
+                  text: 'Cảm ơn quý khách đã thanh toán',
+                  italics: true,
+                  fontSize: 11,
+                  alignment: 'center',
+                  color: '#333333',
+                  margin: [0, 6, 0, 4],
+                },
+                { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 398, y2: 0, lineWidth: 0.8, lineColor: teal }] },
+              ],
+            }]],
+          },
+          layout: {
+            hLineWidth: () => 0.8,
+            vLineWidth: () => 0.8,
+            hLineColor: () => '#aaaaaa',
+            vLineColor: () => '#aaaaaa',
+            paddingLeft: () => 0,
+            paddingRight: () => 0,
+            paddingTop: () => 0,
+            paddingBottom: () => 0,
+          },
+        }],
+        defaultStyle: { font: 'Roboto' },
       };
       const blob = await new Promise<Blob>((resolve) => pdfMake.createPdf(documentDefinition).getBlob(resolve));
       const filename = `xac-nhan-thanh-toan-${apartment.code.replace(/[^a-zA-Z0-9]+/g, '-')}-${payment.month}.pdf`;
@@ -3261,53 +3387,9 @@ function CustomizationPanel({
           <div>
             <h3 className="font-semibold">Hóa đơn thanh toán</h3>
             <p className="mt-1 text-xs text-muted-foreground">
-              Chọn thông tin xuất hiện trên PDF xác nhận thanh toán.
+              Biên nhận sử dụng mẫu chuẩn A5 ngang cố định. Logo lấy từ phần Logo ứng dụng ở trên.
             </p>
           </div>
-          <div className="grid gap-2 sm:grid-cols-2">
-            {([
-              ['showAppName', 'Tên ứng dụng'],
-              ['showApartment', 'Số căn hộ'],
-              ['showOwner', 'Chủ hộ'],
-              ['showPeriod', 'Kỳ thu'],
-              ['showPaidAt', 'Ngày thu'],
-              ['showCollector', 'Người thu'],
-              ['showAmount', 'Số tiền'],
-              ['showMethod', 'Hình thức thanh toán'],
-              ['showNote', 'Ghi chú'],
-            ] as [keyof Omit<InvoicePreferences, 'footer'>, string][]).map(([key, label]) => (
-              <label key={key} className="flex min-h-9 items-center gap-2 text-sm">
-                <Checkbox
-                  checked={draft.uiPreferences.invoice[key]}
-                  onCheckedChange={(checked) =>
-                    setDraft((current) => ({
-                      ...current,
-                      uiPreferences: {
-                        ...current.uiPreferences,
-                        invoice: { ...current.uiPreferences.invoice, [key]: checked === true },
-                      },
-                    }))
-                  }
-                />
-                {label}
-              </label>
-            ))}
-          </div>
-          <Field label="Lời cảm ơn cuối biên nhận">
-            <Input
-              value={draft.uiPreferences.invoice.footer}
-              maxLength={240}
-              onChange={(event) =>
-                setDraft((current) => ({
-                  ...current,
-                  uiPreferences: {
-                    ...current.uiPreferences,
-                    invoice: { ...current.uiPreferences.invoice, footer: event.target.value },
-                  },
-                }))
-              }
-            />
-          </Field>
         </div>
         <div className="space-y-3 border-y py-4 sm:col-span-2">
           <div>
