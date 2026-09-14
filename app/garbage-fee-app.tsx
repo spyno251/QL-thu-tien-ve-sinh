@@ -206,6 +206,17 @@ type AccessLog = {
   actor: { id: string; name: string; role: Role } | null;
 };
 
+type RecordChange = {
+  id: string;
+  record_type: string;
+  record_id: string;
+  action: string;
+  details: Record<string, unknown>;
+  created_at: string;
+};
+
+type OnlineUser = Pick<User, 'id' | 'name' | 'phone' | 'role'>;
+
 type BrowserPdfMake = {
   vfs: unknown;
   addVirtualFileSystem?: (virtualFileSystem: unknown) => void;
@@ -355,6 +366,14 @@ function formatDate(value: string) {
   }).format(new Date(value));
 }
 
+function formatTime(value: string) {
+  return new Intl.DateTimeFormat('vi-VN', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(new Date(value));
+}
+
 function parseAmount(value: string, fallback: number) {
   const amount = Number(value.replaceAll('.', '').replaceAll(',', ''));
   return Number.isFinite(amount) && amount > 0 ? Math.round(amount) : fallback;
@@ -382,6 +401,7 @@ export default function GarbageFeeApp() {
   const [state, setState] = useState<AppState>(initialState);
   const commitQueue = useRef(Promise.resolve());
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([]);
   const [loginPhone, setLoginPhone] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [remember, setRemember] = useState(false);
@@ -502,6 +522,27 @@ export default function GarbageFeeApp() {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!currentUser) {
+      setOnlineUsers([]);
+      return;
+    }
+    let active = true;
+    const updatePresence = async () => {
+      await fetch('/api/presence', { method: 'POST' });
+      if (currentUser.role !== 'admin') return;
+      const response = await fetch('/api/presence', { cache: 'no-store' });
+      const payload = (await response.json()) as { online?: OnlineUser[] };
+      if (active && response.ok) setOnlineUsers(payload.online ?? []);
+    };
+    void updatePresence();
+    const timer = window.setInterval(() => void updatePresence(), 60_000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [currentUser]);
 
   const commit = async (nextState: AppState) => {
     setState(nextState);
@@ -1629,6 +1670,15 @@ export default function GarbageFeeApp() {
               {state.settings.uiPreferences.showSubtitle && state.settings.subtitle && (
                 <p className="max-w-[18rem] truncate text-xs text-muted-foreground/80">
                   {state.settings.subtitle}
+                </p>
+              )}
+              {currentUser.role === 'admin' && (
+                <p className="mt-1 max-w-[30rem] text-xs text-muted-foreground">
+                  <span className="mr-1 inline-block size-2 rounded-full bg-emerald-500" />
+                  Đang online ({onlineUsers.length}):{' '}
+                  {onlineUsers.length
+                    ? onlineUsers.map((user) => `${user.name} (${user.phone})`).join(', ')
+                    : 'Không có tài khoản nào'}
                 </p>
               )}
             </div>
@@ -2831,6 +2881,9 @@ function AccessHistoryPanel() {
   const [logs, setLogs] = useState<AccessLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [detailUser, setDetailUser] = useState<AccessLog['user']>(null);
+  const [changes, setChanges] = useState<RecordChange[]>([]);
+  const [changesLoading, setChangesLoading] = useState(false);
 
   const loadLogs = async () => {
     setLoading(true);
@@ -2857,7 +2910,29 @@ function AccessHistoryPanel() {
     return `Đăng nhập hỗ trợ${log.actor ? ` bởi ${log.actor.name}` : ''}`;
   };
 
+  const openDetails = async (user: AccessLog['user']) => {
+    if (!user) return;
+    setDetailUser(user);
+    setChanges([]);
+    setChangesLoading(true);
+    try {
+      const response = await fetch(`/api/record-history?actorId=${encodeURIComponent(user.id)}`, { cache: 'no-store' });
+      const payload = (await response.json()) as { changes?: RecordChange[] };
+      if (response.ok) setChanges(payload.changes ?? []);
+    } finally {
+      setChangesLoading(false);
+    }
+  };
+
+  const detailText = (change: RecordChange) => {
+    const values = Object.entries(change.details ?? {})
+      .map(([key, value]) => `${key}: ${String(value)}`)
+      .join(' · ');
+    return values || `${change.record_type} #${change.record_id}`;
+  };
+
   return (
+    <>
     <section className="rounded-lg border bg-card p-3 sm:p-5">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
@@ -2882,10 +2957,22 @@ function AccessHistoryPanel() {
           <TableBody>
             {logs.map((log) => (
               <TableRow key={log.id}>
-                <TableCell>{formatDate(log.createdAt)}</TableCell>
+                <TableCell>
+                  <div>{formatDate(log.createdAt)}</div>
+                  <div className="text-xs text-muted-foreground">({formatTime(log.createdAt)})</div>
+                </TableCell>
                 <TableCell>{log.user?.name ?? 'Tài khoản đã xóa'}</TableCell>
                 <TableCell>{roleLabel(log.user?.role)}</TableCell>
-                <TableCell>{actionLabel(log)}</TableCell>
+                <TableCell>
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <span>{actionLabel(log)}</span>
+                    {log.user && (
+                      <Button type="button" variant="link" className="h-auto p-0 text-xs" onClick={() => void openDetails(log.user)}>
+                        Chi tiết
+                      </Button>
+                    )}
+                  </div>
+                </TableCell>
               </TableRow>
             ))}
             {!loading && !logs.length && (
@@ -2898,6 +2985,32 @@ function AccessHistoryPanel() {
         </Table>
       </div>
     </section>
+    <Dialog open={Boolean(detailUser)} onOpenChange={(open) => !open && setDetailUser(null)}>
+      <DialogContent className="max-h-[80vh] overflow-y-auto sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Lịch sử thay đổi bản ghi</DialogTitle>
+          <DialogDescription>{detailUser ? `Các thay đổi dữ liệu do ${detailUser.name} thực hiện.` : ''}</DialogDescription>
+        </DialogHeader>
+        {changesLoading ? (
+          <p className="py-6 text-sm text-muted-foreground">Đang tải lịch sử thay đổi...</p>
+        ) : changes.length ? (
+          <div className="space-y-2">
+            {changes.map((change) => (
+              <div key={change.id} className="rounded-md border p-3 text-sm">
+                <div className="flex flex-wrap justify-between gap-2 font-medium">
+                  <span>{change.action}</span>
+                  <span className="text-muted-foreground">{formatDate(change.created_at)} ({formatTime(change.created_at)})</span>
+                </div>
+                <p className="mt-1 break-words text-muted-foreground">{detailText(change)}</p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="py-6 text-sm text-muted-foreground">Chưa có thay đổi dữ liệu nào được ghi nhận cho tài khoản này.</p>
+        )}
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }
 
