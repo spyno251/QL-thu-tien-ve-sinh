@@ -3067,7 +3067,7 @@ function AccessHistoryPanel() {
       const amount = typeof details.amount === 'number' ? details.amount : Number(details.amount);
       const method = typeof details.method === 'string' ? details.method : '';
       const parts = [
-        apartmentCode && `Căn số ${apartmentCode}${regionName ? ` - ${regionName}` : ''}`,
+        apartmentCode && `Căn số ${apartmentCode.replace(/^căn\s*/i, '')}${regionName ? ` - ${regionName}` : ''}`,
         Number.isFinite(amount) && amount > 0 && `Số tiền: ${formatShortAmount(amount)}`,
         method && `Hình thức: ${method}`,
       ].filter(Boolean);
