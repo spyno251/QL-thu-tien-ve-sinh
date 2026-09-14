@@ -208,6 +208,7 @@ type AccessLog = {
 
 type BrowserPdfMake = {
   vfs: unknown;
+  addVirtualFileSystem?: (virtualFileSystem: unknown) => void;
   createPdf: (definition: unknown) => { getBlob: (callback: (blob: Blob) => void) => void };
 };
 
@@ -735,10 +736,16 @@ export default function GarbageFeeApp() {
       const pdfFonts = (pdfFontsModule.default ?? pdfFontsModule) as unknown as {
         pdfMake?: { vfs?: unknown };
         vfs?: unknown;
+        [fontFile: string]: unknown;
       };
-      const virtualFonts = pdfFonts.pdfMake?.vfs ?? pdfFonts.vfs;
+      // pdfmake 0.2 exports the virtual font map directly, while older builds nest it.
+      const virtualFonts = pdfFonts.pdfMake?.vfs ?? pdfFonts.vfs ?? pdfFonts;
       if (!virtualFonts) throw new Error('PDF fonts are unavailable');
-      pdfMake.vfs = virtualFonts;
+      if (pdfMake.addVirtualFileSystem) {
+        pdfMake.addVirtualFileSystem(virtualFonts);
+      } else {
+        pdfMake.vfs = virtualFonts;
+      }
       const documentDefinition = {
         content: [
           { text: invoice.showAppName ? state.settings.appName : 'XÁC NHẬN THANH TOÁN', style: 'appName' },
