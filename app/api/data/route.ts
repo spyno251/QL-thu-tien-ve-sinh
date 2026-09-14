@@ -171,6 +171,32 @@ async function recordChange(
   if (error) console.error('Unable to record change history', error);
 }
 
+async function paymentAuditDetails(payment: Pick<Payment, 'apartmentId' | 'amount' | 'method'>) {
+  const fallback = { amount: payment.amount, method: payment.method === 'transfer' ? 'Chuyển khoản' : 'Tiền mặt' };
+  const db = getSupabaseAdmin();
+  if (!db) return fallback;
+  try {
+    const { data: apartment } = await db
+      .from('apartments')
+      .select('code, block_id')
+      .eq('id', payment.apartmentId)
+      .maybeSingle();
+    const { data: block } = apartment
+      ? await db.from('blocks').select('region_id').eq('id', apartment.block_id).maybeSingle()
+      : { data: null };
+    const { data: region } = block
+      ? await db.from('regions').select('name').eq('id', block.region_id).maybeSingle()
+      : { data: null };
+    return {
+      apartmentCode: apartment?.code ?? null,
+      regionName: region?.name ?? null,
+      ...fallback,
+    };
+  } catch {
+    return fallback;
+  }
+}
+
 export async function GET(request: Request) {
   const db = getSupabaseAdmin();
   if (!db) return json({ error: configurationError() }, 503);
@@ -236,12 +262,17 @@ export async function POST(request: Request) {
       if (error) throw error;
       if (!insertedPayment)
         return json({ error: 'Chưa thể xác nhận khoản thu vừa ghi.' }, 503);
-      await recordChange(currentUser.id, 'payment', insertedPayment.id, 'Đã ghi nhận thu tiền', {
-        apartmentId: payment.apartmentId,
-        period: payment.month,
-        amount: payment.amount,
-        method: payment.method === 'transfer' ? 'Chuyển khoản' : 'Tiền mặt',
-      });
+      await recordChange(
+        currentUser.id,
+        'payment',
+        insertedPayment.id,
+        'Đã ghi nhận thu tiền',
+        await paymentAuditDetails({
+          apartmentId: payment.apartmentId,
+          amount: Number(payment.amount),
+          method: payment.method === 'transfer' ? 'transfer' : 'cash',
+        }),
+      );
       return json({
         ok: true,
         state: visibleState(await readState(), currentUser),
@@ -254,7 +285,7 @@ export async function POST(request: Request) {
       if (!paymentId) return json({ error: 'Thiếu mã giao dịch.' }, 400);
       const { data: payment, error: paymentError } = await db
         .from('payments')
-        .select('collector_id')
+        .select('collector_id, apartment_id, amount, method')
         .eq('id', paymentId)
         .maybeSingle();
       if (paymentError) throw paymentError;
@@ -263,7 +294,17 @@ export async function POST(request: Request) {
         return json({ error: 'Quản trị chỉ được hủy khoản thu của Nhân viên.' }, 403);
       const { error } = await db.from('payments').delete().eq('id', paymentId);
       if (error) throw error;
-      await recordChange(currentUser.id, 'payment', paymentId, 'Đã hủy khoản thu', {});
+      await recordChange(
+        currentUser.id,
+        'payment',
+        paymentId,
+        'Đã hủy khoản thu',
+        await paymentAuditDetails({
+          apartmentId: payment.apartment_id,
+          amount: payment.amount,
+          method: payment.method as Payment['method'],
+        }),
+      );
       return json({
         ok: true,
         state: visibleState(await readState(), currentUser),

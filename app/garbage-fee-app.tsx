@@ -451,6 +451,15 @@ function formatNumber(value: number) {
   return number.format(Math.round(value));
 }
 
+function formatShortAmount(value: number) {
+  if (value >= 1_000_000) {
+    const millions = value / 1_000_000;
+    return `${new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 1 }).format(millions)} triệu`;
+  }
+  if (value >= 1_000) return `${new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 }).format(value / 1_000)} nghìn`;
+  return `${formatNumber(value)} đồng`;
+}
+
 function formatAmountInput(value: string) {
   const digits = value.replace(/\D/g, '');
   return digits ? formatNumber(Number(digits)) : '';
@@ -3051,7 +3060,20 @@ function AccessHistoryPanel() {
   };
 
   const detailText = (change: RecordChange) => {
-    const values = Object.entries(change.details ?? {})
+    const details = change.details ?? {};
+    if (change.record_type === 'payment') {
+      const apartmentCode = typeof details.apartmentCode === 'string' ? details.apartmentCode : '';
+      const regionName = typeof details.regionName === 'string' ? details.regionName : '';
+      const amount = typeof details.amount === 'number' ? details.amount : Number(details.amount);
+      const method = typeof details.method === 'string' ? details.method : '';
+      const parts = [
+        apartmentCode && `Căn số ${apartmentCode}${regionName ? ` - ${regionName}` : ''}`,
+        Number.isFinite(amount) && amount > 0 && `Số tiền: ${formatShortAmount(amount)}`,
+        method && `Hình thức: ${method}`,
+      ].filter(Boolean);
+      return parts.length ? `${parts.join('; ')}.` : 'Không còn đủ thông tin chi tiết của giao dịch cũ.';
+    }
+    const values = Object.entries(details)
       .map(([key, value]) => `${key}: ${String(value)}`)
       .join(' · ');
     return values || `${change.record_type} #${change.record_id}`;
