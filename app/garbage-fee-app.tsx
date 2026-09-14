@@ -19,6 +19,7 @@ import {
   ReceiptText,
   RotateCcw,
   Search,
+  Send,
   ShieldCheck,
   Trash2,
   UserRound,
@@ -132,11 +133,26 @@ type UiPreferences = {
   tableBorderColor: string;
   apartmentInfoBackgroundColor: string;
   tableTextAlign: 'left' | 'center' | 'right';
+  invoice: InvoicePreferences;
+};
+
+type InvoicePreferences = {
+  showAppName: boolean;
+  showApartment: boolean;
+  showOwner: boolean;
+  showPeriod: boolean;
+  showPaidAt: boolean;
+  showCollector: boolean;
+  showAmount: boolean;
+  showMethod: boolean;
+  showNote: boolean;
+  footer: string;
 };
 
 const defaultUiPreferences: UiPreferences = {
   primaryColor: '#007563', backgroundColor: '#f4fbfa', headerAlignment: 'left', fontScale: 'normal', density: 'comfortable', tableStyle: 'tinted', cornerStyle: 'soft', cardStyle: 'bordered', showSubtitle: true,
   fontFamily: 'sans', fontSize: 16, headerBackgroundColor: '#f4fbfa', headerTextColor: '#102a30', tableHeaderBackgroundColor: '#007563', tableHeaderTextColor: '#ffffff', tableBorderColor: '#bdd9d5', apartmentInfoBackgroundColor: '#d9ece3', tableTextAlign: 'left',
+  invoice: { showAppName: true, showApartment: true, showOwner: true, showPeriod: true, showPaidAt: true, showCollector: true, showAmount: true, showMethod: true, showNote: true, footer: 'Cảm ơn quý khách đã thanh toán.' },
 };
 
 const themeColors = {
@@ -180,6 +196,19 @@ type AppVersion = {
   available: boolean;
   deploymentFound: boolean;
   deployedAt: number | null;
+};
+
+type AccessLog = {
+  id: string;
+  action: 'login' | 'logout' | 'support_login';
+  createdAt: string;
+  user: { id: string; name: string; role: Role } | null;
+  actor: { id: string; name: string; role: Role } | null;
+};
+
+type BrowserPdfMake = {
+  vfs: unknown;
+  createPdf: (definition: unknown) => { getBlob: (callback: (blob: Blob) => void) => void };
 };
 
 type AppState = {
@@ -675,6 +704,72 @@ export default function GarbageFeeApp() {
     });
     const payload = (await response.json()) as { state?: AppState };
     if (response.ok && payload.state) setState(payload.state);
+  };
+
+  const sendPaymentReceipt = async (
+    apartment: Apartment,
+    payment: Payment,
+    collector: User | null,
+  ) => {
+    const invoice = state.settings.uiPreferences.invoice;
+    const block = lookups.blocks.get(apartment.blockId);
+    const region = block ? lookups.regions.get(block.regionId) : null;
+    const method = payment.method === 'transfer' ? 'Chuyển khoản' : 'Tiền mặt';
+    const rows = [
+      invoice.showApartment && ['Số căn', `${apartment.code} - ${region?.name ?? '-'}`],
+      invoice.showOwner && ['Chủ hộ', apartment.owner || '-'],
+      invoice.showPeriod && ['Kỳ thu', payment.month],
+      invoice.showPaidAt && ['Ngày thu', formatDate(payment.paidAt)],
+      invoice.showCollector && ['Người thu', collector?.name ?? '-'],
+      invoice.showAmount && ['Số tiền', money.format(payment.amount)],
+      invoice.showMethod && ['Hình thức', method],
+      invoice.showNote && ['Ghi chú', payment.note || '-'],
+    ].filter(Boolean) as [string, string][];
+
+    try {
+      const [pdfMakeModule, pdfFontsModule] = await Promise.all([
+        import('pdfmake/build/pdfmake'),
+        import('pdfmake/build/vfs_fonts'),
+      ]);
+      const pdfMake = pdfMakeModule.default as unknown as BrowserPdfMake;
+      const pdfFonts = pdfFontsModule.default as unknown as { pdfMake: { vfs: unknown } };
+      pdfMake.vfs = pdfFonts.pdfMake.vfs;
+      const documentDefinition = {
+        content: [
+          { text: invoice.showAppName ? state.settings.appName : 'XÁC NHẬN THANH TOÁN', style: 'appName' },
+          { text: 'XÁC NHẬN THANH TOÁN', style: 'title' },
+          { text: 'Biên nhận đã được lập từ ứng dụng.', style: 'subtitle' },
+          { table: { widths: ['40%', '60%'], body: rows }, layout: 'lightHorizontalLines', margin: [0, 18, 0, 18] },
+          ...(invoice.footer.trim() ? [{ text: invoice.footer.trim(), style: 'footer' }] : []),
+        ],
+        styles: {
+          appName: { color: state.settings.uiPreferences.primaryColor, bold: true, fontSize: 16, alignment: 'center' as const },
+          title: { bold: true, fontSize: 19, alignment: 'center' as const, margin: [0, 8, 0, 4] },
+          subtitle: { color: '#52646a', fontSize: 10, alignment: 'center' as const },
+          footer: { color: '#52646a', italics: true, alignment: 'center' as const, margin: [0, 12, 0, 0] },
+        },
+        defaultStyle: { font: 'Roboto', fontSize: 11 },
+        pageMargins: [42, 48, 42, 48],
+      };
+      const blob = await new Promise<Blob>((resolve) => pdfMake.createPdf(documentDefinition).getBlob(resolve));
+      const filename = `xac-nhan-thanh-toan-${apartment.code.replace(/[^a-zA-Z0-9]+/g, '-')}-${payment.month}.pdf`;
+      const file = new File([blob], filename, { type: 'application/pdf' });
+      const shareData = { title: 'Xác nhận thanh toán', text: `Biên nhận ${apartment.code} - kỳ ${payment.month}`, files: [file] };
+      if (navigator.share && (!navigator.canShare || navigator.canShare(shareData))) {
+        await navigator.share(shareData);
+        return;
+      }
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      link.click();
+      URL.revokeObjectURL(url);
+      window.alert('Thiết bị chưa hỗ trợ gửi trực tiếp. File PDF đã được tải xuống để gửi qua Zalo.');
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return;
+      window.alert('Chưa thể tạo biên nhận PDF. Vui lòng thử lại.');
+    }
   };
 
   const cancelPayment = async (paymentId: string) => {
@@ -1629,6 +1724,14 @@ export default function GarbageFeeApp() {
             </TabsTrigger>
             {canManage && (
               <TabsTrigger
+                value="access-history"
+                className="min-h-9 flex-none whitespace-nowrap px-2 py-1.5 text-sm font-semibold text-foreground/75 data-active:bg-primary data-active:text-primary-foreground data-active:shadow-sm sm:flex-1 sm:px-3 sm:text-base"
+              >
+                Lịch sử truy cập
+              </TabsTrigger>
+            )}
+            {canManage && (
+              <TabsTrigger
                 value="debts"
                 className="min-h-9 flex-none whitespace-nowrap px-2 py-1.5 text-sm font-semibold text-foreground/75 data-active:bg-primary data-active:text-primary-foreground data-active:shadow-sm sm:flex-1 sm:px-3 sm:text-base"
               >
@@ -1851,7 +1954,20 @@ export default function GarbageFeeApp() {
                             <div className="flex h-12 items-center px-3 text-sm font-medium">
                               Người thu
                             </div>
-                            <div className="h-10" />
+                            <div className="flex h-10 items-center px-2">
+                              {payment && paymentFilter === 'paid' && (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="w-full gap-1 text-xs"
+                                  onClick={() => void sendPaymentReceipt(apartment, payment, collector ?? null)}
+                                >
+                                  <Send className="size-3.5" />
+                                  Gửi xác nhận thanh toán
+                                </Button>
+                              )}
+                            </div>
                           </div>
                         </TableCell>
                         <TableCell className="w-1/4 border-r p-0 align-top">
@@ -2039,6 +2155,11 @@ export default function GarbageFeeApp() {
               <Restricted />
             )}
           </TabsContent>
+          {canManage && (
+            <TabsContent value="access-history" className="mt-4">
+              <AccessHistoryPanel />
+            </TabsContent>
+          )}
           {canManage && (
             <TabsContent value="debts" className="mt-4">
               <DebtManagement
@@ -2693,6 +2814,87 @@ function Metric({
   );
 }
 
+function AccessHistoryPanel() {
+  const [logs, setLogs] = useState<AccessLog[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  const loadLogs = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const response = await fetch('/api/access-logs', { cache: 'no-store' });
+      const payload = (await response.json()) as { logs?: AccessLog[]; error?: string };
+      if (!response.ok) throw new Error(payload.error ?? 'Chưa thể tải lịch sử truy cập.');
+      setLogs(payload.logs ?? []);
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : 'Chưa thể tải lịch sử truy cập.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadLogs();
+  }, []);
+
+  const actionLabel = (log: AccessLog) => {
+    if (log.action === 'login') return 'Đăng nhập';
+    if (log.action === 'logout') return 'Đăng xuất';
+    return `Đăng nhập hỗ trợ${log.actor ? ` bởi ${log.actor.name}` : ''}`;
+  };
+
+  return (
+    <section className="rounded-lg border bg-card p-3 sm:p-5">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold">Lịch sử truy cập</h2>
+          <p className="mt-1 text-sm text-muted-foreground">Ghi nhận tối đa 300 lần đăng nhập, đăng xuất và hỗ trợ tài khoản gần nhất.</p>
+        </div>
+        <Button type="button" variant="outline" size="sm" onClick={() => void loadLogs()} disabled={loading}>
+          <RotateCcw /> Làm mới
+        </Button>
+      </div>
+      {error && <p className="mb-3 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
+      <div className="overflow-x-auto">
+        <Table className="min-w-[620px]">
+          <TableHeader>
+            <TableRow>
+              <TableHead>Thời điểm</TableHead>
+              <TableHead>Tài khoản</TableHead>
+              <TableHead>Vai trò</TableHead>
+              <TableHead>Hoạt động</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {logs.map((log) => (
+              <TableRow key={log.id}>
+                <TableCell>{formatDate(log.createdAt)}</TableCell>
+                <TableCell>{log.user?.name ?? 'Tài khoản đã xóa'}</TableCell>
+                <TableCell>{roleLabel(log.user?.role)}</TableCell>
+                <TableCell>{actionLabel(log)}</TableCell>
+              </TableRow>
+            ))}
+            {!loading && !logs.length && (
+              <TableRow><TableCell colSpan={4} className="py-8 text-center text-muted-foreground">Chưa có lịch sử truy cập.</TableCell></TableRow>
+            )}
+            {loading && (
+              <TableRow><TableCell colSpan={4} className="py-8 text-center text-muted-foreground">Đang tải lịch sử truy cập...</TableCell></TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </div>
+    </section>
+  );
+}
+
+function roleLabel(role: Role | undefined) {
+  if (role === 'admin') return 'Admin';
+  if (role === 'manager') return 'Quản trị';
+  if (role === 'staff') return 'Nhân viên';
+  return '-';
+}
+
 function CustomizationPanel({
   settings,
   onSave,
@@ -2929,6 +3131,58 @@ function CustomizationPanel({
             }))
           }
         />
+        <div className="space-y-3 border-y py-4 sm:col-span-2">
+          <div>
+            <h3 className="font-semibold">Hóa đơn thanh toán</h3>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Chọn thông tin xuất hiện trên PDF xác nhận thanh toán.
+            </p>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {([
+              ['showAppName', 'Tên ứng dụng'],
+              ['showApartment', 'Số căn hộ'],
+              ['showOwner', 'Chủ hộ'],
+              ['showPeriod', 'Kỳ thu'],
+              ['showPaidAt', 'Ngày thu'],
+              ['showCollector', 'Người thu'],
+              ['showAmount', 'Số tiền'],
+              ['showMethod', 'Hình thức thanh toán'],
+              ['showNote', 'Ghi chú'],
+            ] as [keyof Omit<InvoicePreferences, 'footer'>, string][]).map(([key, label]) => (
+              <label key={key} className="flex min-h-9 items-center gap-2 text-sm">
+                <Checkbox
+                  checked={draft.uiPreferences.invoice[key]}
+                  onCheckedChange={(checked) =>
+                    setDraft((current) => ({
+                      ...current,
+                      uiPreferences: {
+                        ...current.uiPreferences,
+                        invoice: { ...current.uiPreferences.invoice, [key]: checked === true },
+                      },
+                    }))
+                  }
+                />
+                {label}
+              </label>
+            ))}
+          </div>
+          <Field label="Lời cảm ơn cuối biên nhận">
+            <Input
+              value={draft.uiPreferences.invoice.footer}
+              maxLength={240}
+              onChange={(event) =>
+                setDraft((current) => ({
+                  ...current,
+                  uiPreferences: {
+                    ...current.uiPreferences,
+                    invoice: { ...current.uiPreferences.invoice, footer: event.target.value },
+                  },
+                }))
+              }
+            />
+          </Field>
+        </div>
         <div className="space-y-3 border-y py-4 sm:col-span-2">
           <div>
             <h3 className="font-semibold">Định dạng trực quan</h3>

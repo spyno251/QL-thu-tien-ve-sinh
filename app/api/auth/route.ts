@@ -33,6 +33,21 @@ function text(value: unknown) {
   return typeof value === 'string' ? value : '';
 }
 
+async function recordAccess(
+  userId: string,
+  action: 'login' | 'logout' | 'support_login',
+  actorId?: string,
+) {
+  const db = getSupabaseAdmin();
+  if (!db) return;
+  // Access history is informative only: it must never prevent authentication.
+  await db.from('access_logs').insert({
+    user_id: userId,
+    action,
+    actor_id: actorId ?? null,
+  });
+}
+
 async function hasUsers() {
   const db = getSupabaseAdmin();
   if (!db) return null;
@@ -138,6 +153,7 @@ async function setupAdmin(body: Record<string, unknown>) {
       400,
     );
   const session = await createSession(db, user.id, true);
+  await recordAccess(user.id, 'login');
   return json({ user: safeUser(user) }, 200, { 'Set-Cookie': session.cookie });
 }
 
@@ -157,6 +173,7 @@ async function login(request: Request, body: Record<string, unknown>) {
     .update({ must_change_password: mustChangePassword })
     .eq('id', user.id);
   const session = await createSession(db, user.id, body.remember === true);
+  await recordAccess(user.id, 'login');
   return json({ user: safeUser({ ...user, mustChangePassword }) }, 200, {
     'Set-Cookie': session.cookie,
   });
@@ -166,6 +183,8 @@ async function logout(request: Request) {
   const db = getSupabaseAdmin();
   if (!db) return json({ error: configurationError() }, 503);
   const token = parseCookie(request, SESSION_COOKIE);
+  const user = await getSessionUser(db, request);
+  if (user) await recordAccess(user.id, 'logout');
   if (token) await db.from('sessions').delete().eq('id', token);
   return json({ ok: true }, 200, { 'Set-Cookie': clearSessionCookie() });
 }
@@ -266,6 +285,7 @@ async function adminImpersonate(request: Request, body: Record<string, unknown>)
   const previousToken = parseCookie(request, SESSION_COOKIE);
   if (previousToken) await db.from('sessions').delete().eq('id', previousToken);
   const session = await createSession(db, target.id, false, admin.id);
+  await recordAccess(target.id, 'support_login', admin.id);
   const user: StoredUser = {
     id: target.id,
     phone: target.phone,

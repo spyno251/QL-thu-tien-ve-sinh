@@ -63,10 +63,24 @@ type UiPreferences = {
   tableBorderColor: string;
   apartmentInfoBackgroundColor: string;
   tableTextAlign: 'left' | 'center' | 'right';
+  invoice: InvoicePreferences;
+};
+type InvoicePreferences = {
+  showAppName: boolean;
+  showApartment: boolean;
+  showOwner: boolean;
+  showPeriod: boolean;
+  showPaidAt: boolean;
+  showCollector: boolean;
+  showAmount: boolean;
+  showMethod: boolean;
+  showNote: boolean;
+  footer: string;
 };
 const defaultUiPreferences: UiPreferences = {
   primaryColor: '#007563', backgroundColor: '#f4fbfa', headerAlignment: 'left', fontScale: 'normal', density: 'comfortable', tableStyle: 'tinted', cornerStyle: 'soft', cardStyle: 'bordered', showSubtitle: true,
   fontFamily: 'sans', fontSize: 16, headerBackgroundColor: '#f4fbfa', headerTextColor: '#102a30', tableHeaderBackgroundColor: '#007563', tableHeaderTextColor: '#ffffff', tableBorderColor: '#bdd9d5', apartmentInfoBackgroundColor: '#d9ece3', tableTextAlign: 'left',
+  invoice: { showAppName: true, showApartment: true, showOwner: true, showPeriod: true, showPaidAt: true, showCollector: true, showAmount: true, showMethod: true, showNote: true, footer: 'Cảm ơn quý khách đã thanh toán.' },
 };
 const themeColors = { teal: '#007563', blue: '#1d5fd1', indigo: '#5d42c6', amber: '#b35d00', rose: '#b8325a' } as const;
 type AppSettings = {
@@ -97,6 +111,9 @@ function json(data: unknown, status = 200) {
 
 function normalizeUiPreferences(value: unknown, theme: AppSettings['theme'] = 'teal'): UiPreferences {
   const source = value && typeof value === 'object' ? value as Record<string, unknown> : {};
+  const invoiceSource = source.invoice && typeof source.invoice === 'object'
+    ? source.invoice as Record<string, unknown>
+    : {};
   const pick = <T extends string>(key: string, options: readonly T[], fallback: T) =>
     typeof source[key] === 'string' && options.includes(source[key] as T) ? source[key] as T : fallback;
   const color = (key: string, fallback: string) =>
@@ -119,6 +136,18 @@ function normalizeUiPreferences(value: unknown, theme: AppSettings['theme'] = 't
     tableBorderColor: color('tableBorderColor', defaultUiPreferences.tableBorderColor),
     apartmentInfoBackgroundColor: color('apartmentInfoBackgroundColor', defaultUiPreferences.apartmentInfoBackgroundColor),
     tableTextAlign: pick('tableTextAlign', ['left', 'center', 'right'], defaultUiPreferences.tableTextAlign),
+    invoice: {
+      showAppName: typeof invoiceSource.showAppName === 'boolean' ? invoiceSource.showAppName : defaultUiPreferences.invoice.showAppName,
+      showApartment: typeof invoiceSource.showApartment === 'boolean' ? invoiceSource.showApartment : defaultUiPreferences.invoice.showApartment,
+      showOwner: typeof invoiceSource.showOwner === 'boolean' ? invoiceSource.showOwner : defaultUiPreferences.invoice.showOwner,
+      showPeriod: typeof invoiceSource.showPeriod === 'boolean' ? invoiceSource.showPeriod : defaultUiPreferences.invoice.showPeriod,
+      showPaidAt: typeof invoiceSource.showPaidAt === 'boolean' ? invoiceSource.showPaidAt : defaultUiPreferences.invoice.showPaidAt,
+      showCollector: typeof invoiceSource.showCollector === 'boolean' ? invoiceSource.showCollector : defaultUiPreferences.invoice.showCollector,
+      showAmount: typeof invoiceSource.showAmount === 'boolean' ? invoiceSource.showAmount : defaultUiPreferences.invoice.showAmount,
+      showMethod: typeof invoiceSource.showMethod === 'boolean' ? invoiceSource.showMethod : defaultUiPreferences.invoice.showMethod,
+      showNote: typeof invoiceSource.showNote === 'boolean' ? invoiceSource.showNote : defaultUiPreferences.invoice.showNote,
+      footer: typeof invoiceSource.footer === 'string' ? invoiceSource.footer.slice(0, 240) : defaultUiPreferences.invoice.footer,
+    },
   };
 }
 
