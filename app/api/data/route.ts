@@ -197,6 +197,21 @@ async function paymentAuditDetails(payment: Pick<Payment, 'apartmentId' | 'amoun
   }
 }
 
+async function debtSettlementAuditDetails(settlement: Pick<DebtSettlement, 'staffId' | 'amount' | 'method'>) {
+  const fallback = {
+    amount: settlement.amount,
+    method: settlement.method === 'transfer' ? 'Chuyển khoản' : 'Tiền mặt',
+  };
+  const db = getSupabaseAdmin();
+  if (!db) return fallback;
+  try {
+    const { data: staff } = await db.from('users').select('name').eq('id', settlement.staffId).maybeSingle();
+    return { staffName: staff?.name ?? null, ...fallback };
+  } catch {
+    return fallback;
+  }
+}
+
 export async function GET(request: Request) {
   const db = getSupabaseAdmin();
   if (!db) return json({ error: configurationError() }, 503);
@@ -379,10 +394,17 @@ export async function POST(request: Request) {
         status: 'pending',
       });
       if (error) throw error;
-      await recordChange(currentUser.id, 'debt_settlement', settlementId, 'Đã gửi yêu cầu nộp công nợ', {
-        amount,
-        method: payload.method === 'transfer' ? 'Chuyển khoản' : 'Tiền mặt',
-      });
+      await recordChange(
+        currentUser.id,
+        'debt_settlement',
+        settlementId,
+        'Đã gửi yêu cầu nộp công nợ',
+        await debtSettlementAuditDetails({
+          staffId: currentUser.id,
+          amount,
+          method: payload.method === 'transfer' ? 'transfer' : 'cash',
+        }),
+      );
       return json({
         ok: true,
         state: visibleState(await readState(), currentUser),
@@ -395,7 +417,7 @@ export async function POST(request: Request) {
       if (!settlementId) return json({ error: 'Thiếu mã yêu cầu.' }, 400);
       const { data: settlement, error: settlementError } = await db
         .from('debt_settlements')
-        .select('staff_id')
+        .select('staff_id, amount, method')
         .eq('id', settlementId)
         .maybeSingle();
       if (settlementError) throw settlementError;
@@ -415,7 +437,17 @@ export async function POST(request: Request) {
         .maybeSingle();
       if (error) throw error;
       if (!data) return json({ error: 'Yêu cầu đã được xử lý.' }, 409);
-      await recordChange(currentUser.id, 'debt_settlement', settlementId, 'Đã xác nhận nộp công nợ', {});
+      await recordChange(
+        currentUser.id,
+        'debt_settlement',
+        settlementId,
+        'Đã xác nhận nộp công nợ',
+        await debtSettlementAuditDetails({
+          staffId: settlement.staff_id,
+          amount: settlement.amount,
+          method: settlement.method as DebtSettlement['method'],
+        }),
+      );
       return json({
         ok: true,
         state: visibleState(await readState(), currentUser),
@@ -470,10 +502,17 @@ export async function POST(request: Request) {
         })
         .eq('id', settlementId);
       if (error) throw error;
-      await recordChange(currentUser.id, 'debt_settlement', settlementId, 'Đã cập nhật công nợ', {
-        amount,
-        method: payload.method === 'transfer' ? 'Chuyển khoản' : 'Tiền mặt',
-      });
+      await recordChange(
+        currentUser.id,
+        'debt_settlement',
+        settlementId,
+        'Đã cập nhật công nợ',
+        await debtSettlementAuditDetails({
+          staffId: settlement.staff_id,
+          amount,
+          method: payload.method === 'transfer' ? 'transfer' : 'cash',
+        }),
+      );
       return json({ ok: true, state: visibleState(await readState(), currentUser) });
     }
     if (payload.action === 'delete-debt-settlement') {
@@ -483,7 +522,7 @@ export async function POST(request: Request) {
       if (!settlementId) return json({ error: 'Thiếu mã giao dịch.' }, 400);
       const { data: settlement, error: settlementError } = await db
         .from('debt_settlements')
-        .select('staff_id')
+        .select('staff_id, amount, method')
         .eq('id', settlementId)
         .maybeSingle();
       if (settlementError) throw settlementError;
@@ -492,7 +531,17 @@ export async function POST(request: Request) {
         return json({ error: 'Quản trị chỉ được xóa công nợ của Nhân viên.' }, 403);
       const { error } = await db.from('debt_settlements').delete().eq('id', settlementId);
       if (error) throw error;
-      await recordChange(currentUser.id, 'debt_settlement', settlementId, 'Đã xóa yêu cầu công nợ', {});
+      await recordChange(
+        currentUser.id,
+        'debt_settlement',
+        settlementId,
+        'Đã xóa yêu cầu công nợ',
+        await debtSettlementAuditDetails({
+          staffId: settlement.staff_id,
+          amount: settlement.amount,
+          method: settlement.method as DebtSettlement['method'],
+        }),
+      );
       return json({ ok: true, state: visibleState(await readState(), currentUser) });
     }
     if (!payload.state) return json({ error: 'Missing state' }, 400);
@@ -527,9 +576,9 @@ export async function POST(request: Request) {
         : { ...existing, payments: protectedPayments };
     await saveState(nextState);
     await recordChange(currentUser.id, 'app_state', 'shared', 'Đã cập nhật dữ liệu quản trị', {
-      regions: nextState.regions.length,
-      apartments: nextState.apartments.length,
-      users: nextState.users.length,
+      soKhuVuc: nextState.regions.length,
+      soCanHo: nextState.apartments.length,
+      soTaiKhoan: nextState.users.length,
     });
     return json({
       ok: true,

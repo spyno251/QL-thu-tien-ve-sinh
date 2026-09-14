@@ -3073,10 +3073,33 @@ function AccessHistoryPanel() {
       ].filter(Boolean);
       return parts.length ? `${parts.join('; ')}.` : 'Không còn đủ thông tin chi tiết của giao dịch cũ.';
     }
-    const values = Object.entries(details)
-      .map(([key, value]) => `${key}: ${String(value)}`)
-      .join(' · ');
-    return values || `${change.record_type} #${change.record_id}`;
+    if (change.record_type === 'debt_settlement') {
+      const staffName = typeof details.staffName === 'string' ? details.staffName : '';
+      const amount = typeof details.amount === 'number' ? details.amount : Number(details.amount);
+      const method = typeof details.method === 'string' ? details.method : '';
+      const parts = [
+        staffName && `Nhân viên: ${staffName}`,
+        Number.isFinite(amount) && amount > 0 && `Số tiền: ${formatShortAmount(amount)}`,
+        method && `Hình thức: ${method}`,
+      ].filter(Boolean);
+      return parts.length ? `${parts.join('; ')}.` : 'Yêu cầu nộp công nợ đã được xử lý.';
+    }
+    if (change.action === 'Đã cập nhật ghi chú') {
+      const note = typeof details.note === 'string' ? details.note.trim() : '';
+      return note ? `Ghi chú: ${note}` : 'Đã xóa ghi chú.';
+    }
+    if (change.record_type === 'app_state') {
+      const regionCount = Number(details.soKhuVuc ?? details.regions);
+      const apartmentCount = Number(details.soCanHo ?? details.apartments);
+      const userCount = Number(details.soTaiKhoan ?? details.users);
+      const parts = [
+        Number.isFinite(regionCount) && `Khu vực: ${formatNumber(regionCount)}`,
+        Number.isFinite(apartmentCount) && `Căn hộ: ${formatNumber(apartmentCount)}`,
+        Number.isFinite(userCount) && `Tài khoản: ${formatNumber(userCount)}`,
+      ].filter(Boolean);
+      return parts.length ? `${parts.join('; ')}.` : 'Đã cập nhật dữ liệu quản trị.';
+    }
+    return 'Đã cập nhật dữ liệu.';
   };
 
   return (
