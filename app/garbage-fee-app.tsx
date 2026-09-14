@@ -1735,7 +1735,7 @@ export default function GarbageFeeApp() {
             >
               Nhân viên
             </TabsTrigger>
-            {canManage && (
+            {currentUser.role === 'admin' && (
               <TabsTrigger
                 value="access-history"
                 className="min-h-9 flex-none whitespace-nowrap px-2 py-1.5 text-sm font-semibold text-foreground/75 data-active:bg-primary data-active:text-primary-foreground data-active:shadow-sm sm:flex-1 sm:px-3 sm:text-base"
@@ -2168,7 +2168,7 @@ export default function GarbageFeeApp() {
               <Restricted />
             )}
           </TabsContent>
-          {canManage && (
+          {currentUser.role === 'admin' && (
             <TabsContent value="access-history" className="mt-4">
               <AccessHistoryPanel />
             </TabsContent>

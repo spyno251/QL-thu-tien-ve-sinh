@@ -10,8 +10,8 @@ export async function GET(request: Request) {
 
   try {
     const currentUser = await getSessionUser(db, request);
-    if (!currentUser || currentUser.role === 'staff') {
-      return Response.json({ error: 'Chỉ Admin hoặc Quản trị được xem lịch sử truy cập.' }, { status: 403 });
+    if (!currentUser || currentUser.role !== 'admin') {
+      return Response.json({ error: 'Chỉ Admin được xem lịch sử truy cập.' }, { status: 403 });
     }
 
     const { data: logs, error } = await db
