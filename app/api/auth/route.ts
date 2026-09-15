@@ -82,7 +82,8 @@ export async function GET(request: Request) {
   const db = getSupabaseAdmin();
   if (!db) return json({ error: configurationError() }, 503);
   try {
-    if (!(await hasUsers())) return json({ user: null, setupRequired: true });
+    const token = parseCookie(request, SESSION_COOKIE);
+    if (!token) return json({ user: null });
     const user = await getSessionUser(db, request);
     if (!user) return json({ user: null }, 401);
     return json({ user: safeUser(user) });
@@ -116,9 +117,7 @@ async function setupAdmin(body: Record<string, unknown>) {
   if (await hasUsers()) return json({ error: 'Admin đã được thiết lập.' }, 409);
   const name = text(body.name).trim();
   const phone = text(body.phone).trim();
-  const email = text(body.email)
-    .trim()
-    .toLowerCase();
+  const email = text(body.email).trim().toLowerCase();
   const password = text(body.password);
   if (!name || !phone || !email || password.length < 6) {
     return json(
@@ -217,9 +216,7 @@ async function forgotPassword(body: Record<string, unknown>) {
   const db = getSupabaseAdmin();
   if (!db) return json({ error: configurationError() }, 503);
   const phone = text(body.phone).trim();
-  const email = text(body.email)
-    .trim()
-    .toLowerCase();
+  const email = text(body.email).trim().toLowerCase();
   const { data: user } = await db
     .from('users')
     .select('id')
@@ -245,7 +242,10 @@ async function adminReset(request: Request, body: Record<string, unknown>) {
   const admin = await getSessionUser(db, request);
   const userId = text(body.userId);
   if (!admin || admin.role === 'staff')
-    return json({ error: 'Chỉ Quản trị hoặc Admin được đặt lại mật khẩu.' }, 403);
+    return json(
+      { error: 'Chỉ Quản trị hoặc Admin được đặt lại mật khẩu.' },
+      403,
+    );
   const { data: target } = await db
     .from('users')
     .select('id, role')
@@ -253,7 +253,10 @@ async function adminReset(request: Request, body: Record<string, unknown>) {
     .maybeSingle();
   if (!target) return json({ error: 'Không tìm thấy tài khoản.' }, 404);
   if (admin.role === 'manager' && target.role !== 'staff')
-    return json({ error: 'Quản trị chỉ được đặt lại mật khẩu Nhân viên.' }, 403);
+    return json(
+      { error: 'Quản trị chỉ được đặt lại mật khẩu Nhân viên.' },
+      403,
+    );
   await db
     .from('users')
     .update({
@@ -265,13 +268,19 @@ async function adminReset(request: Request, body: Record<string, unknown>) {
   return json({ ok: true });
 }
 
-async function adminImpersonate(request: Request, body: Record<string, unknown>) {
+async function adminImpersonate(
+  request: Request,
+  body: Record<string, unknown>,
+) {
   const db = getSupabaseAdmin();
   if (!db) return json({ error: configurationError() }, 503);
   const admin = await getSessionUser(db, request);
   const userId = text(body.userId);
   if (!admin || admin.role !== 'admin')
-    return json({ error: 'Chỉ Admin được đăng nhập hỗ trợ tài khoản khác.' }, 403);
+    return json(
+      { error: 'Chỉ Admin được đăng nhập hỗ trợ tài khoản khác.' },
+      403,
+    );
   if (!userId) return json({ error: 'Thiếu tài khoản cần đăng nhập.' }, 400);
   const { data: target } = await db
     .from('users')
@@ -280,7 +289,10 @@ async function adminImpersonate(request: Request, body: Record<string, unknown>)
     .maybeSingle();
   if (!target) return json({ error: 'Không tìm thấy tài khoản.' }, 404);
   if (target.role === 'admin')
-    return json({ error: 'Admin không thể đăng nhập thay một Admin khác.' }, 403);
+    return json(
+      { error: 'Admin không thể đăng nhập thay một Admin khác.' },
+      403,
+    );
 
   const previousToken = parseCookie(request, SESSION_COOKIE);
   if (previousToken) await db.from('sessions').delete().eq('id', previousToken);

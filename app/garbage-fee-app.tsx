@@ -12,6 +12,8 @@ import {
 import {
   Building2,
   CalendarDays,
+  ChevronLeft,
+  ChevronRight,
   CircleDollarSign,
   FileSpreadsheet,
   FileText,
@@ -230,6 +232,7 @@ const themeColors = {
 } as const;
 
 const LOGIN_DEVICE_PREFERENCE = 'garbage-fee-login-device';
+const COLLECTION_PAGE_SIZE = 30;
 
 type AppSettings = {
   appName: string;
@@ -431,6 +434,32 @@ function uid(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
+async function readJsonResponse<T>(response: Response): Promise<T> {
+  const text = await response.text();
+  if (!text.trim()) return {} as T;
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    return {
+      error: 'Máy chủ trả về dữ liệu không hợp lệ. Vui lòng thử lại.',
+    } as T;
+  }
+}
+
+async function fetchWithTimeout(
+  input: RequestInfo | URL,
+  init: RequestInit = {},
+  timeoutMs = 8000,
+) {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } finally {
+    window.clearTimeout(timer);
+  }
+}
+
 function formatDate(value: string) {
   return new Intl.DateTimeFormat('vi-VN', {
     day: '2-digit',
@@ -609,6 +638,10 @@ export default function GarbageFeeApp() {
     Record<string, number>
   >({});
   const [activeMainTab, setActiveMainTab] = useState<MainTabValue>('collect');
+  const [visitedMainTabs, setVisitedMainTabs] = useState<Set<MainTabValue>>(
+    () => new Set(['collect']),
+  );
+  const [collectionPage, setCollectionPage] = useState(1);
   const [recordingPayments, setRecordingPayments] = useState<
     Record<string, boolean>
   >({});
@@ -674,12 +707,13 @@ export default function GarbageFeeApp() {
     } catch {
       window.localStorage.removeItem(LOGIN_DEVICE_PREFERENCE);
     }
-    fetch('/api/auth')
+    fetchWithTimeout('/api/auth', { cache: 'no-store' }, 5000)
       .then(async (response) => {
-        const payload = (await response.json()) as {
+        const payload = await readJsonResponse<{
           user?: User;
           setupRequired?: boolean;
-        };
+          error?: string;
+        }>(response);
         if (payload.setupRequired) {
           setSetupRequired(true);
           return null;
@@ -788,22 +822,28 @@ export default function GarbageFeeApp() {
     return () => window.clearTimeout(timer);
   }, [paymentCountdown]);
 
-  const currentMonthPayments = state.payments.filter(
-    (item) => item.month === selectedMonth,
+  const currentMonthPayments = useMemo(
+    () => state.payments.filter((item) => item.month === selectedMonth),
+    [selectedMonth, state.payments],
   );
-  const paidApartmentIds = new Set(
-    currentMonthPayments.map((item) => item.apartmentId),
+  const currentMonthPaymentByApartment = useMemo(
+    () => new Map(currentMonthPayments.map((item) => [item.apartmentId, item])),
+    [currentMonthPayments],
+  );
+  const paidApartmentIds = useMemo(
+    () => new Set(currentMonthPaymentByApartment.keys()),
+    [currentMonthPaymentByApartment],
   );
 
-  const visibleApartments = state.apartments
-    .filter((apartment) => {
+  const visibleApartments = useMemo(
+    () => state.apartments.filter((apartment) => {
       const block = lookups.blocks.get(apartment.blockId);
       const regionId = block?.regionId ?? '';
       const matchesRegion =
         selectedRegion === 'all' || selectedRegion === regionId;
       const matchesBlock =
         selectedBlock === 'all' || selectedBlock === apartment.blockId;
-      const isPaid = paidApartmentIds.has(apartment.id);
+      const isPaid = currentMonthPaymentByApartment.has(apartment.id);
       const matchesPayment =
         paymentFilter === 'all' ||
         (paymentFilter === 'paid'
@@ -822,7 +862,33 @@ export default function GarbageFeeApp() {
         numeric: true,
         sensitivity: 'base',
       }),
-    );
+    ),
+    [
+      currentMonthPaymentByApartment,
+      lookups.blocks,
+      paymentCountdown,
+      paymentFilter,
+      query,
+      selectedBlock,
+      selectedRegion,
+      state.apartments,
+    ],
+  );
+  const collectionPageCount = Math.max(
+    1,
+    Math.ceil(visibleApartments.length / COLLECTION_PAGE_SIZE),
+  );
+  const activeCollectionPage = Math.min(collectionPage, collectionPageCount);
+  const displayedApartments = useMemo(
+    () => visibleApartments.slice(
+      (activeCollectionPage - 1) * COLLECTION_PAGE_SIZE,
+      activeCollectionPage * COLLECTION_PAGE_SIZE,
+    ),
+    [activeCollectionPage, visibleApartments],
+  );
+  useEffect(() => {
+    if (collectionPage > collectionPageCount) setCollectionPage(collectionPageCount);
+  }, [collectionPage, collectionPageCount]);
   const totalDue = state.apartments.reduce(
     (sum, item) => sum + getFee(item, lookups),
     0,
@@ -839,7 +905,7 @@ export default function GarbageFeeApp() {
     event.preventDefault();
     setAuthLoading(true);
     try {
-      const response = await fetch('/api/auth', {
+      const response = await fetchWithTimeout('/api/auth', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -849,10 +915,10 @@ export default function GarbageFeeApp() {
           remember,
         }),
       });
-      const payload = (await response.json()) as {
+      const payload = await readJsonResponse<{
         user?: User;
         error?: string;
-      };
+      }>(response);
       if (!response.ok || !payload.user)
         throw new Error(payload.error ?? 'Đăng nhập thất bại.');
       if (remember) {
@@ -870,7 +936,11 @@ export default function GarbageFeeApp() {
       await loadState();
     } catch (error) {
       setLoginError(
-        error instanceof Error ? error.message : 'Không thể đăng nhập.',
+        error instanceof DOMException && error.name === 'AbortError'
+          ? 'Kết nối máy chủ quá lâu. Vui lòng thử lại.'
+          : error instanceof Error
+            ? error.message
+            : 'Không thể đăng nhập.',
       );
     } finally {
       setAuthLoading(false);
@@ -899,14 +969,18 @@ export default function GarbageFeeApp() {
         }),
       });
       const payload = (await response.json()) as {
-        state?: AppState;
+        payment?: Payment;
         error?: string;
       };
       if (!response.ok)
         throw new Error(payload.error ?? 'Chưa thể ghi nhận khoản thu.');
-      if (payload.state) setState(payload.state);
+      if (payload.payment) {
+        setState((current) => ({
+          ...current,
+          payments: [payload.payment!, ...current.payments],
+        }));
+      }
       setPaymentCountdown((current) => ({ ...current, [apartment.id]: 3 }));
-      await loadState();
       setDraftPaymentNotes((current) => {
         const { [apartment.id]: _removed, ...remaining } = current;
         return remaining;
@@ -940,8 +1014,17 @@ export default function GarbageFeeApp() {
         note: updates.note ?? '',
       }),
     });
-    const payload = (await response.json()) as { state?: AppState };
-    if (response.ok && payload.state) setState(payload.state);
+    const payload = (await response.json()) as { paymentId?: string; note?: string };
+    if (response.ok && payload.paymentId) {
+      setState((current) => ({
+        ...current,
+        payments: current.payments.map((payment) =>
+          payment.id === payload.paymentId
+            ? { ...payment, note: payload.note ?? '' }
+            : payment,
+        ),
+      }));
+    }
   };
 
   const sendPaymentReceipt = async (
@@ -1147,8 +1230,13 @@ export default function GarbageFeeApp() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'cancel-payment', paymentId }),
     });
-    const payload = (await response.json()) as { state?: AppState };
-    if (response.ok && payload.state) setState(payload.state);
+    const payload = (await response.json()) as { paymentId?: string };
+    if (response.ok && payload.paymentId) {
+      setState((current) => ({
+        ...current,
+        payments: current.payments.filter((payment) => payment.id !== payload.paymentId),
+      }));
+    }
   };
 
   const submitDebtSettlement = async (
@@ -1165,11 +1253,16 @@ export default function GarbageFeeApp() {
       }),
     });
     const payload = (await response.json()) as {
-      state?: AppState;
+      settlement?: DebtSettlement;
       error?: string;
     };
     if (!response.ok) return payload.error ?? 'Chưa thể gửi yêu cầu trả tiền.';
-    if (payload.state) setState(payload.state);
+    if (payload.settlement) {
+      setState((current) => ({
+        ...current,
+        debtSettlements: [payload.settlement!, ...current.debtSettlements],
+      }));
+    }
     return null;
   };
 
@@ -1180,10 +1273,26 @@ export default function GarbageFeeApp() {
       body: JSON.stringify({ action: 'confirm-debt-settlement', settlementId }),
     });
     const payload = (await response.json()) as {
-      state?: AppState;
+      settlementId?: string;
+      confirmedAt?: string;
+      confirmedBy?: string;
       error?: string;
     };
-    if (response.ok && payload.state) setState(payload.state);
+    if (response.ok && payload.settlementId) {
+      setState((current) => ({
+        ...current,
+        debtSettlements: current.debtSettlements.map((settlement) =>
+          settlement.id === payload.settlementId
+            ? {
+                ...settlement,
+                status: 'confirmed',
+                confirmedAt: payload.confirmedAt ?? settlement.confirmedAt,
+                confirmedBy: payload.confirmedBy ?? settlement.confirmedBy,
+              }
+            : settlement,
+        ),
+      }));
+    }
   };
 
   const refreshData = async () => {
@@ -1299,10 +1408,21 @@ export default function GarbageFeeApp() {
       }),
     });
     const payload = (await response.json()) as {
-      state?: AppState;
+      settlementId?: string;
+      amount?: number;
+      method?: DebtSettlement['method'];
       error?: string;
     };
-    if (response.ok && payload.state) setState(payload.state);
+    if (response.ok && payload.settlementId && payload.amount && payload.method) {
+      setState((current) => ({
+        ...current,
+        debtSettlements: current.debtSettlements.map((settlement) =>
+          settlement.id === payload.settlementId
+            ? { ...settlement, amount: payload.amount!, method: payload.method! }
+            : settlement,
+        ),
+      }));
+    }
     return response.ok
       ? null
       : (payload.error ?? 'Chưa thể cập nhật giao dịch.');
@@ -1315,10 +1435,17 @@ export default function GarbageFeeApp() {
       body: JSON.stringify({ action: 'delete-debt-settlement', settlementId }),
     });
     const payload = (await response.json()) as {
-      state?: AppState;
+      settlementId?: string;
       error?: string;
     };
-    if (response.ok && payload.state) setState(payload.state);
+    if (response.ok && payload.settlementId) {
+      setState((current) => ({
+        ...current,
+        debtSettlements: current.debtSettlements.filter(
+          (settlement) => settlement.id !== payload.settlementId,
+        ),
+      }));
+    }
     return response.ok ? null : (payload.error ?? 'Chưa thể xóa giao dịch.');
   };
 
@@ -2133,7 +2260,12 @@ export default function GarbageFeeApp() {
           value={selectedMainTab}
           onValueChange={(value) => {
             const nextTab = value as MainTabValue;
-            if (allowedMainTabs.has(nextTab)) setActiveMainTab(nextTab);
+            if (allowedMainTabs.has(nextTab)) {
+              setActiveMainTab(nextTab);
+              setVisitedMainTabs((tabs) =>
+                tabs.has(nextTab) ? tabs : new Set([...tabs, nextTab]),
+              );
+            }
           }}
           className="mt-5"
         >
@@ -2155,7 +2287,10 @@ export default function GarbageFeeApp() {
                 <Field label="Kỳ thu">
                   <MonthYearSelect
                     value={selectedMonth}
-                    onChange={setSelectedMonth}
+                    onChange={(value) => {
+                      setSelectedMonth(value);
+                      setCollectionPage(1);
+                    }}
                   />
                 </Field>
                 <Field label="Khu vực">
@@ -2165,6 +2300,7 @@ export default function GarbageFeeApp() {
                     onChange={(event) => {
                       setSelectedRegion(event.target.value);
                       setSelectedBlock('all');
+                      setCollectionPage(1);
                     }}
                   >
                     <NativeSelectOption value="all">Tất cả</NativeSelectOption>
@@ -2179,7 +2315,10 @@ export default function GarbageFeeApp() {
                   <NativeSelect
                     className="w-full"
                     value={selectedBlock}
-                    onChange={(event) => setSelectedBlock(event.target.value)}
+                    onChange={(event) => {
+                      setSelectedBlock(event.target.value);
+                      setCollectionPage(1);
+                    }}
                   >
                     <NativeSelectOption value="all">Tất cả</NativeSelectOption>
                     {filteredBlocks.map((block) => (
@@ -2196,7 +2335,10 @@ export default function GarbageFeeApp() {
                       className="pl-8"
                       placeholder="Số căn hộ hoặc tên chủ hộ"
                       value={query}
-                      onChange={(event) => setQuery(event.target.value)}
+                      onChange={(event) => {
+                        setQuery(event.target.value);
+                        setCollectionPage(1);
+                      }}
                     />
                   </div>
                 </Field>
@@ -2208,7 +2350,10 @@ export default function GarbageFeeApp() {
                   type="button"
                   size="sm"
                   variant={paymentFilter === 'unpaid' ? 'default' : 'outline'}
-                  onClick={() => setPaymentFilter('unpaid')}
+                  onClick={() => {
+                    setPaymentFilter('unpaid');
+                    setCollectionPage(1);
+                  }}
                 >
                   Chưa thu
                 </Button>
@@ -2216,7 +2361,10 @@ export default function GarbageFeeApp() {
                   type="button"
                   size="sm"
                   variant={paymentFilter === 'paid' ? 'default' : 'outline'}
-                  onClick={() => setPaymentFilter('paid')}
+                  onClick={() => {
+                    setPaymentFilter('paid');
+                    setCollectionPage(1);
+                  }}
                 >
                   Đã thu
                 </Button>
@@ -2224,7 +2372,10 @@ export default function GarbageFeeApp() {
                   type="button"
                   size="sm"
                   variant={paymentFilter === 'all' ? 'default' : 'outline'}
-                  onClick={() => setPaymentFilter('all')}
+                  onClick={() => {
+                    setPaymentFilter('all');
+                    setCollectionPage(1);
+                  }}
                 >
                   Tất cả
                 </Button>
@@ -2252,14 +2403,12 @@ export default function GarbageFeeApp() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {visibleApartments.map((apartment) => {
+                  {displayedApartments.map((apartment) => {
                     const block = lookups.blocks.get(apartment.blockId);
                     const region = block
                       ? lookups.regions.get(block.regionId)
                       : null;
-                    const payment = currentMonthPayments.find(
-                      (item) => item.apartmentId === apartment.id,
-                    );
+                    const payment = currentMonthPaymentByApartment.get(apartment.id);
                     const collector = payment
                       ? lookups.users.get(payment.collectorId)
                       : null;
@@ -2508,10 +2657,40 @@ export default function GarbageFeeApp() {
                   })}
                 </TableBody>
               </Table>
+              {visibleApartments.length > COLLECTION_PAGE_SIZE && (
+                <div className="mt-3 flex items-center justify-between gap-3 border-t pt-3 text-sm text-muted-foreground">
+                  <span>
+                    Hiển thị {(activeCollectionPage - 1) * COLLECTION_PAGE_SIZE + 1}-{Math.min(activeCollectionPage * COLLECTION_PAGE_SIZE, visibleApartments.length)} / {visibleApartments.length} căn
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      aria-label="Trang trước"
+                      disabled={activeCollectionPage === 1}
+                      onClick={() => setCollectionPage((page) => Math.max(1, page - 1))}
+                    >
+                      <ChevronLeft />
+                    </Button>
+                    <span>Trang {activeCollectionPage}/{collectionPageCount}</span>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      aria-label="Trang sau"
+                      disabled={activeCollectionPage === collectionPageCount}
+                      onClick={() => setCollectionPage((page) => Math.min(collectionPageCount, page + 1))}
+                    >
+                      <ChevronRight />
+                    </Button>
+                  </div>
+                </div>
+              )}
             </section>
           </TabsContent>
 
-          <TabsContent value="stats" className="mt-4">
+          {visitedMainTabs.has('stats') && <TabsContent value="stats" className="mt-4">
             <StatsView
               state={state}
               month={selectedMonth}
@@ -2521,9 +2700,9 @@ export default function GarbageFeeApp() {
               lookups={lookups}
               settlements={state.debtSettlements}
             />
-          </TabsContent>
+          </TabsContent>}
 
-          {canManage && (
+          {canManage && visitedMainTabs.has('users') && (
             <TabsContent value="users" className="mt-4">
               <AdminUsers
                 users={state.users}
@@ -2539,7 +2718,7 @@ export default function GarbageFeeApp() {
             </TabsContent>
           )}
 
-          {canManage && (
+          {canManage && visitedMainTabs.has('areas') && (
             <TabsContent value="areas" className="mt-4">
               <AdminAreas
                 state={state}
@@ -2566,7 +2745,7 @@ export default function GarbageFeeApp() {
             </TabsContent>
           )}
 
-          {canManage && (
+          {canManage && visitedMainTabs.has('debts') && (
             <TabsContent value="debts" className="mt-4">
               <DebtManagement
                 users={state.users}
@@ -2579,13 +2758,13 @@ export default function GarbageFeeApp() {
             </TabsContent>
           )}
 
-          {currentUser.role === 'admin' && (
+          {currentUser.role === 'admin' && visitedMainTabs.has('access-history') && (
             <TabsContent value="access-history" className="mt-4">
               <AccessHistoryPanel />
             </TabsContent>
           )}
 
-          {currentUser.role === 'admin' && (
+          {currentUser.role === 'admin' && visitedMainTabs.has('settings') && (
             <TabsContent value="settings" className="mt-4">
               <CustomizationPanel
                 settings={state.settings}

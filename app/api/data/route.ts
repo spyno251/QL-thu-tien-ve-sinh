@@ -271,7 +271,7 @@ export async function POST(request: Request) {
         amount: payment.amount,
         note: String(payment.note ?? '').trim(),
         method: payment.method === 'transfer' ? 'transfer' : 'cash',
-      }).select('id').maybeSingle();
+      }).select('id, apartment_id, collector_id, month, paid_at, amount, note, method').maybeSingle();
       if (error?.code === '23505')
         return json({ error: 'Căn hộ này đã được thu trong kỳ này.' }, 409);
       if (error) throw error;
@@ -290,7 +290,16 @@ export async function POST(request: Request) {
       );
       return json({
         ok: true,
-        state: visibleState(await readState(), currentUser),
+        payment: {
+          id: insertedPayment.id,
+          apartmentId: insertedPayment.apartment_id,
+          collectorId: insertedPayment.collector_id,
+          month: insertedPayment.month,
+          paidAt: insertedPayment.paid_at,
+          amount: insertedPayment.amount,
+          note: insertedPayment.note,
+          method: insertedPayment.method,
+        },
       });
     }
     if (payload.action === 'cancel-payment') {
@@ -322,7 +331,7 @@ export async function POST(request: Request) {
       );
       return json({
         ok: true,
-        state: visibleState(await readState(), currentUser),
+        paymentId,
       });
     }
     if (payload.action === 'update-payment-note') {
@@ -347,10 +356,7 @@ export async function POST(request: Request) {
       await recordChange(currentUser.id, 'payment', paymentId, 'Đã cập nhật ghi chú', {
         note: String(payload.note ?? '').trim(),
       });
-      return json({
-        ok: true,
-        state: visibleState(await readState(), currentUser),
-      });
+      return json({ ok: true, paymentId, note: String(payload.note ?? '').trim() });
     }
     if (payload.action === 'submit-debt-settlement') {
       if (currentUser.role !== 'staff')
@@ -384,16 +390,18 @@ export async function POST(request: Request) {
       if (amount > totalCollected - totalCommitted)
         return json({ error: 'Số tiền nộp vượt quá công nợ hiện có.' }, 400);
       const settlementId = crypto.randomUUID();
-      const { error } = await db.from('debt_settlements').insert({
+      const submittedAt = new Date().toISOString();
+      const { data: insertedSettlement, error } = await db.from('debt_settlements').insert({
         id: settlementId,
         staff_id: currentUser.id,
         amount,
         debt_at_submission: debtAtSubmission,
         method: payload.method === 'transfer' ? 'transfer' : 'cash',
-        submitted_at: new Date().toISOString(),
+        submitted_at: submittedAt,
         status: 'pending',
-      });
+      }).select('id, staff_id, amount, debt_at_submission, method, submitted_at, confirmed_at, confirmed_by, status').maybeSingle();
       if (error) throw error;
+      if (!insertedSettlement) return json({ error: 'Chưa thể xác nhận yêu cầu vừa gửi.' }, 503);
       await recordChange(
         currentUser.id,
         'debt_settlement',
@@ -407,7 +415,17 @@ export async function POST(request: Request) {
       );
       return json({
         ok: true,
-        state: visibleState(await readState(), currentUser),
+        settlement: {
+          id: insertedSettlement.id,
+          staffId: insertedSettlement.staff_id,
+          amount: insertedSettlement.amount,
+          debtAtSubmission: insertedSettlement.debt_at_submission,
+          method: insertedSettlement.method,
+          submittedAt: insertedSettlement.submitted_at,
+          confirmedAt: insertedSettlement.confirmed_at,
+          confirmedBy: insertedSettlement.confirmed_by,
+          status: insertedSettlement.status,
+        },
       });
     }
     if (payload.action === 'confirm-debt-settlement') {
@@ -424,11 +442,12 @@ export async function POST(request: Request) {
       if (!settlement) return json({ error: 'Không tìm thấy giao dịch.' }, 404);
       if (!(await managerMayManage(settlement.staff_id)))
         return json({ error: 'Quản trị chỉ được xác nhận công nợ của Nhân viên.' }, 403);
+      const confirmedAt = new Date().toISOString();
       const { data, error } = await db
         .from('debt_settlements')
         .update({
           status: 'confirmed',
-          confirmed_at: new Date().toISOString(),
+          confirmed_at: confirmedAt,
           confirmed_by: currentUser.id,
         })
         .eq('id', settlementId)
@@ -448,10 +467,7 @@ export async function POST(request: Request) {
           method: settlement.method as DebtSettlement['method'],
         }),
       );
-      return json({
-        ok: true,
-        state: visibleState(await readState(), currentUser),
-      });
+      return json({ ok: true, settlementId, confirmedAt, confirmedBy: currentUser.id });
     }
     if (payload.action === 'update-debt-settlement') {
       if (currentUser.role === 'staff')
@@ -513,7 +529,7 @@ export async function POST(request: Request) {
           method: payload.method === 'transfer' ? 'transfer' : 'cash',
         }),
       );
-      return json({ ok: true, state: visibleState(await readState(), currentUser) });
+      return json({ ok: true, settlementId, amount, method: payload.method === 'transfer' ? 'transfer' : 'cash' });
     }
     if (payload.action === 'delete-debt-settlement') {
       if (currentUser.role === 'staff')
@@ -542,7 +558,7 @@ export async function POST(request: Request) {
           method: settlement.method as DebtSettlement['method'],
         }),
       );
-      return json({ ok: true, state: visibleState(await readState(), currentUser) });
+      return json({ ok: true, settlementId });
     }
     if (!payload.state) return json({ error: 'Missing state' }, 400);
     const existing = await readState();
@@ -580,10 +596,7 @@ export async function POST(request: Request) {
       soCanHo: nextState.apartments.length,
       soTaiKhoan: nextState.users.length,
     });
-    return json({
-      ok: true,
-      state: visibleState(await readState(), currentUser),
-    });
+    return json({ ok: true });
   } catch {
     return json({ error: 'Chưa thể lưu dữ liệu.' }, 503);
   }
@@ -775,10 +788,10 @@ async function saveState(state: AppState) {
   if (!db) throw new Error(configurationError());
   const [usersResult, regionsResult, blocksResult, apartmentsResult] =
     await Promise.all([
-      db.from('users').select('id, password'),
-      db.from('regions').select('id'),
-      db.from('blocks').select('id'),
-      db.from('apartments').select('id'),
+      db.from('users').select('id, phone, password, email, name, role, must_change_password'),
+      db.from('regions').select('id, name, default_fee'),
+      db.from('blocks').select('id, region_id, name'),
+      db.from('apartments').select('id, block_id, code, owner, phone, note, monthly_fee'),
     ]);
   if (
     usersResult.error ||
@@ -791,6 +804,10 @@ async function saveState(state: AppState) {
   const passwordById = new Map(
     storedRows.map((item) => [item.id, item.password]),
   );
+  const usersById = new Map(storedRows.map((item) => [item.id, item]));
+  const regionsById = new Map((regionsResult.data ?? []).map((item) => [item.id, item]));
+  const blocksById = new Map((blocksResult.data ?? []).map((item) => [item.id, item]));
+  const apartmentsById = new Map((apartmentsResult.data ?? []).map((item) => [item.id, item]));
   const userIds = new Set(state.users.map((user) => user.id));
   const removedUserIds = storedRows
     .filter((user) => !userIds.has(user.id))
@@ -834,7 +851,15 @@ async function saveState(state: AppState) {
     fail((await db.from('users').delete().in('id', removedUserIds)).error);
   }
   const users = await Promise.all(
-    state.users.map(async (user) => ({
+    state.users.filter((user) => {
+      const stored = usersById.get(user.id);
+      return !stored ||
+        stored.phone !== user.phone ||
+        stored.email !== user.email ||
+        stored.name !== user.name ||
+        stored.role !== user.role ||
+        Boolean(stored.must_change_password) !== user.mustChangePassword;
+    }).map(async (user) => ({
       id: user.id,
       phone: user.phone,
       email: user.email,
@@ -846,50 +871,60 @@ async function saveState(state: AppState) {
     })),
   );
   if (users.length) fail((await db.from('users').upsert(users)).error);
-  if (state.regions.length)
+  const regions = state.regions
+    .filter((item) => {
+      const stored = regionsById.get(item.id);
+      return !stored || stored.name !== item.name || stored.default_fee !== item.defaultFee;
+    })
+    .map((item) => ({ id: item.id, name: item.name, default_fee: item.defaultFee }));
+  if (regions.length)
     fail(
       (
         await db
           .from('regions')
-          .upsert(
-            state.regions.map((item) => ({
-              id: item.id,
-              name: item.name,
-              default_fee: item.defaultFee,
-            })),
-          )
+          .upsert(regions)
       ).error,
     );
-  if (state.blocks.length)
+  const blocks = state.blocks
+    .filter((item) => {
+      const stored = blocksById.get(item.id);
+      return !stored || stored.region_id !== item.regionId || stored.name !== item.name;
+    })
+    .map((item) => ({ id: item.id, region_id: item.regionId, name: item.name }));
+  if (blocks.length)
     fail(
       (
         await db
           .from('blocks')
-          .upsert(
-            state.blocks.map((item) => ({
-              id: item.id,
-              region_id: item.regionId,
-              name: item.name,
-            })),
-          )
+          .upsert(blocks)
       ).error,
     );
-  if (state.apartments.length)
+  const apartments = state.apartments
+    .filter((item) => {
+      const stored = apartmentsById.get(item.id);
+      return !stored ||
+        stored.block_id !== item.blockId ||
+        stored.code !== item.code ||
+        stored.owner !== item.owner ||
+        stored.phone !== item.phone ||
+        stored.note !== item.note ||
+        stored.monthly_fee !== item.monthlyFee;
+    })
+    .map((item) => ({
+      id: item.id,
+      block_id: item.blockId,
+      code: item.code,
+      owner: item.owner,
+      phone: item.phone,
+      note: item.note,
+      monthly_fee: item.monthlyFee,
+    }));
+  if (apartments.length)
     fail(
       (
         await db
           .from('apartments')
-          .upsert(
-            state.apartments.map((item) => ({
-              id: item.id,
-              block_id: item.blockId,
-              code: item.code,
-              owner: item.owner,
-              phone: item.phone,
-              note: item.note,
-              monthly_fee: item.monthlyFee,
-            })),
-          )
+          .upsert(apartments)
       ).error,
     );
   fail(
