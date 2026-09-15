@@ -11,6 +11,13 @@ const VERCEL_TEAM_ID =
 
 const APP_VERSIONS = [
   {
+    id: 'v1.2.0-stable',
+    name: 'v1.2.0-stable',
+    commit: 'fca4cf374f1ed6d2466bc7de4808ac7cb976b20c',
+    description:
+      'Bản ổn định với tối ưu tốc độ, 40 căn mỗi trang và sắp xếp Thu tháng.',
+  },
+  {
     id: 'v1.1.0-stable',
     name: 'v1.1.0-stable',
     commit: 'dfaf3a850264c5ef32d0b799e3ea42a5994be956',
