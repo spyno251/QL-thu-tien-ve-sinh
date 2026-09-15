@@ -232,7 +232,7 @@ const themeColors = {
 } as const;
 
 const LOGIN_DEVICE_PREFERENCE = 'garbage-fee-login-device';
-const COLLECTION_PAGE_SIZE = 30;
+const COLLECTION_PAGE_SIZE = 40;
 
 type AppSettings = {
   appName: string;
@@ -857,15 +857,24 @@ export default function GarbageFeeApp() {
         text.includes(query.toLowerCase())
       );
     })
-    .sort((a, b) =>
-      a.code.localeCompare(b.code, 'vi', {
-        numeric: true,
-        sensitivity: 'base',
-      }),
-    ),
+    .sort((a, b) => {
+      const aBlock = lookups.blocks.get(a.blockId);
+      const bBlock = lookups.blocks.get(b.blockId);
+      const aRegion = aBlock ? lookups.regions.get(aBlock.regionId) : undefined;
+      const bRegion = bBlock ? lookups.regions.get(bBlock.regionId) : undefined;
+      const compare = (left: string, right: string) =>
+        left.localeCompare(right, 'vi', { numeric: true, sensitivity: 'base' });
+
+      return (
+        compare(aRegion?.name ?? '', bRegion?.name ?? '') ||
+        compare(aBlock?.name ?? '', bBlock?.name ?? '') ||
+        compare(a.code, b.code)
+      );
+    }),
     [
       currentMonthPaymentByApartment,
       lookups.blocks,
+      lookups.regions,
       paymentCountdown,
       paymentFilter,
       query,
