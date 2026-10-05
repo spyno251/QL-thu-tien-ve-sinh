@@ -598,6 +598,27 @@ function formatAmountInput(value: string) {
   return digits ? formatNumber(Number(digits)) : '';
 }
 
+function normalizeApartmentCode(value: string) {
+  const trimmed = value.trim().replace(/\s+/g, ' ');
+  const number = trimmed.replace(/^căn\s*/i, '');
+  if (/^\d+$/.test(number)) {
+    return `Căn ${number.padStart(Math.max(2, number.length), '0')}`;
+  }
+  return trimmed;
+}
+
+function apartmentCodeKey(value: string) {
+  const normalized = normalizeApartmentCode(value).toLocaleLowerCase('vi-VN');
+  const number = normalized.replace(/^căn\s*/i, '');
+  return /^\d+$/.test(number)
+    ? `number:${Number.parseInt(number, 10)}`
+    : normalized;
+}
+
+function apartmentIdentityKey(apartment: Apartment) {
+  return `${apartment.blockId}:${apartmentCodeKey(apartment.code)}`;
+}
+
 function getBlockDefaultFee(
   blockId: string,
   regions: Region[],
@@ -610,6 +631,7 @@ function getBlockDefaultFee(
 export default function GarbageFeeApp() {
   const [state, setState] = useState<AppState>(initialState);
   const commitQueue = useRef(Promise.resolve());
+  const pendingApartmentKeys = useRef(new Set<string>());
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([]);
   const [loginPhone, setLoginPhone] = useState('');
@@ -683,6 +705,7 @@ export default function GarbageFeeApp() {
     end: '56',
     monthlyFee: '300.000',
   });
+  const [addingApartment, setAddingApartment] = useState(false);
   const [newUser, setNewUser] = useState({
     name: '',
     phone: '',
@@ -785,6 +808,7 @@ export default function GarbageFeeApp() {
     : 'collect';
 
   const commit = async (nextState: AppState) => {
+    let saved = false;
     setState(nextState);
     setSyncStatus('saving');
 
@@ -804,11 +828,13 @@ export default function GarbageFeeApp() {
         const payload = (await response.json()) as { state?: AppState };
         if (payload.state) setState(payload.state);
         setSyncStatus('synced');
+        saved = true;
       } catch {
         setSyncStatus('local');
       }
     });
     await commitQueue.current;
+    return saved;
   };
 
   const lookups = useMemo(() => {
@@ -849,8 +875,29 @@ export default function GarbageFeeApp() {
     [currentMonthPaymentByApartment],
   );
 
+  // Old duplicate records are retained for audit safety, but represent one bill.
+  const activeApartments = useMemo(() => {
+    const unique = new Map<string, Apartment>();
+    for (const apartment of state.apartments) {
+      const block = lookups.blocks.get(apartment.blockId);
+      const region = block ? lookups.regions.get(block.regionId) : undefined;
+      if (!apartment.isActive || !block?.isActive || !region?.isActive) continue;
+
+      const key = apartmentIdentityKey(apartment);
+      const existing = unique.get(key);
+      if (
+        !existing ||
+        (!currentMonthPaymentByApartment.has(existing.id) &&
+          currentMonthPaymentByApartment.has(apartment.id))
+      ) {
+        unique.set(key, apartment);
+      }
+    }
+    return [...unique.values()];
+  }, [currentMonthPaymentByApartment, lookups.blocks, lookups.regions, state.apartments]);
+
   const visibleApartments = useMemo(
-    () => state.apartments.filter((apartment) => {
+    () => activeApartments.filter((apartment) => {
       const block = lookups.blocks.get(apartment.blockId);
       const regionId = block?.regionId ?? '';
       const matchesRegion =
@@ -863,9 +910,8 @@ export default function GarbageFeeApp() {
         (paymentFilter === 'paid'
           ? isPaid
           : !isPaid || paymentCountdown[apartment.id] !== undefined);
-      const text = `${apartment.code} ${apartment.owner}`.toLowerCase();
+      const text = `${normalizeApartmentCode(apartment.code)} ${apartment.owner}`.toLowerCase();
       return (
-        apartment.isActive && block?.isActive && lookups.regions.get(regionId)?.isActive &&
         matchesRegion &&
         matchesBlock &&
         matchesPayment &&
@@ -883,7 +929,7 @@ export default function GarbageFeeApp() {
       return (
         compare(aRegion?.name ?? '', bRegion?.name ?? '') ||
         compare(aBlock?.name ?? '', bBlock?.name ?? '') ||
-        compare(a.code, b.code)
+        compare(normalizeApartmentCode(a.code), normalizeApartmentCode(b.code))
       );
     }),
     [
@@ -895,7 +941,7 @@ export default function GarbageFeeApp() {
       query,
       selectedBlock,
       selectedRegion,
-      state.apartments,
+      activeApartments,
     ],
   );
   const collectionPageCount = Math.max(
@@ -913,11 +959,13 @@ export default function GarbageFeeApp() {
   useEffect(() => {
     if (collectionPage > collectionPageCount) setCollectionPage(collectionPageCount);
   }, [collectionPage, collectionPageCount]);
-  const activeApartments = state.apartments.filter((item) => item.isActive);
   const totalDue = activeApartments.reduce(
     (sum, item) => sum + getFee(item, lookups),
     0,
   );
+  const paidActiveApartmentCount = activeApartments.filter((apartment) =>
+    paidApartmentIds.has(apartment.id),
+  ).length;
   const totalPaid = currentMonthPayments.reduce(
     (sum, item) => sum + item.amount,
     0,
@@ -1090,7 +1138,7 @@ export default function GarbageFeeApp() {
       }
       const [year, month] = payment.month.split('-');
       const rows = [
-        ['Căn Hộ:', `${apartment.code}-${region?.name ?? '-'}`],
+        ['Căn Hộ:', `${normalizeApartmentCode(apartment.code)}-${region?.name ?? '-'}`],
         ['Tên chủ hộ:', apartment.owner || '-'],
         ['Số điện thoại:', apartment.phone || '-'],
         ['Kỳ thanh toán:', `${month}/${year}`],
@@ -1219,11 +1267,11 @@ export default function GarbageFeeApp() {
       const blob = await new Promise<Blob>((resolve) =>
         pdfMake.createPdf(documentDefinition).getBlob(resolve),
       );
-      const filename = `xac-nhan-thanh-toan-${apartment.code.replace(/[^a-zA-Z0-9]+/g, '-')}-${payment.month}.pdf`;
+      const filename = `xac-nhan-thanh-toan-${normalizeApartmentCode(apartment.code).replace(/[^a-zA-Z0-9]+/g, '-')}-${payment.month}.pdf`;
       const file = new File([blob], filename, { type: 'application/pdf' });
       const shareData = {
         title: 'Xác nhận thanh toán',
-        text: `Biên nhận ${apartment.code} - kỳ ${payment.month}`,
+        text: `Biên nhận ${normalizeApartmentCode(apartment.code)} - kỳ ${payment.month}`,
         files: [file],
       };
       if (
@@ -1572,7 +1620,7 @@ export default function GarbageFeeApp() {
         await commit({ ...state, payments: [payment, ...state.payments] });
         return {
           status: 'recorded',
-          apartmentCode: apartment.code,
+          apartmentCode: normalizeApartmentCode(apartment.code),
           month: selectedMonth,
           amount,
           collector: currentUser.name,
@@ -1747,38 +1795,73 @@ export default function GarbageFeeApp() {
     });
   };
 
-  const addApartment = (event: FormEvent<HTMLFormElement>) => {
+  const addApartment = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!newApartment.blockId || !newApartment.code.trim()) return;
+    const block = state.blocks.find(
+      (item) => item.id === newApartment.blockId && item.isActive,
+    );
+    const region = block
+      ? state.regions.find((item) => item.id === block.regionId && item.isActive)
+      : undefined;
+    const code = normalizeApartmentCode(newApartment.code);
+    if (!block || !region) {
+      setQuickSetupMessage('Chọn khu vực và dãy đang hoạt động trước khi thêm căn.');
+      return;
+    }
+    if (!code) return;
+
+    const identityKey = `${block.id}:${apartmentCodeKey(code)}`;
+    const alreadyExists = state.apartments.some(
+      (item) =>
+        item.blockId === block.id &&
+        apartmentCodeKey(item.code) === apartmentCodeKey(code),
+    );
+    if (alreadyExists || pendingApartmentKeys.current.has(identityKey)) {
+      setQuickSetupMessage(`${code} đã có trong ${block.name || region.name}.`);
+      return;
+    }
+
     const monthlyFee = parseAmount(
       newApartment.monthlyFee,
       getBlockDefaultFee(newApartment.blockId, state.regions, state.blocks),
     );
-    void commit({
-      ...state,
-      apartments: [
-        ...state.apartments,
-        {
-          id: uid('apt'),
-          blockId: newApartment.blockId,
-          code: newApartment.code.trim(),
-          owner: newApartment.owner.trim(),
-          phone: newApartment.phone.trim(),
-          note: '',
-          monthlyFee,
-          isActive: true,
-        },
-      ],
-    });
-    setNewApartment({
-      ...newApartment,
-      code: '',
-      owner: '',
-      phone: '',
-      monthlyFee: formatNumber(
-        getBlockDefaultFee(newApartment.blockId, state.regions, state.blocks),
-      ),
-    });
+    pendingApartmentKeys.current.add(identityKey);
+    setAddingApartment(true);
+    try {
+      const saved = await commit({
+        ...state,
+        apartments: [
+          ...state.apartments,
+          {
+            id: uid('apt'),
+            blockId: newApartment.blockId,
+            code,
+            owner: newApartment.owner.trim(),
+            phone: newApartment.phone.trim(),
+            note: '',
+            monthlyFee,
+            isActive: true,
+          },
+        ],
+      });
+      if (!saved) {
+        setQuickSetupMessage('Chưa thể lưu căn mới. Vui lòng kiểm tra kết nối rồi thử lại.');
+        return;
+      }
+      setNewApartment({
+        ...newApartment,
+        code: '',
+        owner: '',
+        phone: '',
+        monthlyFee: formatNumber(
+          getBlockDefaultFee(newApartment.blockId, state.regions, state.blocks),
+        ),
+      });
+      setQuickSetupMessage(`Đã thêm ${code} vào ${block.name || region.name}.`);
+    } finally {
+      pendingApartmentKeys.current.delete(identityKey);
+      setAddingApartment(false);
+    }
   };
 
   const updateApartment = (id: string, patch: Partial<Apartment>) => {
@@ -1807,12 +1890,16 @@ export default function GarbageFeeApp() {
       return;
     }
     const width = Math.max(2, String(end).length);
-    const existing = new Set(state.apartments.filter((item) => item.blockId === block.id).map((item) => item.code.trim().toLowerCase()));
+    const existing = new Set(
+      state.apartments
+        .filter((item) => item.blockId === block.id)
+        .map((item) => apartmentCodeKey(item.code)),
+    );
     const monthlyFee = parseAmount(batchApartments.monthlyFee, getBlockDefaultFee(block.id, state.regions, state.blocks));
     const additions: Apartment[] = [];
     for (let number = start; number <= end; number += 1) {
-      const code = `${batchApartments.prefix.trim()} ${String(number).padStart(width, '0')}`;
-      if (!existing.has(code.toLowerCase())) additions.push({ id: uid('apt'), blockId: block.id, code, owner: '', phone: '', note: '', monthlyFee, isActive: true });
+      const code = normalizeApartmentCode(`${batchApartments.prefix.trim()} ${String(number).padStart(width, '0')}`);
+      if (!existing.has(apartmentCodeKey(code))) additions.push({ id: uid('apt'), blockId: block.id, code, owner: '', phone: '', note: '', monthlyFee, isActive: true });
     }
     if (!additions.length) {
       setQuickSetupMessage('Các căn trong khoảng này đã tồn tại ở dãy đã chọn.');
@@ -2280,7 +2367,7 @@ export default function GarbageFeeApp() {
           />
           <Metric
             label="Đã thu"
-            value={`${formatNumber(paidApartmentIds.size)}/${formatNumber(activeApartments.length)}`}
+            value={`${formatNumber(paidActiveApartmentCount)}/${formatNumber(activeApartments.length)}`}
             icon={ReceiptText}
           />
           <Metric
@@ -2463,7 +2550,7 @@ export default function GarbageFeeApp() {
                           <div className="grid min-h-[168px] grid-rows-[40px_44px_44px_40px] divide-y">
                             <div className="flex items-center gap-1.5 bg-primary/25 px-3 font-semibold">
                               <span>
-                                {apartment.code} - {region?.name ?? '-'}
+                                {normalizeApartmentCode(apartment.code)} - {region?.name ?? '-'}
                               </span>
                               {apartment.phone && (
                                 <a
@@ -2774,6 +2861,7 @@ export default function GarbageFeeApp() {
                 newApartment={newApartment}
                 setNewApartment={setNewApartment}
                 addApartment={addApartment}
+                addingApartment={addingApartment}
                 updateApartment={updateApartment}
                 deleteApartment={deleteApartment}
                 quickSetup={quickSetup}
@@ -2848,7 +2936,8 @@ function fullApartmentLabel(
   if (!apartment) return '-';
   const block = blocks.get(apartment.blockId);
   const region = block ? regions.get(block.regionId) : undefined;
-  return region?.name ? `${apartment.code} - ${region.name}` : apartment.code;
+  const code = normalizeApartmentCode(apartment.code);
+  return region?.name ? `${code} - ${region.name}` : code;
 }
 
 function AdminSetupScreen({
@@ -5395,7 +5484,8 @@ function AdminAreas(props: {
     phone: string;
     monthlyFee: string;
   }) => void;
-  addApartment: (event: FormEvent<HTMLFormElement>) => void;
+  addApartment: (event: FormEvent<HTMLFormElement>) => Promise<void>;
+  addingApartment: boolean;
   updateApartment: (id: string, patch: Partial<Apartment>) => void;
   deleteApartment: (id: string) => void;
   quickSetup: {
@@ -5765,7 +5855,15 @@ function AdminAreas(props: {
                 })
               }
             >
-              {state.blocks.map((block) => (
+              {state.blocks
+                .filter(
+                  (block) =>
+                    block.isActive &&
+                    state.regions.some(
+                      (region) => region.id === block.regionId && region.isActive,
+                    ),
+                )
+                .map((block) => (
                 <NativeSelectOption key={block.id} value={block.id}>
                   {blockLabel(block)}
                 </NativeSelectOption>
@@ -5819,9 +5917,9 @@ function AdminAreas(props: {
                 })
               }
             />
-            <Button type="submit" className="h-9 px-2.5 sm:px-4">
+            <Button type="submit" className="h-9 px-2.5 sm:px-4" disabled={props.addingApartment}>
               <Plus className="size-4" />
-              Thêm
+              {props.addingApartment ? 'Đang thêm' : 'Thêm'}
             </Button>
           </div>
         </form>
