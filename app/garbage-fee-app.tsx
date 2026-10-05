@@ -277,7 +277,7 @@ type AppVersion = {
 
 type AccessLog = {
   id: string;
-  action: 'login' | 'logout' | 'support_login';
+  action: 'login' | 'logout' | 'support_login' | 'session_resume';
   createdAt: string;
   user: { id: string; name: string; role: Role } | null;
   actor: { id: string; name: string; role: Role } | null;
@@ -3671,6 +3671,7 @@ function AccessHistoryPanel() {
   const actionLabel = (log: AccessLog) => {
     if (log.action === 'login') return 'Đăng nhập';
     if (log.action === 'logout') return 'Đăng xuất';
+    if (log.action === 'session_resume') return 'Truy cập ứng dụng';
     return `Đăng nhập hỗ trợ${log.actor ? ` bởi ${log.actor.name}` : ''}`;
   };
 
@@ -3762,8 +3763,8 @@ function AccessHistoryPanel() {
           <div>
             <h2 className="text-lg font-semibold">Lịch sử truy cập</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Ghi nhận tối đa 300 lần đăng nhập, đăng xuất và hỗ trợ tài khoản
-              gần nhất.
+              Ghi nhận tối đa 300 lần đăng nhập, truy cập hằng ngày, đăng xuất
+              và hỗ trợ tài khoản gần nhất.
             </p>
           </div>
           <Button
@@ -5586,6 +5587,9 @@ function AdminAreas(props: {
   addApartmentRange: (event: FormEvent<HTMLFormElement>) => Promise<void>;
 }) {
   const { state } = props;
+  const [apartmentRegionFilter, setApartmentRegionFilter] = useState('all');
+  const [apartmentSearch, setApartmentSearch] = useState('');
+  const [apartmentStatusFilter, setApartmentStatusFilter] = useState<'active' | 'inactive' | 'all'>('active');
   const regionName = (id: string) =>
     state.regions.find((item) => item.id === id)?.name ?? '-';
   const blockLabel = (block: Block) => regionName(block.regionId);
@@ -5603,6 +5607,20 @@ function AdminAreas(props: {
     }
     return totals;
   }, [state.apartments, state.blocks]);
+  const filteredApartments = useMemo(() => {
+    const keyword = apartmentSearch.trim().toLocaleLowerCase('vi-VN');
+    return state.apartments.filter((apartment) => {
+      const block = state.blocks.find((item) => item.id === apartment.blockId);
+      const matchesRegion =
+        apartmentRegionFilter === 'all' || block?.regionId === apartmentRegionFilter;
+      const matchesStatus =
+        apartmentStatusFilter === 'all' ||
+        (apartmentStatusFilter === 'active' ? apartment.isActive : !apartment.isActive);
+      const searchText = `${normalizeApartmentCode(apartment.code)} ${apartment.owner} ${apartment.phone}`
+        .toLocaleLowerCase('vi-VN');
+      return matchesRegion && matchesStatus && (!keyword || searchText.includes(keyword));
+    });
+  }, [apartmentRegionFilter, apartmentSearch, apartmentStatusFilter, state.apartments, state.blocks]);
 
   return (
     <section className="grid gap-3 xl:grid-cols-[minmax(310px,0.85fr)_minmax(0,1.85fr)]">
@@ -5855,7 +5873,39 @@ function AdminAreas(props: {
       </div>
 
       <div className="rounded-lg border bg-card p-2.5 sm:p-4 xl:col-span-1">
-        <h2 className="mb-2 text-base font-semibold">Căn hộ</h2>
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-base font-semibold">Căn hộ</h2>
+          <span className="text-xs text-muted-foreground">{filteredApartments.length} căn</span>
+        </div>
+        <div className="mb-3 grid gap-1.5 sm:grid-cols-[minmax(130px,0.7fr)_minmax(180px,1fr)_130px]">
+          <NativeSelect
+            className="h-9 min-w-0"
+            value={apartmentRegionFilter}
+            onChange={(event) => setApartmentRegionFilter(event.target.value)}
+          >
+            <NativeSelectOption value="all">Tất cả khu vực</NativeSelectOption>
+            {state.regions.map((region) => (
+              <NativeSelectOption key={region.id} value={region.id}>
+                {region.name}
+              </NativeSelectOption>
+            ))}
+          </NativeSelect>
+          <Input
+            className="h-9 min-w-0"
+            placeholder="Tìm số căn, chủ hộ hoặc SĐT"
+            value={apartmentSearch}
+            onChange={(event) => setApartmentSearch(event.target.value)}
+          />
+          <NativeSelect
+            className="h-9 min-w-0"
+            value={apartmentStatusFilter}
+            onChange={(event) => setApartmentStatusFilter(event.target.value as 'active' | 'inactive' | 'all')}
+          >
+            <NativeSelectOption value="active">Đang hoạt động</NativeSelectOption>
+            <NativeSelectOption value="inactive">Đã ngừng</NativeSelectOption>
+            <NativeSelectOption value="all">Tất cả trạng thái</NativeSelectOption>
+          </NativeSelect>
+        </div>
         <form onSubmit={props.addApartment} className="mb-2 grid gap-1.5">
           <div className="grid gap-1.5 sm:grid-cols-[minmax(150px,1fr)_minmax(54px,0.8fr)_minmax(0,1fr)_88px_auto]">
             <NativeSelect
@@ -5940,7 +5990,7 @@ function AdminAreas(props: {
           </div>
         </form>
         <div className="max-h-[420px] space-y-1.5 overflow-auto pr-1">
-          {state.apartments.filter((apartment) => apartment.isActive).map((apartment) => (
+          {filteredApartments.map((apartment) => (
             <div
               key={apartment.id}
               className="grid gap-1.5 rounded-md border p-1.5 sm:grid-cols-[minmax(150px,1fr)_minmax(54px,0.8fr)_minmax(0,1fr)_88px_32px]"
@@ -6014,6 +6064,11 @@ function AdminAreas(props: {
               </Button>
             </div>
           ))}
+          {!filteredApartments.length && (
+            <p className="py-6 text-center text-sm text-muted-foreground">
+              Không tìm thấy căn phù hợp.
+            </p>
+          )}
         </div>
       </div>
     </section>

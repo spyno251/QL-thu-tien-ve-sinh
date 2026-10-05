@@ -35,7 +35,7 @@ function text(value: unknown) {
 
 async function recordAccess(
   userId: string,
-  action: 'login' | 'logout' | 'support_login',
+  action: 'login' | 'logout' | 'support_login' | 'session_resume',
   actorId?: string,
 ) {
   const db = getSupabaseAdmin();
@@ -46,6 +46,34 @@ async function recordAccess(
     action,
     actor_id: actorId ?? null,
   });
+}
+
+function startOfVietnamDay() {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Ho_Chi_Minh',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date());
+  const value = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value ?? '';
+  return new Date(
+    `${value('year')}-${value('month')}-${value('day')}T00:00:00+07:00`,
+  ).toISOString();
+}
+
+async function recordDailyAccess(userId: string) {
+  const db = getSupabaseAdmin();
+  if (!db) return;
+  const { data, error } = await db
+    .from('access_logs')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('action', 'session_resume')
+    .gte('created_at', startOfVietnamDay())
+    .limit(1)
+    .maybeSingle();
+  if (!error && !data) await recordAccess(userId, 'session_resume');
 }
 
 async function hasUsers() {
@@ -86,6 +114,7 @@ export async function GET(request: Request) {
     if (!token) return json({ user: null });
     const user = await getSessionUser(db, request);
     if (!user) return json({ user: null }, 401);
+    await recordDailyAccess(user.id);
     return json({ user: safeUser(user) });
   } catch {
     return json({ error: 'Chưa thể kết nối Supabase.' }, 503);
