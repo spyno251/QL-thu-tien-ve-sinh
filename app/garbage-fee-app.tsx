@@ -706,6 +706,7 @@ export default function GarbageFeeApp() {
     monthlyFee: '300.000',
   });
   const [addingApartment, setAddingApartment] = useState(false);
+  const [addingNextApartmentForRegion, setAddingNextApartmentForRegion] = useState<string | null>(null);
   const [newUser, setNewUser] = useState({
     name: '',
     phone: '',
@@ -1880,6 +1881,60 @@ export default function GarbageFeeApp() {
     });
   };
 
+  const addNextApartmentForRegion = async (regionId: string) => {
+    const region = state.regions.find(
+      (item) => item.id === regionId && item.isActive,
+    );
+    if (!region || addingNextApartmentForRegion) return;
+
+    const existingBlocks = state.blocks.filter(
+      (item) => item.regionId === region.id && item.isActive,
+    );
+    const block = existingBlocks.find((item) => !item.name.trim()) ?? existingBlocks[0];
+    const blockId = block?.id ?? uid('block');
+    const apartmentNumbers = state.apartments
+      .filter((item) => item.blockId === blockId)
+      .map((item) => normalizeApartmentCode(item.code).match(/^Căn (\d+)$/i)?.[1])
+      .flatMap((value) => (value ? [Number.parseInt(value, 10)] : []));
+    const nextNumber = Math.max(0, ...apartmentNumbers) + 1;
+    const code = `Căn ${String(nextNumber).padStart(Math.max(2, String(nextNumber).length), '0')}`;
+    const identityKey = `${blockId}:${apartmentCodeKey(code)}`;
+
+    if (pendingApartmentKeys.current.has(identityKey)) return;
+    pendingApartmentKeys.current.add(identityKey);
+    setAddingNextApartmentForRegion(region.id);
+    try {
+      const nextBlocks = block
+        ? state.blocks
+        : [...state.blocks, { id: blockId, regionId: region.id, name: '', isActive: true }];
+      const saved = await commit({
+        ...state,
+        blocks: nextBlocks,
+        apartments: [
+          ...state.apartments,
+          {
+            id: uid('apt'),
+            blockId,
+            code,
+            owner: '',
+            phone: '',
+            note: '',
+            monthlyFee: region.defaultFee,
+            isActive: true,
+          },
+        ],
+      });
+      setQuickSetupMessage(
+        saved
+          ? `Đã thêm ${code} vào ${region.name}.`
+          : 'Chưa thể lưu căn mới. Vui lòng kiểm tra kết nối rồi thử lại.',
+      );
+    } finally {
+      pendingApartmentKeys.current.delete(identityKey);
+      setAddingNextApartmentForRegion(null);
+    }
+  };
+
   const addApartmentRange = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const start = Number.parseInt(batchApartments.start, 10);
@@ -2862,6 +2917,8 @@ export default function GarbageFeeApp() {
                 setNewApartment={setNewApartment}
                 addApartment={addApartment}
                 addingApartment={addingApartment}
+                addNextApartmentForRegion={addNextApartmentForRegion}
+                addingNextApartmentForRegion={addingNextApartmentForRegion}
                 updateApartment={updateApartment}
                 deleteApartment={deleteApartment}
                 quickSetup={quickSetup}
@@ -5486,6 +5543,8 @@ function AdminAreas(props: {
   }) => void;
   addApartment: (event: FormEvent<HTMLFormElement>) => Promise<void>;
   addingApartment: boolean;
+  addNextApartmentForRegion: (regionId: string) => Promise<void>;
+  addingNextApartmentForRegion: string | null;
   updateApartment: (id: string, patch: Partial<Apartment>) => void;
   deleteApartment: (id: string) => void;
   quickSetup: {
@@ -5529,28 +5588,40 @@ function AdminAreas(props: {
   const { state } = props;
   const regionName = (id: string) =>
     state.regions.find((item) => item.id === id)?.name ?? '-';
-  const blockLabel = (block: Block) =>
-    block.name
-      ? `${regionName(block.regionId)} / ${block.name}`
-      : regionName(block.regionId);
+  const blockLabel = (block: Block) => regionName(block.regionId);
   const defaultFeeForBlock = (blockId: string) =>
     getBlockDefaultFee(blockId, state.regions, state.blocks);
+  const regionApartmentTotals = useMemo(() => {
+    const totals = new Map<string, number>();
+    for (const apartment of state.apartments) {
+      if (!apartment.isActive) continue;
+      const block = state.blocks.find(
+        (item) => item.id === apartment.blockId && item.isActive,
+      );
+      if (!block) continue;
+      totals.set(block.regionId, (totals.get(block.regionId) ?? 0) + 1);
+    }
+    return totals;
+  }, [state.apartments, state.blocks]);
 
   return (
-    <section className="grid gap-3 xl:grid-cols-3">
-      <div className="rounded-lg border border-primary/25 bg-primary/5 p-2.5 sm:p-4 xl:col-span-3">
+    <section className="grid gap-3 xl:grid-cols-[minmax(310px,0.85fr)_minmax(0,1.85fr)]">
+      <div className="rounded-lg border border-primary/25 bg-primary/5 p-2.5 sm:p-4 xl:col-span-2">
         <h2 className="text-base font-semibold">Thêm nhiều căn vào khu vực</h2>
         <p className="mt-1 text-sm text-muted-foreground">Chọn khu/dãy, nhập khoảng số. Các căn đã có sẽ được giữ nguyên và tự bỏ qua.</p>
         <form onSubmit={props.addApartmentRange} className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
-          <Field label="Khu vực / dãy">
+          <Field label="Khu vực">
             <NativeSelect
               value={props.batchApartments.blockId}
               onChange={(event) => props.setBatchApartments({ ...props.batchApartments, blockId: event.target.value })}
             >
-              <NativeSelectOption value="">Chọn dãy</NativeSelectOption>
-              {state.blocks.filter((block) => block.isActive && state.regions.some((region) => region.id === block.regionId && region.isActive)).map((block) => (
-                <NativeSelectOption key={block.id} value={block.id}>{blockLabel(block)}</NativeSelectOption>
-              ))}
+              <NativeSelectOption value="">Chọn khu vực</NativeSelectOption>
+              {state.regions.filter((region) => region.isActive).flatMap((region) => {
+                const block = state.blocks.find((item) => item.regionId === region.id && item.isActive);
+                return block ? [
+                  <NativeSelectOption key={block.id} value={block.id}>{region.name}</NativeSelectOption>,
+                ] : [];
+              })}
             </NativeSelect>
           </Field>
           <Field label="Tên căn">
@@ -5565,7 +5636,7 @@ function AdminAreas(props: {
           <div className="flex items-end"><Button type="submit" className="w-full"><Plus className="size-4" />Thêm dải căn</Button></div>
         </form>
       </div>
-      <div className="rounded-lg border border-primary/25 bg-primary/5 p-2.5 sm:p-4 xl:col-span-3">
+      <div className="rounded-lg border border-primary/25 bg-primary/5 p-2.5 sm:p-4 xl:col-span-2">
         <div className="mb-3">
           <h2 className="text-base font-semibold">Thêm nhanh khu và căn hộ</h2>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -5699,7 +5770,11 @@ function AdminAreas(props: {
       </div>
 
       <div className="rounded-lg border bg-card p-2.5 sm:p-4">
-        <h2 className="mb-2 text-base font-semibold">Khu vực</h2>
+        <div className="mb-2 grid grid-cols-[minmax(0,1fr)_68px_68px_38px] items-center gap-1.5 text-xs font-semibold text-muted-foreground sm:grid-cols-[minmax(0,1fr)_76px_76px_38px]">
+          <h2 className="text-base font-semibold text-foreground">Khu vực</h2>
+          <span>Giá</span>
+          <span>Tổng căn</span>
+        </div>
         <form
           onSubmit={props.addRegion}
           className="mb-2 grid grid-cols-[minmax(0,1fr)_96px_auto] gap-1.5 sm:grid-cols-[1fr_130px_auto]"
@@ -5735,7 +5810,7 @@ function AdminAreas(props: {
           {state.regions.map((region) => (
             <div
               key={region.id}
-              className="grid grid-cols-[minmax(0,1fr)_96px_38px] gap-1.5 rounded-md border p-1.5 sm:grid-cols-[1fr_130px_38px]"
+              className="grid grid-cols-[minmax(0,1fr)_68px_68px_38px] gap-1.5 rounded-md border p-1.5 sm:grid-cols-[minmax(0,1fr)_76px_76px_38px]"
             >
               <Input
                 className="h-8 min-w-0"
@@ -5757,6 +5832,20 @@ function AdminAreas(props: {
                   })
                 }
               />
+              <Button
+                type="button"
+                variant="outline"
+                className="h-8 px-2 text-xs"
+                title={`Thêm căn kế tiếp vào ${region.name}`}
+                disabled={!region.isActive || props.addingNextApartmentForRegion !== null}
+                onClick={() => void props.addNextApartmentForRegion(region.id)}
+              >
+                {props.addingNextApartmentForRegion === region.id ? (
+                  '...'
+                ) : (
+                  <><Plus className="size-3" />{regionApartmentTotals.get(region.id) ?? 0}</>
+                )}
+              </Button>
               <Button type="button" variant={region.isActive ? 'outline' : 'secondary'} className="h-8 px-2 text-xs" onClick={() => region.isActive ? props.deleteRegion(region.id) : props.updateRegion(region.id, { isActive: true })}>
                 {region.isActive ? 'Ngừng' : 'Khôi phục'}
               </Button>
@@ -5765,80 +5854,7 @@ function AdminAreas(props: {
         </div>
       </div>
 
-      <div className="rounded-lg border bg-card p-2.5 sm:p-4">
-        <h2 className="mb-2 text-base font-semibold">Dãy</h2>
-        <form
-          onSubmit={props.addBlock}
-          className="mb-2 grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-1.5"
-        >
-          <NativeSelect
-            className="h-9 min-w-0"
-            value={props.newBlock.regionId}
-            onChange={(event) =>
-              props.setNewBlock({
-                ...props.newBlock,
-                regionId: event.target.value,
-              })
-            }
-          >
-            {state.regions.map((region) => (
-              <NativeSelectOption key={region.id} value={region.id}>
-                {region.name}
-              </NativeSelectOption>
-            ))}
-          </NativeSelect>
-          <Input
-            className="h-9 min-w-0"
-            placeholder="Tên dãy"
-            value={props.newBlock.name}
-            onChange={(event) =>
-              props.setNewBlock({ ...props.newBlock, name: event.target.value })
-            }
-          />
-          <Button type="submit" className="h-9 px-2.5 sm:px-4">
-            <Plus className="size-4" />
-            Thêm
-          </Button>
-        </form>
-        <div className="space-y-1.5">
-          {state.blocks
-            .filter((block) => block.name.trim())
-            .map((block) => (
-              <div
-                key={block.id}
-                className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_38px] gap-1.5 rounded-md border p-1.5"
-              >
-                <NativeSelect
-                  className="h-8 min-w-0"
-                  value={block.regionId}
-                  onChange={(event) =>
-                    props.updateBlock(block.id, {
-                      regionId: event.target.value,
-                    })
-                  }
-                >
-                  {state.regions.map((region) => (
-                    <NativeSelectOption key={region.id} value={region.id}>
-                      {region.name}
-                    </NativeSelectOption>
-                  ))}
-                </NativeSelect>
-                <Input
-                  className="h-8 min-w-0"
-                  value={block.name}
-                  onChange={(event) =>
-                    props.updateBlock(block.id, { name: event.target.value })
-                  }
-                />
-                <Button type="button" variant={block.isActive ? 'outline' : 'secondary'} className="h-8 px-2 text-xs" onClick={() => block.isActive ? props.deleteBlock(block.id) : props.updateBlock(block.id, { isActive: true })}>
-                  {block.isActive ? 'Ngừng' : 'Khôi phục'}
-                </Button>
-              </div>
-            ))}
-        </div>
-      </div>
-
-      <div className="rounded-lg border bg-card p-2.5 sm:p-4">
+      <div className="rounded-lg border bg-card p-2.5 sm:p-4 xl:col-span-1">
         <h2 className="mb-2 text-base font-semibold">Căn hộ</h2>
         <form onSubmit={props.addApartment} className="mb-2 grid gap-1.5">
           <div className="grid gap-1.5 sm:grid-cols-[minmax(150px,1fr)_minmax(54px,0.8fr)_minmax(0,1fr)_88px_auto]">
@@ -5924,7 +5940,7 @@ function AdminAreas(props: {
           </div>
         </form>
         <div className="max-h-[420px] space-y-1.5 overflow-auto pr-1">
-          {state.apartments.map((apartment) => (
+          {state.apartments.filter((apartment) => apartment.isActive).map((apartment) => (
             <div
               key={apartment.id}
               className="grid gap-1.5 rounded-md border p-1.5 sm:grid-cols-[minmax(150px,1fr)_minmax(54px,0.8fr)_minmax(0,1fr)_88px_32px]"
