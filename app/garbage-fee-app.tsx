@@ -1038,7 +1038,7 @@ export default function GarbageFeeApp() {
             month: selectedMonth,
             amount,
             note: draftPaymentNotes[apartment.id]?.trim() ?? '',
-            method: draftPaymentMethods[apartment.id] ?? 'cash',
+            method: draftPaymentMethods[apartment.id] ?? 'transfer',
           },
         }),
       });
@@ -2769,7 +2769,7 @@ export default function GarbageFeeApp() {
                                 <NativeSelect
                                   className="h-8 w-full"
                                   value={
-                                    draftPaymentMethods[apartment.id] ?? 'cash'
+                                    draftPaymentMethods[apartment.id] ?? 'transfer'
                                   }
                                   onChange={(event) =>
                                     setDraftPaymentMethods({
