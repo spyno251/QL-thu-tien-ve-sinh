@@ -28,6 +28,7 @@ export const regions = sqliteTable('regions', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
   defaultFee: integer('default_fee').notNull(),
+  isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
 });
 
 export const blocks = sqliteTable('blocks', {
@@ -36,6 +37,7 @@ export const blocks = sqliteTable('blocks', {
     .notNull()
     .references(() => regions.id, { onDelete: 'cascade' }),
   name: text('name').notNull(),
+  isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
 });
 
 export const apartments = sqliteTable('apartments', {
@@ -46,6 +48,7 @@ export const apartments = sqliteTable('apartments', {
   code: text('code').notNull(),
   owner: text('owner').notNull(),
   monthlyFee: integer('monthly_fee'),
+  isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
 });
 
 export const payments = sqliteTable('payments', {

@@ -114,12 +114,14 @@ type Region = {
   id: string;
   name: string;
   defaultFee: number;
+  isActive: boolean;
 };
 
 type Block = {
   id: string;
   regionId: string;
   name: string;
+  isActive: boolean;
 };
 
 type Apartment = {
@@ -130,6 +132,7 @@ type Apartment = {
   phone: string;
   note: string;
   monthlyFee: number | null;
+  isActive: boolean;
 };
 
 type Payment = {
@@ -361,13 +364,13 @@ const initialState: AppState = {
     },
   ],
   regions: [
-    { id: 'r-a', name: 'Khu A', defaultFee: 50000 },
-    { id: 'r-b', name: 'Khu B', defaultFee: 60000 },
+    { id: 'r-a', name: 'Khu A', defaultFee: 50000, isActive: true },
+    { id: 'r-b', name: 'Khu B', defaultFee: 60000, isActive: true },
   ],
   blocks: [
-    { id: 'b-a1', regionId: 'r-a', name: 'Dãy A1' },
-    { id: 'b-a2', regionId: 'r-a', name: 'Dãy A2' },
-    { id: 'b-b1', regionId: 'r-b', name: 'Dãy B1' },
+    { id: 'b-a1', regionId: 'r-a', name: 'Dãy A1', isActive: true },
+    { id: 'b-a2', regionId: 'r-a', name: 'Dãy A2', isActive: true },
+    { id: 'b-b1', regionId: 'r-b', name: 'Dãy B1', isActive: true },
   ],
   apartments: [
     {
@@ -378,6 +381,7 @@ const initialState: AppState = {
       phone: '',
       note: '',
       monthlyFee: null,
+      isActive: true,
     },
     {
       id: 'apt-a102',
@@ -387,6 +391,7 @@ const initialState: AppState = {
       phone: '',
       note: '',
       monthlyFee: null,
+      isActive: true,
     },
     {
       id: 'apt-a201',
@@ -396,6 +401,7 @@ const initialState: AppState = {
       phone: '',
       note: '',
       monthlyFee: 70000,
+      isActive: true,
     },
     {
       id: 'apt-b101',
@@ -405,6 +411,7 @@ const initialState: AppState = {
       phone: '',
       note: '',
       monthlyFee: null,
+      isActive: true,
     },
   ],
   payments: [],
@@ -669,6 +676,13 @@ export default function GarbageFeeApp() {
     defaultFee: '300.000',
   });
   const [quickSetupMessage, setQuickSetupMessage] = useState('');
+  const [batchApartments, setBatchApartments] = useState({
+    blockId: '',
+    prefix: 'Căn',
+    start: '41',
+    end: '56',
+    monthlyFee: '300.000',
+  });
   const [newUser, setNewUser] = useState({
     name: '',
     phone: '',
@@ -805,7 +819,7 @@ export default function GarbageFeeApp() {
   }, [state]);
 
   const filteredBlocks = state.blocks.filter(
-    (block) => selectedRegion === 'all' || block.regionId === selectedRegion,
+    (block) => block.isActive && (selectedRegion === 'all' || block.regionId === selectedRegion),
   );
 
   useEffect(() => {
@@ -851,6 +865,7 @@ export default function GarbageFeeApp() {
           : !isPaid || paymentCountdown[apartment.id] !== undefined);
       const text = `${apartment.code} ${apartment.owner}`.toLowerCase();
       return (
+        apartment.isActive && block?.isActive && lookups.regions.get(regionId)?.isActive &&
         matchesRegion &&
         matchesBlock &&
         matchesPayment &&
@@ -898,7 +913,8 @@ export default function GarbageFeeApp() {
   useEffect(() => {
     if (collectionPage > collectionPageCount) setCollectionPage(collectionPageCount);
   }, [collectionPage, collectionPageCount]);
-  const totalDue = state.apartments.reduce(
+  const activeApartments = state.apartments.filter((item) => item.isActive);
+  const totalDue = activeApartments.reduce(
     (sum, item) => sum + getFee(item, lookups),
     0,
   );
@@ -1591,6 +1607,7 @@ export default function GarbageFeeApp() {
       id: uid('region'),
       name: newRegion.name.trim(),
       defaultFee: parseAmount(newRegion.defaultFee, 50000),
+      isActive: true,
     };
     setNewRegion({ name: '', defaultFee: '300.000' });
     void commit({ ...state, regions: [...state.regions, item] });
@@ -1651,8 +1668,8 @@ export default function GarbageFeeApp() {
       if (existingNames.has(regionName.toLowerCase())) continue;
       const regionId = uid('region');
       const blockId = uid('block');
-      regions.push({ id: regionId, name: regionName, defaultFee });
-      blocks.push({ id: blockId, regionId, name: '' });
+      regions.push({ id: regionId, name: regionName, defaultFee, isActive: true });
+      blocks.push({ id: blockId, regionId, name: '', isActive: true });
       addedRegions += 1;
       for (
         let apartmentNumber = apartmentStart;
@@ -1667,6 +1684,7 @@ export default function GarbageFeeApp() {
           phone: '',
           note: '',
           monthlyFee: defaultFee,
+          isActive: true,
         });
         addedApartments += 1;
       }
@@ -1686,19 +1704,11 @@ export default function GarbageFeeApp() {
     const blockIds = state.blocks
       .filter((item) => item.regionId === id)
       .map((item) => item.id);
-    const apartmentIds = state.apartments
-      .filter((item) => blockIds.includes(item.blockId))
-      .map((item) => item.id);
     void commit({
       ...state,
-      regions: state.regions.filter((item) => item.id !== id),
-      blocks: state.blocks.filter((item) => item.regionId !== id),
-      apartments: state.apartments.filter(
-        (item) => !blockIds.includes(item.blockId),
-      ),
-      payments: state.payments.filter(
-        (item) => !apartmentIds.includes(item.apartmentId),
-      ),
+      regions: state.regions.map((item) => item.id === id ? { ...item, isActive: false } : item),
+      blocks: state.blocks.map((item) => blockIds.includes(item.id) ? { ...item, isActive: false } : item),
+      apartments: state.apartments.map((item) => blockIds.includes(item.blockId) ? { ...item, isActive: false } : item),
     });
   };
 
@@ -1713,6 +1723,7 @@ export default function GarbageFeeApp() {
           id: uid('block'),
           regionId: newBlock.regionId,
           name: newBlock.name.trim(),
+          isActive: true,
         },
       ],
     });
@@ -1720,16 +1731,10 @@ export default function GarbageFeeApp() {
   };
 
   const deleteBlock = (id: string) => {
-    const apartmentIds = state.apartments
-      .filter((item) => item.blockId === id)
-      .map((item) => item.id);
     void commit({
       ...state,
-      blocks: state.blocks.filter((item) => item.id !== id),
-      apartments: state.apartments.filter((item) => item.blockId !== id),
-      payments: state.payments.filter(
-        (item) => !apartmentIds.includes(item.apartmentId),
-      ),
+      blocks: state.blocks.map((item) => item.id === id ? { ...item, isActive: false } : item),
+      apartments: state.apartments.map((item) => item.blockId === id ? { ...item, isActive: false } : item),
     });
   };
 
@@ -1761,6 +1766,7 @@ export default function GarbageFeeApp() {
           phone: newApartment.phone.trim(),
           note: '',
           monthlyFee,
+          isActive: true,
         },
       ],
     });
@@ -1787,9 +1793,33 @@ export default function GarbageFeeApp() {
   const deleteApartment = (id: string) => {
     void commit({
       ...state,
-      apartments: state.apartments.filter((item) => item.id !== id),
-      payments: state.payments.filter((item) => item.apartmentId !== id),
+      apartments: state.apartments.map((item) => item.id === id ? { ...item, isActive: false } : item),
     });
+  };
+
+  const addApartmentRange = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const start = Number.parseInt(batchApartments.start, 10);
+    const end = Number.parseInt(batchApartments.end, 10);
+    const block = state.blocks.find((item) => item.id === batchApartments.blockId && item.isActive);
+    if (!block || !batchApartments.prefix.trim() || !Number.isInteger(start) || !Number.isInteger(end) || start < 1 || end < start || end - start > 199) {
+      setQuickSetupMessage('Chọn dãy và nhập khoảng căn hợp lệ (tối đa 200 căn).');
+      return;
+    }
+    const width = Math.max(2, String(end).length);
+    const existing = new Set(state.apartments.filter((item) => item.blockId === block.id).map((item) => item.code.trim().toLowerCase()));
+    const monthlyFee = parseAmount(batchApartments.monthlyFee, getBlockDefaultFee(block.id, state.regions, state.blocks));
+    const additions: Apartment[] = [];
+    for (let number = start; number <= end; number += 1) {
+      const code = `${batchApartments.prefix.trim()} ${String(number).padStart(width, '0')}`;
+      if (!existing.has(code.toLowerCase())) additions.push({ id: uid('apt'), blockId: block.id, code, owner: '', phone: '', note: '', monthlyFee, isActive: true });
+    }
+    if (!additions.length) {
+      setQuickSetupMessage('Các căn trong khoảng này đã tồn tại ở dãy đã chọn.');
+      return;
+    }
+    await commit({ ...state, apartments: [...state.apartments, ...additions] });
+    setQuickSetupMessage(`Đã thêm ${additions.length} căn vào ${block.name || 'khu vực đã chọn'}. Căn trùng được bỏ qua.`);
   };
 
   const addUser = (event: FormEvent<HTMLFormElement>) => {
@@ -2245,12 +2275,12 @@ export default function GarbageFeeApp() {
         <section className="grid grid-cols-2 gap-2 md:grid-cols-4">
           <Metric
             label="Tổng căn hộ"
-            value={formatNumber(state.apartments.length)}
+            value={formatNumber(activeApartments.length)}
             icon={Building2}
           />
           <Metric
             label="Đã thu"
-            value={`${formatNumber(paidApartmentIds.size)}/${formatNumber(state.apartments.length)}`}
+            value={`${formatNumber(paidApartmentIds.size)}/${formatNumber(activeApartments.length)}`}
             icon={ReceiptText}
           />
           <Metric
@@ -2750,6 +2780,9 @@ export default function GarbageFeeApp() {
                 setQuickSetup={setQuickSetup}
                 addQuickSetup={addQuickSetup}
                 quickSetupMessage={quickSetupMessage}
+                batchApartments={batchApartments}
+                setBatchApartments={setBatchApartments}
+                addApartmentRange={addApartmentRange}
               />
             </TabsContent>
           )}
@@ -5387,6 +5420,21 @@ function AdminAreas(props: {
   }) => void;
   addQuickSetup: (event: FormEvent<HTMLFormElement>) => Promise<void>;
   quickSetupMessage: string;
+  batchApartments: {
+    blockId: string;
+    prefix: string;
+    start: string;
+    end: string;
+    monthlyFee: string;
+  };
+  setBatchApartments: (value: {
+    blockId: string;
+    prefix: string;
+    start: string;
+    end: string;
+    monthlyFee: string;
+  }) => void;
+  addApartmentRange: (event: FormEvent<HTMLFormElement>) => Promise<void>;
 }) {
   const { state } = props;
   const regionName = (id: string) =>
@@ -5400,6 +5448,33 @@ function AdminAreas(props: {
 
   return (
     <section className="grid gap-3 xl:grid-cols-3">
+      <div className="rounded-lg border border-primary/25 bg-primary/5 p-2.5 sm:p-4 xl:col-span-3">
+        <h2 className="text-base font-semibold">Thêm nhiều căn vào khu vực</h2>
+        <p className="mt-1 text-sm text-muted-foreground">Chọn khu/dãy, nhập khoảng số. Các căn đã có sẽ được giữ nguyên và tự bỏ qua.</p>
+        <form onSubmit={props.addApartmentRange} className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+          <Field label="Khu vực / dãy">
+            <NativeSelect
+              value={props.batchApartments.blockId}
+              onChange={(event) => props.setBatchApartments({ ...props.batchApartments, blockId: event.target.value })}
+            >
+              <NativeSelectOption value="">Chọn dãy</NativeSelectOption>
+              {state.blocks.filter((block) => block.isActive && state.regions.some((region) => region.id === block.regionId && region.isActive)).map((block) => (
+                <NativeSelectOption key={block.id} value={block.id}>{blockLabel(block)}</NativeSelectOption>
+              ))}
+            </NativeSelect>
+          </Field>
+          <Field label="Tên căn">
+            <Input value={props.batchApartments.prefix} onChange={(event) => props.setBatchApartments({ ...props.batchApartments, prefix: event.target.value })} placeholder="Căn" />
+          </Field>
+          <Field label="Từ số căn">
+            <Input inputMode="numeric" value={props.batchApartments.start} onChange={(event) => props.setBatchApartments({ ...props.batchApartments, start: event.target.value })} />
+          </Field>
+          <Field label="Đến số căn">
+            <Input inputMode="numeric" value={props.batchApartments.end} onChange={(event) => props.setBatchApartments({ ...props.batchApartments, end: event.target.value })} />
+          </Field>
+          <div className="flex items-end"><Button type="submit" className="w-full"><Plus className="size-4" />Thêm dải căn</Button></div>
+        </form>
+      </div>
       <div className="rounded-lg border border-primary/25 bg-primary/5 p-2.5 sm:p-4 xl:col-span-3">
         <div className="mb-3">
           <h2 className="text-base font-semibold">Thêm nhanh khu và căn hộ</h2>
@@ -5592,10 +5667,9 @@ function AdminAreas(props: {
                   })
                 }
               />
-              <IconButton
-                label="Xóa khu vực"
-                onClick={() => props.deleteRegion(region.id)}
-              />
+              <Button type="button" variant={region.isActive ? 'outline' : 'secondary'} className="h-8 px-2 text-xs" onClick={() => region.isActive ? props.deleteRegion(region.id) : props.updateRegion(region.id, { isActive: true })}>
+                {region.isActive ? 'Ngừng' : 'Khôi phục'}
+              </Button>
             </div>
           ))}
         </div>
@@ -5666,10 +5740,9 @@ function AdminAreas(props: {
                     props.updateBlock(block.id, { name: event.target.value })
                   }
                 />
-                <IconButton
-                  label="Xóa dãy"
-                  onClick={() => props.deleteBlock(block.id)}
-                />
+                <Button type="button" variant={block.isActive ? 'outline' : 'secondary'} className="h-8 px-2 text-xs" onClick={() => block.isActive ? props.deleteBlock(block.id) : props.updateBlock(block.id, { isActive: true })}>
+                  {block.isActive ? 'Ngừng' : 'Khôi phục'}
+                </Button>
               </div>
             ))}
         </div>
@@ -5822,10 +5895,9 @@ function AdminAreas(props: {
                   })
                 }
               />
-              <IconButton
-                label="Xóa căn hộ"
-                onClick={() => props.deleteApartment(apartment.id)}
-              />
+              <Button type="button" variant={apartment.isActive ? 'outline' : 'secondary'} className="h-8 px-2 text-xs" onClick={() => apartment.isActive ? props.deleteApartment(apartment.id) : props.updateApartment(apartment.id, { isActive: true })}>
+                {apartment.isActive ? 'Ngừng' : 'Khôi phục'}
+              </Button>
             </div>
           ))}
         </div>

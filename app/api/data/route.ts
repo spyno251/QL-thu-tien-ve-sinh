@@ -12,8 +12,8 @@ type User = {
   role: 'admin' | 'manager' | 'staff';
   mustChangePassword: boolean;
 };
-type Region = { id: string; name: string; defaultFee: number };
-type Block = { id: string; regionId: string; name: string };
+type Region = { id: string; name: string; defaultFee: number; isActive: boolean };
+type Block = { id: string; regionId: string; name: string; isActive: boolean };
 type Apartment = {
   id: string;
   blockId: string;
@@ -22,6 +22,7 @@ type Apartment = {
   phone: string;
   note: string;
   monthlyFee: number | null;
+  isActive: boolean;
 };
 type Payment = {
   id: string;
@@ -690,11 +691,11 @@ async function readState(): Promise<AppState> {
       .from('users')
       .select('id, phone, password, email, name, role, must_change_password')
       .order('name'),
-    db.from('regions').select('id, name, default_fee').order('name'),
-    db.from('blocks').select('id, region_id, name').order('name'),
+    db.from('regions').select('id, name, default_fee, is_active').order('name'),
+    db.from('blocks').select('id, region_id, name, is_active').order('name'),
     db
       .from('apartments')
-      .select('id, block_id, code, owner, phone, note, monthly_fee')
+      .select('id, block_id, code, owner, phone, note, monthly_fee, is_active')
       .order('code'),
     db
       .from('payments')
@@ -733,11 +734,13 @@ async function readState(): Promise<AppState> {
       id: item.id,
       name: item.name,
       defaultFee: item.default_fee,
+      isActive: item.is_active,
     })),
     blocks: (blocksResult.data ?? []).map((item) => ({
       id: item.id,
       regionId: item.region_id,
       name: item.name,
+      isActive: item.is_active,
     })),
     apartments: (apartmentsResult.data ?? []).map((item) => ({
       id: item.id,
@@ -747,6 +750,7 @@ async function readState(): Promise<AppState> {
       phone: item.phone,
       note: item.note,
       monthlyFee: item.monthly_fee,
+      isActive: item.is_active,
     })),
     payments: (paymentsResult.data ?? []).map((item) => ({
       id: item.id,
@@ -789,9 +793,9 @@ async function saveState(state: AppState) {
   const [usersResult, regionsResult, blocksResult, apartmentsResult] =
     await Promise.all([
       db.from('users').select('id, phone, password, email, name, role, must_change_password'),
-      db.from('regions').select('id, name, default_fee'),
-      db.from('blocks').select('id, region_id, name'),
-      db.from('apartments').select('id, block_id, code, owner, phone, note, monthly_fee'),
+      db.from('regions').select('id, name, default_fee, is_active'),
+      db.from('blocks').select('id, region_id, name, is_active'),
+      db.from('apartments').select('id, block_id, code, owner, phone, note, monthly_fee, is_active'),
     ]);
   if (
     usersResult.error ||
@@ -816,24 +820,7 @@ async function saveState(state: AppState) {
     if (error) throw error;
   };
 
-  const regionIds = new Set(state.regions.map((item) => item.id));
-  const blockIds = new Set(state.blocks.map((item) => item.id));
-  const apartmentIds = new Set(state.apartments.map((item) => item.id));
-  const removedApartmentIds = (apartmentsResult.data ?? [])
-    .filter((item) => !apartmentIds.has(item.id))
-    .map((item) => item.id);
-  const removedBlockIds = (blocksResult.data ?? [])
-    .filter((item) => !blockIds.has(item.id))
-    .map((item) => item.id);
-  const removedRegionIds = (regionsResult.data ?? [])
-    .filter((item) => !regionIds.has(item.id))
-    .map((item) => item.id);
-  if (removedApartmentIds.length)
-    fail((await db.from('apartments').delete().in('id', removedApartmentIds)).error);
-  if (removedBlockIds.length)
-    fail((await db.from('blocks').delete().in('id', removedBlockIds)).error);
-  if (removedRegionIds.length)
-    fail((await db.from('regions').delete().in('id', removedRegionIds)).error);
+  // Area records are deliberately never deleted here: payments reference them.
   if (removedUserIds.length) {
     fail(
       (
@@ -874,9 +861,9 @@ async function saveState(state: AppState) {
   const regions = state.regions
     .filter((item) => {
       const stored = regionsById.get(item.id);
-      return !stored || stored.name !== item.name || stored.default_fee !== item.defaultFee;
+      return !stored || stored.name !== item.name || stored.default_fee !== item.defaultFee || Boolean(stored.is_active) !== item.isActive;
     })
-    .map((item) => ({ id: item.id, name: item.name, default_fee: item.defaultFee }));
+    .map((item) => ({ id: item.id, name: item.name, default_fee: item.defaultFee, is_active: item.isActive }));
   if (regions.length)
     fail(
       (
@@ -888,9 +875,9 @@ async function saveState(state: AppState) {
   const blocks = state.blocks
     .filter((item) => {
       const stored = blocksById.get(item.id);
-      return !stored || stored.region_id !== item.regionId || stored.name !== item.name;
+      return !stored || stored.region_id !== item.regionId || stored.name !== item.name || Boolean(stored.is_active) !== item.isActive;
     })
-    .map((item) => ({ id: item.id, region_id: item.regionId, name: item.name }));
+    .map((item) => ({ id: item.id, region_id: item.regionId, name: item.name, is_active: item.isActive }));
   if (blocks.length)
     fail(
       (
@@ -908,7 +895,7 @@ async function saveState(state: AppState) {
         stored.owner !== item.owner ||
         stored.phone !== item.phone ||
         stored.note !== item.note ||
-        stored.monthly_fee !== item.monthlyFee;
+        stored.monthly_fee !== item.monthlyFee || Boolean(stored.is_active) !== item.isActive;
     })
     .map((item) => ({
       id: item.id,
@@ -918,6 +905,7 @@ async function saveState(state: AppState) {
       phone: item.phone,
       note: item.note,
       monthly_fee: item.monthlyFee,
+      is_active: item.isActive,
     }));
   if (apartments.length)
     fail(
