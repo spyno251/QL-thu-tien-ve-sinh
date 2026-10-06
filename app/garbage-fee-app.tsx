@@ -559,21 +559,6 @@ function amountInWords(value: number) {
   return `${result.charAt(0).toUpperCase()}${result.slice(1)} đồng`;
 }
 
-async function loadPdfImage(url: string) {
-  const response = await fetch(url);
-  if (!response.ok) throw new Error('Logo is unavailable');
-  const blob = await response.blob();
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () =>
-      typeof reader.result === 'string'
-        ? resolve(reader.result)
-        : reject(new Error('Invalid logo'));
-    reader.onerror = () => reject(new Error('Unable to read logo'));
-    reader.readAsDataURL(blob);
-  });
-}
-
 function parseAmount(value: string, fallback: number) {
   const amount = Number(value.replaceAll('.', '').replaceAll(',', ''));
   return Number.isFinite(amount) && amount > 0 ? Math.round(amount) : fallback;
@@ -1132,12 +1117,6 @@ export default function GarbageFeeApp() {
       } else {
         pdfMake.vfs = virtualFonts;
       }
-      let logo: string | null = null;
-      try {
-        logo = await loadPdfImage(state.settings.logoUrl || '/app-icon.png');
-      } catch {
-        logo = await loadPdfImage('/app-icon.png');
-      }
       const [year, month] = payment.month.split('-');
       const rows = [
         ['Căn Hộ:', `${normalizeApartmentCode(apartment.code)}-${region?.name ?? '-'}`],
@@ -1149,13 +1128,12 @@ export default function GarbageFeeApp() {
           `${formatNumber(payment.amount)} (${amountInWords(payment.amount)})`,
         ],
         ['Hình thức thanh toán:', method],
-        ['Người thu:', collector?.name ?? '-'],
       ];
       const teal = '#007f88';
       const documentDefinition = {
         pageSize: 'A5',
         pageOrientation: 'landscape',
-        pageMargins: [48, 42, 48, 42],
+        pageMargins: [36, 24, 36, 24],
         content: [
           {
             table: {
@@ -1164,7 +1142,7 @@ export default function GarbageFeeApp() {
                 [
                   {
                     border: [true, true, true, true],
-                    margin: [44, 34, 44, 36],
+                    margin: [38, 20, 38, 20],
                     stack: [
                       {
                         columns: [
@@ -1211,55 +1189,26 @@ export default function GarbageFeeApp() {
                             ],
                           },
                         ],
-                        margin: [0, 0, 0, 16],
+                        margin: [0, 0, 0, 10],
                       },
                       {
-                        columns: [
-                          {
-                            width: 72,
-                            image: logo,
-                            fit: [58, 58],
-                            margin: [34, 0, 0, 0],
-                          },
-                          {
-                            width: '*',
-                            stack: [
-                              {
-                                text: 'THU TIỀN VỆ SINH',
-                                color: teal,
-                                bold: true,
-                                fontSize: 10,
-                                alignment: 'center',
-                              },
-                              {
-                                text: 'XÁC NHẬN THANH TOÁN',
-                                bold: true,
-                                fontSize: 18,
-                                alignment: 'center',
-                                margin: [0, 12, 0, 7],
-                              },
-                              {
-                                text: formatReceiptDate(payment.paidAt),
-                                color: '#974e4e',
-                                fontSize: 10,
-                                alignment: 'center',
-                              },
-                            ],
-                          },
-                          { width: 72, text: '' },
-                        ],
-                        margin: [0, 0, 0, 14],
+                        text: 'PHIẾU THU',
+                        color: teal,
+                        bold: true,
+                        fontSize: 20,
+                        alignment: 'center',
+                        margin: [0, 0, 0, 10],
                       },
                       {
                         table: {
                           widths: [150, '*'],
                           body: rows.map(([label, value]) => [
-                            { text: label, fontSize: 10, margin: [5, 4, 4, 4] },
+                            { text: label, fontSize: 9.5, margin: [5, 3, 4, 3] },
                             {
                               text: value,
                               bold: label === 'Căn Hộ:',
-                              fontSize: 10,
-                              margin: [5, 4, 4, 4],
+                              fontSize: 9.5,
+                              margin: [5, 3, 4, 3],
                             },
                           ]),
                         },
@@ -1274,25 +1223,43 @@ export default function GarbageFeeApp() {
                         },
                       },
                       {
-                        text: 'Cảm ơn quý khách đã thanh toán',
-                        italics: true,
-                        fontSize: 11,
-                        alignment: 'center',
-                        color: '#333333',
-                        margin: [0, 6, 0, 4],
-                      },
-                      {
-                        canvas: [
+                        columns: [
                           {
-                            type: 'line',
-                            x1: 0,
-                            y1: 0,
-                            x2: 398,
-                            y2: 0,
-                            lineWidth: 0.8,
-                            lineColor: teal,
+                            width: '*',
+                            text: '',
+                          },
+                          {
+                            width: 190,
+                            stack: [
+                              {
+                                text: `Hà Nội, ${formatReceiptDate(payment.paidAt)}`,
+                                italics: true,
+                                fontSize: 9,
+                                alignment: 'center',
+                              },
+                              {
+                                text: 'Người thu',
+                                bold: true,
+                                fontSize: 9.5,
+                                alignment: 'center',
+                                margin: [0, 8, 0, 18],
+                              },
+                              {
+                                text: collector?.name ?? '-',
+                                bold: true,
+                                fontSize: 9.5,
+                                alignment: 'center',
+                              },
+                              {
+                                text: `ID: ${collector?.phone ?? '-'}`,
+                                fontSize: 8.5,
+                                alignment: 'center',
+                                margin: [0, 2, 0, 0],
+                              },
+                            ],
                           },
                         ],
+                        margin: [0, 12, 0, 0],
                       },
                     ],
                   },
