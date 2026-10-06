@@ -1149,7 +1149,7 @@ export default function GarbageFeeApp() {
           `${formatNumber(payment.amount)} (${amountInWords(payment.amount)})`,
         ],
         ['Hình thức thanh toán:', method],
-        ['Người Thu:', (collector?.name ?? '-').toUpperCase()],
+        ['Người thu:', collector?.name ?? '-'],
       ];
       const teal = '#007f88';
       const documentDefinition = {
@@ -1166,6 +1166,53 @@ export default function GarbageFeeApp() {
                     border: [true, true, true, true],
                     margin: [44, 34, 44, 36],
                     stack: [
+                      {
+                        columns: [
+                          {
+                            width: '*',
+                            stack: [
+                              {
+                                text: 'CÔNG TY TNHH THƯƠNG MẠI\nVÀ DỊCH VỤ XANH - QUANG MINH',
+                                bold: true,
+                                color: teal,
+                                fontSize: 8.5,
+                                lineHeight: 1.1,
+                              },
+                              {
+                                text: 'Địa chỉ: Số nhà 16, ngõ 241, đường phố Huyện,\nXã Quốc Oai, TP. Hà Nội, Việt Nam',
+                                fontSize: 7.5,
+                                lineHeight: 1.1,
+                                margin: [0, 3, 0, 0],
+                              },
+                              {
+                                text: 'Mã số thuế: 0108953858',
+                                fontSize: 7.5,
+                                margin: [0, 2, 0, 0],
+                              },
+                            ],
+                          },
+                          {
+                            width: '*',
+                            stack: [
+                              {
+                                text: 'CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM',
+                                bold: true,
+                                fontSize: 8,
+                                alignment: 'center',
+                              },
+                              {
+                                text: 'Độc lập - Tự do - Hạnh phúc',
+                                bold: true,
+                                fontSize: 8,
+                                alignment: 'center',
+                                decoration: 'underline',
+                                margin: [0, 2, 0, 0],
+                              },
+                            ],
+                          },
+                        ],
+                        margin: [0, 0, 0, 16],
+                      },
                       {
                         columns: [
                           {
