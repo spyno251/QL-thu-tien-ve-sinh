@@ -650,6 +650,7 @@ export default function GarbageFeeApp() {
     'loading',
   );
   const [selectedMonth, setSelectedMonth] = useState(monthNow);
+  const [pendingMonth, setPendingMonth] = useState<string | null>(null);
   const [selectedRegion, setSelectedRegion] = useState('all');
   const [selectedBlock, setSelectedBlock] = useState('all');
   const [query, setQuery] = useState('');
@@ -2297,6 +2298,17 @@ export default function GarbageFeeApp() {
     (total, payment) => total + payment.amount,
     0,
   );
+  const requestMonthChange = (month: string) => {
+    if (month !== selectedMonth) setPendingMonth(month);
+  };
+  const confirmMonthChange = () => {
+    if (!pendingMonth) return;
+    setSelectedMonth(pendingMonth);
+    setCollectionPage(1);
+    setPendingMonth(null);
+  };
+  const periodLabel = (month: string) =>
+    `${month.slice(5, 7)}/${month.slice(0, 4)}`;
 
   return (
     <main
@@ -2413,6 +2425,48 @@ export default function GarbageFeeApp() {
         onSubmitDebt={submitDebtSettlement}
       />
 
+      <Dialog
+        open={Boolean(pendingMonth)}
+        onOpenChange={(open) => {
+          if (!open) setPendingMonth(null);
+        }}
+      >
+        <DialogContent className="max-w-[calc(100%-2rem)] border-2 border-primary/30 p-6 sm:max-w-lg sm:p-8">
+          <DialogHeader className="space-y-3 text-center sm:text-center">
+            <CalendarDays className="mx-auto size-12 text-primary" />
+            <DialogTitle className="text-2xl font-bold sm:text-3xl">
+              Xác nhận đổi kỳ thu
+            </DialogTitle>
+            <DialogDescription className="text-base leading-7 sm:text-lg">
+              Bạn đang xem kỳ <strong>{periodLabel(selectedMonth)}</strong>.
+              {pendingMonth && (
+                <>
+                  {' '}Chuyển sang kỳ <strong>{periodLabel(pendingMonth)}</strong>{' '}
+                  chỉ để xem và ghi nhận khoản thu của kỳ này.
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="mt-6 grid gap-3 sm:grid-cols-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="min-h-12 text-base"
+              onClick={() => setPendingMonth(null)}
+            >
+              Ở lại kỳ cũ
+            </Button>
+            <Button
+              type="button"
+              className="min-h-12 text-base"
+              onClick={confirmMonthChange}
+            >
+              Xác nhận đổi kỳ
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <div className="mx-auto max-w-7xl px-2 py-3 sm:px-4 sm:py-5">
         <section className="grid grid-cols-2 gap-2 md:grid-cols-4">
           <Metric
@@ -2468,10 +2522,7 @@ export default function GarbageFeeApp() {
                 <Field label="Kỳ thu">
                   <MonthYearSelect
                     value={selectedMonth}
-                    onChange={(value) => {
-                      setSelectedMonth(value);
-                      setCollectionPage(1);
-                    }}
+                    onChange={requestMonthChange}
                   />
                 </Field>
                 <Field label="Khu vực">
