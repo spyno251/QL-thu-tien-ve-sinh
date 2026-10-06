@@ -2527,7 +2527,7 @@ export default function GarbageFeeApp() {
                 </Field>
                 <Field label="Khu vực">
                   <NativeSelect
-                    className="w-full"
+                    className="w-full [&>select]:border-sky-700 [&>select]:bg-sky-600 [&>select]:font-semibold [&>select]:text-white [&>select]:hover:bg-sky-700 [&>svg]:text-white"
                     value={selectedRegion}
                     onChange={(event) => {
                       setSelectedRegion(event.target.value);
@@ -3283,7 +3283,7 @@ function MonthYearSelect({
     <div className="grid grid-cols-2 gap-1.5">
       <NativeSelect
         aria-label="Tháng"
-        className="w-full"
+        className="w-full [&>select]:border-red-700 [&>select]:bg-red-600 [&>select]:font-bold [&>select]:text-white [&>select]:hover:bg-red-700 [&>svg]:text-white"
         value={selectedMonth}
         onChange={(event) => update(event.target.value, selectedYear)}
       >
@@ -3298,7 +3298,7 @@ function MonthYearSelect({
       </NativeSelect>
       <NativeSelect
         aria-label="Năm"
-        className="w-full"
+        className="w-full [&>select]:border-red-700 [&>select]:bg-red-600 [&>select]:font-bold [&>select]:text-white [&>select]:hover:bg-red-700 [&>svg]:text-white"
         value={selectedYear}
         onChange={(event) => update(selectedMonth, event.target.value)}
       >
