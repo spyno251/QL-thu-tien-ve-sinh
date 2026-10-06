@@ -241,6 +241,7 @@ export async function POST(request: Request) {
       note?: string;
       amount?: number;
       method?: 'cash' | 'transfer';
+      paidAt?: string;
       settlementId?: string;
     };
     const managerMayManage = async (userId: string) => {
@@ -304,8 +305,6 @@ export async function POST(request: Request) {
       });
     }
     if (payload.action === 'cancel-payment') {
-      if (currentUser.role === 'staff')
-        return json({ error: 'Chỉ Quản trị hoặc Admin được hủy khoản thu.' }, 403);
       const paymentId = String(payload.paymentId ?? '');
       if (!paymentId) return json({ error: 'Thiếu mã giao dịch.' }, 400);
       const { data: payment, error: paymentError } = await db
@@ -315,8 +314,11 @@ export async function POST(request: Request) {
         .maybeSingle();
       if (paymentError) throw paymentError;
       if (!payment) return json({ error: 'Không tìm thấy giao dịch.' }, 404);
-      if (!(await managerMayManage(payment.collector_id)))
-        return json({ error: 'Quản trị chỉ được hủy khoản thu của Nhân viên.' }, 403);
+      const mayDelete =
+        currentUser.id === payment.collector_id ||
+        (await managerMayManage(payment.collector_id));
+      if (!mayDelete)
+        return json({ error: 'Bạn chỉ được xóa khoản thu của chính mình.' }, 403);
       const { error } = await db.from('payments').delete().eq('id', paymentId);
       if (error) throw error;
       await recordChange(
@@ -333,6 +335,61 @@ export async function POST(request: Request) {
       return json({
         ok: true,
         paymentId,
+      });
+    }
+    if (payload.action === 'update-payment') {
+      const paymentId = String(payload.paymentId ?? '');
+      const amount = Number(payload.amount);
+      const paidDate = String(payload.paidAt ?? '');
+      const method = payload.method === 'transfer' ? 'transfer' : payload.method === 'cash' ? 'cash' : null;
+      if (!paymentId || !Number.isInteger(amount) || amount <= 0 || !/^\d{4}-\d{2}-\d{2}$/.test(paidDate) || !method)
+        return json({ error: 'Thông tin khoản thu không hợp lệ.' }, 400);
+      const paidAt = new Date(`${paidDate}T12:00:00+07:00`);
+      if (Number.isNaN(paidAt.getTime()))
+        return json({ error: 'Ngày thu không hợp lệ.' }, 400);
+      const { data: payment, error: paymentError } = await db
+        .from('payments')
+        .select('collector_id, apartment_id')
+        .eq('id', paymentId)
+        .maybeSingle();
+      if (paymentError) throw paymentError;
+      if (!payment) return json({ error: 'Không tìm thấy giao dịch.' }, 404);
+      if (payment.collector_id !== currentUser.id)
+        return json({ error: 'Bạn chỉ được sửa khoản thu của chính mình.' }, 403);
+      const { data: updatedPayment, error } = await db
+        .from('payments')
+        .update({ amount, paid_at: paidAt.toISOString(), method })
+        .eq('id', paymentId)
+        .select('id, apartment_id, collector_id, month, paid_at, amount, note, method')
+        .maybeSingle();
+      if (error) throw error;
+      if (!updatedPayment) return json({ error: 'Chưa thể cập nhật khoản thu.' }, 503);
+      await recordChange(
+        currentUser.id,
+        'payment',
+        paymentId,
+        'Đã sửa khoản thu',
+        {
+          ...(await paymentAuditDetails({
+            apartmentId: payment.apartment_id,
+            amount,
+            method,
+          })),
+          paidDate,
+        },
+      );
+      return json({
+        ok: true,
+        payment: {
+          id: updatedPayment.id,
+          apartmentId: updatedPayment.apartment_id,
+          collectorId: updatedPayment.collector_id,
+          month: updatedPayment.month,
+          paidAt: updatedPayment.paid_at,
+          amount: updatedPayment.amount,
+          note: updatedPayment.note,
+          method: updatedPayment.method,
+        },
       });
     }
     if (payload.action === 'update-payment-note') {

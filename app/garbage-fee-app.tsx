@@ -504,6 +504,18 @@ function formatReceiptDate(value: string) {
   return `Ngày ${part('day')} tháng ${part('month')} Năm ${part('year')}`;
 }
 
+function formatDateInput(value: string) {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Ho_Chi_Minh',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  }).formatToParts(new Date(value));
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((item) => item.type === type)?.value ?? '';
+  return `${part('year')}-${part('month')}-${part('day')}`;
+}
+
 function amountInWords(value: number) {
   if (!Number.isFinite(value) || value <= 0) return 'Không đồng';
   const digits = [
@@ -652,6 +664,13 @@ export default function GarbageFeeApp() {
   const [paymentCountdown, setPaymentCountdown] = useState<
     Record<string, number>
   >({});
+  const [editingPayment, setEditingPayment] = useState<Payment | null>(null);
+  const [editPaymentAmount, setEditPaymentAmount] = useState('');
+  const [editPaymentDate, setEditPaymentDate] = useState('');
+  const [editPaymentMethod, setEditPaymentMethod] =
+    useState<Payment['method']>('transfer');
+  const [editPaymentError, setEditPaymentError] = useState('');
+  const [savingPaymentEdit, setSavingPaymentEdit] = useState(false);
   const [activeMainTab, setActiveMainTab] = useState<MainTabValue>('collect');
   const [visitedMainTabs, setVisitedMainTabs] = useState<Set<MainTabValue>>(
     () => new Set(['collect']),
@@ -1087,6 +1106,57 @@ export default function GarbageFeeApp() {
     }
   };
 
+  const openPaymentEditor = (payment: Payment) => {
+    setEditingPayment(payment);
+    setEditPaymentAmount(formatNumber(payment.amount));
+    setEditPaymentDate(formatDateInput(payment.paidAt));
+    setEditPaymentMethod(payment.method);
+    setEditPaymentError('');
+  };
+
+  const savePaymentEdit = async () => {
+    if (!editingPayment) return;
+    const amount = parseAmount(editPaymentAmount, 0);
+    if (!amount || !/^\d{4}-\d{2}-\d{2}$/.test(editPaymentDate)) {
+      setEditPaymentError('Vui lòng nhập số tiền và ngày thu hợp lệ.');
+      return;
+    }
+    setSavingPaymentEdit(true);
+    setEditPaymentError('');
+    try {
+      const response = await fetch('/api/data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'update-payment',
+          paymentId: editingPayment.id,
+          amount,
+          paidAt: editPaymentDate,
+          method: editPaymentMethod,
+        }),
+      });
+      const payload = (await response.json()) as {
+        payment?: Payment;
+        error?: string;
+      };
+      if (!response.ok || !payload.payment)
+        throw new Error(payload.error ?? 'Chưa thể cập nhật khoản thu.');
+      setState((current) => ({
+        ...current,
+        payments: current.payments.map((payment) =>
+          payment.id === payload.payment!.id ? payload.payment! : payment,
+        ),
+      }));
+      setEditingPayment(null);
+    } catch (error) {
+      setEditPaymentError(
+        error instanceof Error ? error.message : 'Chưa thể cập nhật khoản thu.',
+      );
+    } finally {
+      setSavingPaymentEdit(false);
+    }
+  };
+
   const sendPaymentReceipt = async (
     apartment: Apartment,
     payment: Payment,
@@ -1283,11 +1353,11 @@ export default function GarbageFeeApp() {
       const blob = await new Promise<Blob>((resolve) =>
         pdfMake.createPdf(documentDefinition).getBlob(resolve),
       );
-      const filename = `xac-nhan-thanh-toan-${normalizeApartmentCode(apartment.code).replace(/[^a-zA-Z0-9]+/g, '-')}-${payment.month}.pdf`;
+      const filename = `phieu-thu-${normalizeApartmentCode(apartment.code).replace(/[^a-zA-Z0-9]+/g, '-')}-${payment.month}.pdf`;
       const file = new File([blob], filename, { type: 'application/pdf' });
       const shareData = {
-        title: 'Xác nhận thanh toán',
-        text: `Biên nhận ${normalizeApartmentCode(apartment.code)} - kỳ ${payment.month}`,
+        title: 'Phiếu Thu',
+        text: `Phiếu thu ${normalizeApartmentCode(apartment.code)} - kỳ ${payment.month}`,
         files: [file],
       };
       if (
@@ -1303,29 +1373,34 @@ export default function GarbageFeeApp() {
       link.download = filename;
       link.click();
       URL.revokeObjectURL(url);
-      window.alert(
-        'Thiết bị chưa hỗ trợ gửi trực tiếp. File PDF đã được tải xuống để gửi qua Zalo.',
-      );
+      window.alert('Thiết bị chưa hỗ trợ gửi trực tiếp. Phiếu Thu PDF đã được tải xuống để gửi qua Zalo.');
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') return;
       console.error('Unable to create payment receipt PDF', error);
-      window.alert('Chưa thể tạo biên nhận PDF. Vui lòng thử lại.');
+      window.alert('Chưa thể tạo Phiếu Thu PDF. Vui lòng thử lại.');
     }
   };
 
-  const cancelPayment = async (paymentId: string) => {
+  const cancelPayment = async (payment: Payment) => {
+    if (!window.confirm('Xóa khoản thu này? Căn hộ sẽ trở về trạng thái Chưa thu.'))
+      return;
     const response = await fetch('/api/data', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'cancel-payment', paymentId }),
+      body: JSON.stringify({ action: 'cancel-payment', paymentId: payment.id }),
     });
-    const payload = (await response.json()) as { paymentId?: string };
+    const payload = (await response.json()) as {
+      paymentId?: string;
+      error?: string;
+    };
     if (response.ok && payload.paymentId) {
       setState((current) => ({
         ...current,
         payments: current.payments.filter((payment) => payment.id !== payload.paymentId),
       }));
+      return;
     }
+    setPaymentError(payload.error ?? 'Chưa thể xóa khoản thu.');
   };
 
   const submitDebtSettlement = async (
@@ -2440,6 +2515,76 @@ export default function GarbageFeeApp() {
       />
 
       <Dialog
+        open={Boolean(editingPayment)}
+        onOpenChange={(open) => {
+          if (!open && !savingPaymentEdit) setEditingPayment(null);
+        }}
+      >
+        <DialogContent className="max-w-[calc(100%-2rem)] sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Sửa khoản thu</DialogTitle>
+            <DialogDescription>
+              Chỉ cập nhật số tiền, ngày thu và hình thức thanh toán của khoản thu do bạn ghi nhận.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4">
+            <Field label="Số tiền">
+              <Input
+                inputMode="numeric"
+                value={editPaymentAmount}
+                onChange={(event) =>
+                  setEditPaymentAmount(formatAmountInput(event.target.value))
+                }
+              />
+            </Field>
+            <Field label="Ngày thu">
+              <Input
+                type="date"
+                value={editPaymentDate}
+                onChange={(event) => setEditPaymentDate(event.target.value)}
+              />
+            </Field>
+            <Field label="Hình thức thanh toán">
+              <NativeSelect
+                className="w-full"
+                value={editPaymentMethod}
+                onChange={(event) =>
+                  setEditPaymentMethod(event.target.value as Payment['method'])
+                }
+              >
+                <NativeSelectOption value="transfer">
+                  Chuyển khoản
+                </NativeSelectOption>
+                <NativeSelectOption value="cash">Tiền mặt</NativeSelectOption>
+              </NativeSelect>
+            </Field>
+            {editPaymentError && (
+              <p className="rounded-lg bg-destructive/10 p-3 text-sm font-medium text-destructive">
+                {editPaymentError}
+              </p>
+            )}
+            <div className="grid grid-cols-2 gap-3 pt-1">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={savingPaymentEdit}
+                onClick={() => setEditingPayment(null)}
+              >
+                Hủy
+              </Button>
+              <Button
+                type="button"
+                disabled={savingPaymentEdit}
+                onClick={() => void savePaymentEdit()}
+              >
+                {savingPaymentEdit ? 'Đang lưu...' : 'Lưu thay đổi'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
         open={Boolean(pendingMonth)}
         onOpenChange={(open) => {
           if (!open) setPendingMonth(null);
@@ -2661,6 +2806,10 @@ export default function GarbageFeeApp() {
                     const countdown = paymentCountdown[apartment.id];
                     const isRecording = recordingPayments[apartment.id];
                     const defaultFee = getFee(apartment, lookups);
+                    const canEditOwnPayment = payment?.collectorId === currentUser.id;
+                    const canDeletePayment = Boolean(
+                      payment && (canEditOwnPayment || canManage),
+                    );
                     return (
                       <TableRow
                         key={apartment.id}
@@ -2751,12 +2900,11 @@ export default function GarbageFeeApp() {
                               Người thu
                             </div>
                             <div className="flex h-10 items-center px-2">
-                              {payment && paymentFilter === 'paid' && (
+                              {payment && (
                                 <Button
                                   type="button"
-                                  variant="outline"
                                   size="sm"
-                                  className="w-full gap-1 text-xs"
+                                  className="w-full gap-1 text-xs font-bold shadow-sm"
                                   onClick={() =>
                                     void sendPaymentReceipt(
                                       apartment,
@@ -2766,7 +2914,7 @@ export default function GarbageFeeApp() {
                                   }
                                 >
                                   <Send className="size-3.5" />
-                                  Gửi xác nhận thanh toán
+                                  Gửi Phiếu Thu
                                 </Button>
                               )}
                             </div>
@@ -2873,15 +3021,38 @@ export default function GarbageFeeApp() {
                                     Ẩn giao dịch trong {countdown} giây
                                   </span>
                                 </Button>
-                              ) : payment && canManage ? (
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  className="h-full min-h-16 w-full text-base font-semibold"
-                                  onClick={() => cancelPayment(payment.id)}
-                                >
-                                  Hủy
-                                </Button>
+                              ) : payment ? (
+                                <div className="flex h-full min-h-16 flex-col items-center justify-center gap-2 p-2 text-center text-sm font-semibold text-primary">
+                                  <span>Đã ghi nhận</span>
+                                  {(canEditOwnPayment || canDeletePayment) && (
+                                    <div className="flex w-full gap-2">
+                                      {canEditOwnPayment && (
+                                        <Button
+                                          type="button"
+                                          variant="outline"
+                                          size="sm"
+                                          className="flex-1"
+                                          onClick={() => openPaymentEditor(payment)}
+                                        >
+                                          <Pencil className="size-3.5" />
+                                          Sửa
+                                        </Button>
+                                      )}
+                                      {canDeletePayment && (
+                                        <Button
+                                          type="button"
+                                          variant="destructive"
+                                          size="sm"
+                                          className="flex-1"
+                                          onClick={() => void cancelPayment(payment)}
+                                        >
+                                          <Trash2 className="size-3.5" />
+                                          Xóa
+                                        </Button>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
                               ) : !payment ? (
                                 <Button
                                   type="button"
@@ -2890,11 +3061,7 @@ export default function GarbageFeeApp() {
                                 >
                                   Thu tiền
                                 </Button>
-                              ) : (
-                                <div className="flex h-full min-h-16 items-center justify-center text-center text-base font-semibold text-primary">
-                                  Đã ghi nhận
-                                </div>
-                              )}
+                              ) : null}
                             </div>
                           </div>
                         </TableCell>
