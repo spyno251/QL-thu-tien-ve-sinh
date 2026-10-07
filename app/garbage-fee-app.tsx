@@ -5129,6 +5129,9 @@ function StatsView({
   const [selectedCollectorId, setSelectedCollectorId] = useState<string | null>(
     null,
   );
+  const [exportCollectorId, setExportCollectorId] = useState(
+    currentUser.role === 'admin' ? 'all' : currentUser.id,
+  );
   const payments = state.payments.filter((item) => item.month === month);
   const byUser = state.users
     .filter(
@@ -5174,6 +5177,7 @@ function StatsView({
     const region = block ? lookups.regions.get(block.regionId) : undefined;
     const collector = lookups.users.get(payment.collectorId);
     return {
+      collectorId: payment.collectorId,
       apartment: fullApartmentLabel(apartment, lookups.blocks, lookups.regions),
       area: `${region?.name ?? '-'} / ${block?.name ?? '-'}`,
       collector: collector?.name ?? payment.collectorId,
@@ -5184,26 +5188,71 @@ function StatsView({
     };
   });
 
+  const exportPayments = payments.filter(
+    (payment) =>
+      currentUser.role === 'admin'
+        ? exportCollectorId === 'all' || payment.collectorId === exportCollectorId
+        : payment.collectorId === currentUser.id,
+  );
+  const exportRows = detailRows.filter((row) =>
+    exportPayments.some((payment) => payment.collectorId === row.collectorId),
+  );
+  const exportCollectors = state.users.filter(
+    (user) =>
+      exportCollectorId === 'all'
+        ? exportPayments.some((payment) => payment.collectorId === user.id)
+        : user.id === exportCollectorId,
+  );
+  const exportGroups = exportCollectors.map((collector) => {
+    const rows = exportRows.filter((row) => row.collectorId === collector.id);
+    return {
+      collector,
+      rows,
+      transferRows: rows.filter((row) => row.method === 'Chuyển khoản'),
+      cashRows: rows.filter((row) => row.method === 'Tiền mặt'),
+      total: rows.reduce((sum, row) => sum + row.amount, 0),
+    };
+  });
+  const exportTotal = exportRows.reduce((sum, row) => sum + row.amount, 0);
+  const exportScopeLabel =
+    currentUser.role === 'admin' && exportCollectorId === 'all'
+      ? 'Tổng hợp tất cả người thu'
+      : exportGroups[0]?.collector.name ?? currentUser.name;
+
+  const exportRowsForSheet = (rows: typeof detailRows) =>
+    rows.map((row) => ({
+      'Căn hộ': row.apartment,
+      'Khu vực': row.area,
+      'Ngày thu': row.paidAt,
+      'Số tiền': row.amount,
+      'Ghi chú': row.note,
+    }));
+
   const exportExcel = async () => {
     const XLSX = await import('xlsx');
-    const summaryRows = byUser.map(
-      ({ user, count, total, settled, outstanding }) => ({
-        'Nhân viên': user.name,
-        'Số căn': count,
-        'Tổng tiền': total,
-        'Đã nộp': settled,
-        'Còn nợ': outstanding,
-      }),
-    );
     const workbook = XLSX.utils.book_new();
     const summary = XLSX.utils.aoa_to_sheet([
       ['BÁO CÁO THỐNG KÊ THU TIỀN VỆ SINH'],
       ['Kỳ thu', `${month.slice(5, 7)}/${month.slice(0, 4)}`],
-      ['Dự kiến', totalDue],
-      ['Đã thu', totalPaid],
+      ['Phạm vi', exportScopeLabel],
+      ['Số khoản thu', exportRows.length],
+      ['Tổng đã thu', exportTotal],
       [],
     ]);
-    XLSX.utils.sheet_add_json(summary, summaryRows, { origin: 'A7' });
+    XLSX.utils.sheet_add_json(
+      summary,
+      exportGroups.map((group) => ({
+        'Người thu': group.collector.name,
+        'Số căn': group.rows.length,
+        'Chuyển khoản': group.transferRows.reduce(
+          (sum, row) => sum + row.amount,
+          0,
+        ),
+        'Tiền mặt': group.cashRows.reduce((sum, row) => sum + row.amount, 0),
+        'Tổng tiền': group.total,
+      })),
+      { origin: 'A7' },
+    );
     summary['!cols'] = [
       { wch: 22 },
       { wch: 12 },
@@ -5211,29 +5260,40 @@ function StatsView({
       { wch: 18 },
       { wch: 18 },
     ];
-    const details = XLSX.utils.json_to_sheet(
-      detailRows.map((row) => ({
-        'Căn hộ': row.apartment,
-        'Khu vực': row.area,
-        'Người thu': row.collector,
-        'Ngày thu': row.paidAt,
-        'Số tiền': row.amount,
-        'Thanh toán': row.method,
-        'Ghi chú': row.note,
-      })),
-    );
-    details['!cols'] = [
-      { wch: 18 },
-      { wch: 24 },
-      { wch: 20 },
-      { wch: 14 },
-      { wch: 16 },
-      { wch: 18 },
-      { wch: 32 },
-    ];
     XLSX.utils.book_append_sheet(workbook, summary, 'Tổng hợp');
-    XLSX.utils.book_append_sheet(workbook, details, 'Chi tiết thu');
-    XLSX.writeFile(workbook, `Thong-ke-thu-ve-sinh-${month}.xlsx`);
+
+    exportGroups.forEach((group, index) => {
+      const details = XLSX.utils.aoa_to_sheet([
+        ['BÁO CÁO THU TIỀN VỆ SINH'],
+        ['Kỳ thu', `${month.slice(5, 7)}/${month.slice(0, 4)}`],
+        ['Người thu', group.collector.name],
+        ['Tổng đã thu', group.total],
+        [],
+        ['CHUYỂN KHOẢN'],
+      ]);
+      XLSX.utils.sheet_add_json(details, exportRowsForSheet(group.transferRows), {
+        origin: 'A7',
+      });
+      const cashStart = 8 + group.transferRows.length;
+      XLSX.utils.sheet_add_aoa(details, [[], ['TIỀN MẶT']], {
+        origin: `A${cashStart}`,
+      });
+      XLSX.utils.sheet_add_json(details, exportRowsForSheet(group.cashRows), {
+        origin: `A${cashStart + 2}`,
+      });
+      details['!cols'] = [
+        { wch: 20 },
+        { wch: 24 },
+        { wch: 18 },
+        { wch: 16 },
+        { wch: 32 },
+      ];
+      const sheetName = `${index + 1}. ${group.collector.name}`
+        .replace(/[\\/?*\[\]:]/g, '-')
+        .slice(0, 31);
+      XLSX.utils.book_append_sheet(workbook, details, sheetName);
+    });
+    XLSX.writeFile(workbook, `Thong-ke-thu-ve-sinh-${month}-${exportScopeLabel}.xlsx`);
   };
 
   const printReport = (forPdf: boolean) => {
@@ -5249,48 +5309,69 @@ function StatsView({
             '"': '&quot;',
           })[character] ?? character,
       );
-    const reportWindow = window.open('', '_blank', 'noopener,noreferrer');
+    const reportWindow = window.open('', '_blank');
     if (!reportWindow) return;
-    const employeeRows = byUser
+    const paymentRows = (rows: typeof detailRows) =>
+      rows
+        .map(
+          (row) =>
+            `<tr><td>${escapeHtml(row.apartment)}</td><td>${escapeHtml(row.area)}</td><td>${escapeHtml(row.paidAt)}</td><td>${money.format(row.amount)}</td><td>${escapeHtml(row.note)}</td></tr>`,
+        )
+        .join('') || '<tr><td colspan="5">Chưa có khoản thu</td></tr>';
+    const groupSections = exportGroups
       .map(
-        ({ user, count, total, settled, outstanding }) =>
-          `<tr><td>${escapeHtml(user.name)}</td><td>${formatNumber(count)}</td><td>${money.format(total)}</td><td>${money.format(settled)}</td><td>${money.format(outstanding)}</td></tr>`,
+        (group) =>
+          `<section><h2>${escapeHtml(group.collector.name)}</h2><p>Tổng đã thu: <strong>${money.format(group.total)}</strong></p><h3>Chuyển khoản</h3><table><thead><tr><th>Căn hộ</th><th>Khu vực</th><th>Ngày thu</th><th>Số tiền</th><th>Ghi chú</th></tr></thead><tbody>${paymentRows(group.transferRows)}</tbody></table><h3>Tiền mặt</h3><table><thead><tr><th>Căn hộ</th><th>Khu vực</th><th>Ngày thu</th><th>Số tiền</th><th>Ghi chú</th></tr></thead><tbody>${paymentRows(group.cashRows)}</tbody></table></section>`,
       )
-      .join('');
-    const paymentRows = detailRows
-      .map(
-        (row) =>
-          `<tr><td>${escapeHtml(row.apartment)}</td><td>${escapeHtml(row.area)}</td><td>${escapeHtml(row.collector)}</td><td>${escapeHtml(row.paidAt)}</td><td>${money.format(row.amount)}</td><td>${escapeHtml(row.method)}</td><td>${escapeHtml(row.note)}</td></tr>`,
-      )
-      .join('');
+      .join('') || '<p>Chưa có khoản thu trong kỳ này.</p>';
     reportWindow.document.write(
-      `<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>Thống kê ${month}</title><style>body{font-family:Arial,sans-serif;color:#102a30;padding:28px}h1{margin:0 0 6px;font-size:24px}p{margin:0 0 20px;color:#547077}.summary{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-bottom:24px}.metric{border:1px solid #bdd9d5;border-radius:6px;padding:12px}.metric span{display:block;color:#587277;font-size:12px}.metric strong{font-size:19px}h2{font-size:17px;margin:24px 0 10px}table{border-collapse:collapse;width:100%;font-size:12px}th{background:#006d5a;color:#fff}th,td{border:1px solid #bdd9d5;padding:8px;text-align:left;vertical-align:top}@page{size:A4 landscape;margin:12mm}@media print{body{padding:0}}</style></head><body><h1>Báo cáo thu tiền vệ sinh</h1><p>Kỳ thu: ${month.slice(5, 7)}/${month.slice(0, 4)}${forPdf ? ' · Chọn “Lưu dưới dạng PDF” trong hộp in.' : ''}</p><div class="summary"><div class="metric"><span>Dự kiến</span><strong>${money.format(totalDue)}</strong></div><div class="metric"><span>Đã thu</span><strong>${money.format(totalPaid)}</strong></div></div><h2>Theo nhân viên</h2><table><thead><tr><th>Nhân viên</th><th>Số căn</th><th>Tổng tiền</th><th>Đã nộp</th><th>Còn nợ</th></tr></thead><tbody>${employeeRows || '<tr><td colspan="5">Chưa có dữ liệu</td></tr>'}</tbody></table><h2>Chi tiết thu trong kỳ</h2><table><thead><tr><th>Căn hộ</th><th>Khu vực</th><th>Người thu</th><th>Ngày thu</th><th>Số tiền</th><th>Thanh toán</th><th>Ghi chú</th></tr></thead><tbody>${paymentRows || '<tr><td colspan="7">Chưa có khoản thu</td></tr>'}</tbody></table></body></html>`,
+      `<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>Thống kê ${month}</title><style>body{font-family:Arial,sans-serif;color:#102a30;padding:28px}h1{margin:0 0 6px;font-size:24px}p{margin:0 0 14px;color:#547077}.summary{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-bottom:24px}.metric{border:1px solid #bdd9d5;border-radius:6px;padding:12px}.metric span{display:block;color:#587277;font-size:12px}.metric strong{font-size:19px}section{break-inside:avoid;margin-top:28px}h2{font-size:18px;margin:0 0 5px}h3{font-size:14px;margin:18px 0 8px;color:#006d5a}table{border-collapse:collapse;width:100%;font-size:12px}th{background:#006d5a;color:#fff}th,td{border:1px solid #bdd9d5;padding:8px;text-align:left;vertical-align:top}@page{size:A4 landscape;margin:12mm}@media print{body{padding:0}}</style></head><body><h1>Báo cáo thu tiền vệ sinh</h1><p>Kỳ thu: ${month.slice(5, 7)}/${month.slice(0, 4)} · ${escapeHtml(exportScopeLabel)}${forPdf ? ' · Chọn “Lưu dưới dạng PDF” trong hộp in.' : ''}</p><div class="summary"><div class="metric"><span>Số khoản thu</span><strong>${formatNumber(exportRows.length)}</strong></div><div class="metric"><span>Tổng đã thu</span><strong>${money.format(exportTotal)}</strong></div></div>${groupSections}</body></html>`,
     );
     reportWindow.document.close();
-    window.setTimeout(() => reportWindow.print(), 250);
+    window.setTimeout(() => {
+      reportWindow.focus();
+      reportWindow.print();
+    }, 400);
   };
 
   return (
     <section className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
       <div className="flex justify-end lg:col-span-2">
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            render={<Button type="button" variant="outline" />}
-          >
-            Xuất dữ liệu thống kê
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => void exportExcel()}>
-              <FileSpreadsheet className="size-4" /> Xuất Excel
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => printReport(true)}>
-              <FileText className="size-4" /> Xuất PDF
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => printReport(false)}>
-              <Printer className="size-4" /> In
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {currentUser.role === 'admin' && (
+            <NativeSelect
+              aria-label="Chọn người thu để xuất thống kê"
+              className="w-56"
+              value={exportCollectorId}
+              onChange={(event) => setExportCollectorId(event.target.value)}
+            >
+              <NativeSelectOption value="all">Tổng hợp tất cả người thu</NativeSelectOption>
+              {state.users.map((user) => (
+                <NativeSelectOption key={user.id} value={user.id}>
+                  {user.name} · {user.phone}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+          )}
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={<Button type="button" variant="outline" />}
+            >
+              Xuất dữ liệu thống kê
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => void exportExcel()}>
+                <FileSpreadsheet className="size-4" /> Xuất Excel
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => printReport(true)}>
+                <FileText className="size-4" /> Xuất PDF
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => printReport(false)}>
+                <Printer className="size-4" /> In
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </div>
       <div className="rounded-lg border bg-card p-4">
         <h2 className="mb-3 text-base font-semibold">
