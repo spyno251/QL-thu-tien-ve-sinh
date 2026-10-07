@@ -668,7 +668,7 @@ export default function GarbageFeeApp() {
   const [selectedRegion, setSelectedRegion] = useState('all');
   const [selectedBlock, setSelectedBlock] = useState('all');
   const [query, setQuery] = useState('');
-  const [paymentFilter, setPaymentFilter] = useState<'unpaid' | 'paid' | 'all'>(
+  const [paymentFilter, setPaymentFilter] = useState<'unpaid' | 'paid'>(
     'unpaid',
   );
   const [draftAmounts, setDraftAmounts] = useState<Record<string, string>>({});
@@ -929,10 +929,9 @@ export default function GarbageFeeApp() {
         selectedBlock === 'all' || selectedBlock === apartment.blockId;
       const isPaid = currentMonthPaymentByApartment.has(apartment.id);
       const matchesPayment =
-        paymentFilter === 'all' ||
-        (paymentFilter === 'paid'
+        paymentFilter === 'paid'
           ? isPaid
-          : !isPaid || paymentCountdown[apartment.id] !== undefined);
+          : !isPaid || paymentCountdown[apartment.id] !== undefined;
       const text = `${normalizeApartmentCode(apartment.code)} ${apartment.owner}`.toLowerCase();
       return (
         matchesRegion &&
@@ -967,6 +966,27 @@ export default function GarbageFeeApp() {
       activeApartments,
     ],
   );
+  const collectionScopeApartments = useMemo(
+    () =>
+      activeApartments.filter((apartment) => {
+        const block = lookups.blocks.get(apartment.blockId);
+        const regionId = block?.regionId ?? '';
+        return (
+          (selectedRegion === 'all' || selectedRegion === regionId) &&
+          (selectedBlock === 'all' || selectedBlock === apartment.blockId)
+        );
+      }),
+    [activeApartments, lookups.blocks, selectedBlock, selectedRegion],
+  );
+  const paidApartmentCount = collectionScopeApartments.filter((apartment) =>
+    currentMonthPaymentByApartment.has(apartment.id),
+  ).length;
+  const unpaidApartmentCount =
+    collectionScopeApartments.length - paidApartmentCount;
+  const collectionPercent = (count: number) =>
+    collectionScopeApartments.length === 0
+      ? 0
+      : Math.round((count / collectionScopeApartments.length) * 100);
   const collectionPageCount = Math.max(
     1,
     Math.ceil(visibleApartments.length / COLLECTION_PAGE_SIZE),
@@ -2752,40 +2772,29 @@ export default function GarbageFeeApp() {
                 </Field>
               </div>
 
-              <div className="mb-3 flex flex-wrap items-center gap-1.5">
-                <span className="mr-1 text-sm font-medium">Lọc nhanh:</span>
+              <div className="mb-3 flex flex-wrap items-center gap-2">
+                <span className="mr-1 text-sm font-semibold">Lọc nhanh:</span>
                 <Button
                   type="button"
-                  size="sm"
+                  className="h-11 whitespace-nowrap px-4 text-base font-bold sm:px-5"
                   variant={paymentFilter === 'unpaid' ? 'default' : 'outline'}
                   onClick={() => {
                     setPaymentFilter('unpaid');
                     setCollectionPage(1);
                   }}
                 >
-                  Chưa thu
+                  Chưa thu {unpaidApartmentCount} ({collectionPercent(unpaidApartmentCount)}%)
                 </Button>
                 <Button
                   type="button"
-                  size="sm"
+                  className="h-11 whitespace-nowrap px-4 text-base font-bold sm:px-5"
                   variant={paymentFilter === 'paid' ? 'default' : 'outline'}
                   onClick={() => {
                     setPaymentFilter('paid');
                     setCollectionPage(1);
                   }}
                 >
-                  Đã thu
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={paymentFilter === 'all' ? 'default' : 'outline'}
-                  onClick={() => {
-                    setPaymentFilter('all');
-                    setCollectionPage(1);
-                  }}
-                >
-                  Tất cả
+                  Đã thu {paidApartmentCount} ({collectionPercent(paidApartmentCount)}%)
                 </Button>
               </div>
               {paymentError && (
