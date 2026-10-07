@@ -5270,20 +5270,20 @@ function StatsView({
         ['Người thu', group.collector.name],
         ['Tổng đã thu', group.total],
         [],
-        [`CHUYỂN KHOẢN (${group.transferTotal})`, '', '', '', `TIỀN MẶT (${group.cashTotal})`],
+        [`TIỀN MẶT (${group.cashTotal})`],
       ]);
-      XLSX.utils.sheet_add_json(details, exportRowsForSheet(group.transferRows), {
+      XLSX.utils.sheet_add_json(details, exportRowsForSheet(group.cashRows), {
         origin: 'A7',
       });
-      XLSX.utils.sheet_add_json(details, exportRowsForSheet(group.cashRows), {
-        origin: 'E7',
+      const transferStart = 8 + group.cashRows.length;
+      XLSX.utils.sheet_add_aoa(details, [[], [`CHUYỂN KHOẢN (${group.transferTotal})`]], {
+        origin: `A${transferStart}`,
+      });
+      XLSX.utils.sheet_add_json(details, exportRowsForSheet(group.transferRows), {
+        origin: `A${transferStart + 2}`,
       });
       details['!cols'] = [
-        { wch: 19 },
-        { wch: 16 },
-        { wch: 15 },
-        { wch: 3 },
-        { wch: 19 },
+        { wch: 22 },
         { wch: 16 },
         { wch: 15 },
       ];
@@ -5320,11 +5320,11 @@ function StatsView({
     const groupSections = exportGroups
       .map(
         (group) =>
-          `<section><h2>${escapeHtml(group.collector.name)}</h2><p>Tổng đã thu: <strong>${money.format(group.total)}</strong></p><div class="payment-columns"><div><h3>Chuyển khoản <span>(${money.format(group.transferTotal)})</span></h3><table><colgroup><col class="apartment"><col class="date"><col class="amount"></colgroup><thead><tr><th>Căn hộ</th><th>Ngày thu</th><th>Số tiền</th></tr></thead><tbody>${paymentRows(group.transferRows)}</tbody></table></div><div><h3>Tiền mặt <span>(${money.format(group.cashTotal)})</span></h3><table><colgroup><col class="apartment"><col class="date"><col class="amount"></colgroup><thead><tr><th>Căn hộ</th><th>Ngày thu</th><th>Số tiền</th></tr></thead><tbody>${paymentRows(group.cashRows)}</tbody></table></div></div></section>`,
+          `<section><h2>${escapeHtml(group.collector.name)}</h2><p>Tổng đã thu: <strong>${money.format(group.total)}</strong></p><h3>Tiền mặt <span>(${money.format(group.cashTotal)})</span></h3><table><colgroup><col class="apartment"><col class="date"><col class="amount"></colgroup><thead><tr><th>Căn hộ</th><th>Ngày thu</th><th>Số tiền</th></tr></thead><tbody>${paymentRows(group.cashRows)}</tbody></table><h3>Chuyển khoản <span>(${money.format(group.transferTotal)})</span></h3><table><colgroup><col class="apartment"><col class="date"><col class="amount"></colgroup><thead><tr><th>Căn hộ</th><th>Ngày thu</th><th>Số tiền</th></tr></thead><tbody>${paymentRows(group.transferRows)}</tbody></table></section>`,
       )
       .join('') || '<p>Chưa có khoản thu trong kỳ này.</p>';
     reportWindow.document.write(
-      `<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>Thống kê ${month}</title><style>body{font-family:Arial,sans-serif;color:#102a30;padding:22px}h1{margin:0 0 6px;font-size:22px}p{margin:0 0 12px;color:#547077}.summary{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-bottom:20px}.metric{border:1px solid #bdd9d5;border-radius:6px;padding:10px}.metric span{display:block;color:#587277;font-size:12px}.metric strong{font-size:18px}section{break-inside:avoid;margin-top:24px}h2{font-size:17px;margin:0 0 4px}h3{font-size:14px;margin:14px 0 7px;color:#006d5a}h3 span{font-weight:normal;color:#547077}.payment-columns{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}table{border-collapse:collapse;width:100%;table-layout:fixed;font-size:11px}.apartment{width:40%}.date{width:34%}.amount{width:26%}th{background:#006d5a;color:#fff}th,td{border:1px solid #bdd9d5;padding:6px;text-align:left;vertical-align:top;overflow-wrap:anywhere}@page{size:A4 landscape;margin:10mm}@media print{body{padding:0}}</style></head><body><h1>Báo cáo thu tiền vệ sinh</h1><p>Kỳ thu: ${month.slice(5, 7)}/${month.slice(0, 4)} · ${escapeHtml(exportScopeLabel)}${forPdf ? ' · Chọn “Lưu dưới dạng PDF” trong hộp in.' : ''}</p><div class="summary"><div class="metric"><span>Số khoản thu</span><strong>${formatNumber(exportRows.length)}</strong></div><div class="metric"><span>Tổng đã thu</span><strong>${money.format(exportTotal)}</strong></div></div>${groupSections}</body></html>`,
+      `<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>Thống kê ${month}</title><style>body{font-family:Arial,sans-serif;color:#102a30;padding:20px}h1{margin:0 0 6px;font-size:22px}p{margin:0 0 12px;color:#547077}.summary{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-bottom:20px}.metric{border:1px solid #bdd9d5;border-radius:6px;padding:10px}.metric span{display:block;color:#587277;font-size:12px}.metric strong{font-size:18px}section{margin-top:24px}h2{font-size:17px;margin:0 0 4px;break-after:avoid}h3{font-size:14px;margin:18px 0 7px;color:#006d5a;break-after:avoid}h3 span{font-weight:normal;color:#547077}table{border-collapse:collapse;width:100%;table-layout:fixed;font-size:11px}.apartment{width:42%}.date{width:32%}.amount{width:26%}th{background:#006d5a;color:#fff}th,td{border:1px solid #bdd9d5;padding:6px;text-align:left;vertical-align:top;overflow-wrap:anywhere}@page{size:A4 portrait;margin:10mm}@media print{body{padding:0}}</style></head><body><h1>Báo cáo thu tiền vệ sinh</h1><p>Kỳ thu: ${month.slice(5, 7)}/${month.slice(0, 4)} · ${escapeHtml(exportScopeLabel)}${forPdf ? ' · Chọn “Lưu dưới dạng PDF” trong hộp in.' : ''}</p><div class="summary"><div class="metric"><span>Số khoản thu</span><strong>${formatNumber(exportRows.length)}</strong></div><div class="metric"><span>Tổng đã thu</span><strong>${money.format(exportTotal)}</strong></div></div>${groupSections}</body></html>`,
     );
     reportWindow.document.close();
     window.setTimeout(() => {
