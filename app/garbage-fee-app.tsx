@@ -2772,11 +2772,11 @@ export default function GarbageFeeApp() {
                 </Field>
               </div>
 
-              <div className="mb-3 flex flex-wrap items-center gap-2">
-                <span className="mr-1 text-sm font-semibold">Lọc nhanh:</span>
+              <div className="mb-3 grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center">
+                <span className="col-span-2 text-sm font-semibold sm:mr-1 sm:col-auto">Lọc nhanh:</span>
                 <Button
                   type="button"
-                  className="h-11 whitespace-nowrap px-4 text-base font-bold sm:px-5"
+                  className="h-10 min-w-0 justify-center whitespace-nowrap px-1 text-xs font-bold sm:h-11 sm:px-5 sm:text-base"
                   variant={paymentFilter === 'unpaid' ? 'default' : 'outline'}
                   onClick={() => {
                     setPaymentFilter('unpaid');
@@ -2787,7 +2787,7 @@ export default function GarbageFeeApp() {
                 </Button>
                 <Button
                   type="button"
-                  className="h-11 whitespace-nowrap px-4 text-base font-bold sm:px-5"
+                  className="h-10 min-w-0 justify-center whitespace-nowrap px-1 text-xs font-bold sm:h-11 sm:px-5 sm:text-base"
                   variant={paymentFilter === 'paid' ? 'default' : 'outline'}
                   onClick={() => {
                     setPaymentFilter('paid');
