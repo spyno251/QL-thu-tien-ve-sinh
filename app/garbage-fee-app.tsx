@@ -469,6 +469,7 @@ async function fetchWithTimeout(
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat('vi-VN', {
+    timeZone: 'Asia/Ho_Chi_Minh',
     day: '2-digit',
     month: '2-digit',
     year: '2-digit',
@@ -477,6 +478,7 @@ function formatDate(value: string) {
 
 function formatTime(value: string) {
   return new Intl.DateTimeFormat('vi-VN', {
+    timeZone: 'Asia/Ho_Chi_Minh',
     hour: '2-digit',
     minute: '2-digit',
     hour12: false,
@@ -514,6 +516,21 @@ function formatDateInput(value: string) {
   const part = (type: Intl.DateTimeFormatPartTypes) =>
     parts.find((item) => item.type === type)?.value ?? '';
   return `${part('year')}-${part('month')}-${part('day')}`;
+}
+
+function formatPaymentDateTime(value: string) {
+  return `${formatDate(value)} (${formatTime(value)})`;
+}
+
+function PaymentDateTime({ value }: { value: string }) {
+  return (
+    <div className="leading-tight">
+      <div>{formatDate(value)}</div>
+      <div className="mt-1 text-xs text-muted-foreground">
+        ({formatTime(value)})
+      </div>
+    </div>
+  );
 }
 
 function amountInWords(value: number) {
@@ -1302,7 +1319,7 @@ export default function GarbageFeeApp() {
                             width: 190,
                             stack: [
                               {
-                                text: `Hà Nội, ${formatReceiptDate(payment.paidAt)}`,
+                                text: `Hà Nội, ${formatReceiptDate(payment.paidAt)} (${formatTime(payment.paidAt)})`,
                                 italics: true,
                                 fontSize: 9,
                                 alignment: 'center',
@@ -2955,9 +2972,7 @@ export default function GarbageFeeApp() {
                                   <div>
                                     {collector?.name ?? payment.collectorId}
                                   </div>
-                                  <div className="text-xs text-muted-foreground">
-                                    {formatDate(payment.paidAt)}
-                                  </div>
+                                  <PaymentDateTime value={payment.paidAt} />
                                 </div>
                               ) : (
                                 <span className="text-muted-foreground">-</span>
@@ -3813,7 +3828,9 @@ function AccountInformationDialog({
                       <TableCell>
                         {payment.month.slice(5, 7)}/{payment.month.slice(0, 4)}
                       </TableCell>
-                      <TableCell>{formatDate(payment.paidAt)}</TableCell>
+                      <TableCell>
+                        <PaymentDateTime value={payment.paidAt} />
+                      </TableCell>
                       <TableCell>{money.format(payment.amount)}</TableCell>
                       <TableCell>
                         {payment.method === 'transfer'
@@ -5160,7 +5177,7 @@ function StatsView({
       apartment: fullApartmentLabel(apartment, lookups.blocks, lookups.regions),
       area: `${region?.name ?? '-'} / ${block?.name ?? '-'}`,
       collector: collector?.name ?? payment.collectorId,
-      paidAt: formatDate(payment.paidAt),
+      paidAt: formatPaymentDateTime(payment.paidAt),
       amount: payment.amount,
       method: payment.method === 'transfer' ? 'Chuyển khoản' : 'Tiền mặt',
       note: payment.note || '-',
@@ -5378,7 +5395,9 @@ function StatsView({
                           lookups.regions,
                         )}
                       </TableCell>
-                      <TableCell>{formatDate(payment.paidAt)}</TableCell>
+                      <TableCell>
+                        <PaymentDateTime value={payment.paidAt} />
+                      </TableCell>
                       <TableCell>{money.format(payment.amount)}</TableCell>
                       <TableCell>{payment.note || '-'}</TableCell>
                       <TableCell>
@@ -5436,7 +5455,9 @@ function StatsView({
                       ? 'Chuyển khoản'
                       : 'Tiền mặt'}
                   </TableCell>
-                  <TableCell>{formatDate(payment.paidAt)}</TableCell>
+                  <TableCell>
+                    <PaymentDateTime value={payment.paidAt} />
+                  </TableCell>
                   <TableCell>{money.format(payment.amount)}</TableCell>
                 </TableRow>
               );
