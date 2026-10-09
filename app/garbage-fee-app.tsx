@@ -10,6 +10,8 @@ import {
   useState,
 } from 'react';
 import {
+  ArrowDown,
+  ArrowUp,
   Building2,
   CalendarDays,
   ChevronLeft,
@@ -83,6 +85,9 @@ type MainTabConfig = {
   roles: readonly Role[];
 };
 
+type MainMenuDisplay = 'scroll' | 'wrap';
+type MainMenuSize = 'small' | 'normal' | 'large';
+
 const MAIN_TABS: readonly MainTabConfig[] = [
   {
     value: 'collect',
@@ -97,8 +102,10 @@ const MAIN_TABS: readonly MainTabConfig[] = [
   { value: 'settings', label: 'Tùy chỉnh', roles: ['admin'] },
 ] as const;
 
+const MAIN_TAB_VALUES = MAIN_TABS.map((tab) => tab.value);
+
 const mainTabTriggerClass =
-  'min-h-11 flex-none whitespace-nowrap rounded-xl border border-transparent px-4 py-2 text-sm font-bold text-slate-700 shadow-none transition-all hover:-translate-y-0.5 hover:bg-white/80 hover:text-primary focus-visible:ring-2 focus-visible:ring-primary/40 data-active:-translate-y-1 data-active:border-primary/40 data-active:bg-primary data-active:text-primary-foreground data-active:shadow-[0_12px_28px_rgba(15,23,42,0.24)] sm:text-base';
+  'flex-none whitespace-nowrap rounded-lg border border-transparent py-2 font-bold shadow-none transition-colors hover:bg-white/60 focus-visible:ring-2 focus-visible:ring-primary/40 data-active:border-primary/40 data-active:shadow-sm';
 
 type User = {
   id: string;
@@ -177,6 +184,14 @@ type UiPreferences = {
   tableBorderColor: string;
   apartmentInfoBackgroundColor: string;
   tableTextAlign: 'left' | 'center' | 'right';
+  mainMenuOrder: MainTabValue[];
+  mainMenuLabels: Partial<Record<MainTabValue, string>>;
+  mainMenuBackgroundColor: string;
+  mainMenuTextColor: string;
+  mainMenuActiveBackgroundColor: string;
+  mainMenuActiveTextColor: string;
+  mainMenuSize: MainMenuSize;
+  mainMenuDisplay: MainMenuDisplay;
   invoice: InvoicePreferences;
 };
 
@@ -212,6 +227,14 @@ const defaultUiPreferences: UiPreferences = {
   tableBorderColor: '#bdd9d5',
   apartmentInfoBackgroundColor: '#d9ece3',
   tableTextAlign: 'left',
+  mainMenuOrder: [...MAIN_TAB_VALUES],
+  mainMenuLabels: {},
+  mainMenuBackgroundColor: '#eaf6f3',
+  mainMenuTextColor: '#102a30',
+  mainMenuActiveBackgroundColor: '#007563',
+  mainMenuActiveTextColor: '#ffffff',
+  mainMenuSize: 'normal',
+  mainMenuDisplay: 'scroll',
   invoice: {
     showAppName: true,
     showApartment: true,
@@ -816,11 +839,22 @@ export default function GarbageFeeApp() {
   }, [currentUser]);
 
   const visibleMainTabs = useMemo(
-    () =>
-      currentUser
-        ? MAIN_TABS.filter((tab) => tab.roles.includes(currentUser.role))
-        : [],
-    [currentUser],
+    () => {
+      if (!currentUser) return [];
+      const allowed = MAIN_TABS.filter((tab) =>
+        tab.roles.includes(currentUser.role),
+      );
+      const order = state.settings.uiPreferences.mainMenuOrder;
+      return [...allowed].sort((left, right) => {
+        const leftIndex = order.indexOf(left.value);
+        const rightIndex = order.indexOf(right.value);
+        return (
+          (leftIndex === -1 ? Number.MAX_SAFE_INTEGER : leftIndex) -
+          (rightIndex === -1 ? Number.MAX_SAFE_INTEGER : rightIndex)
+        );
+      });
+    },
+    [currentUser, state.settings.uiPreferences.mainMenuOrder],
   );
   const allowedMainTabs = useMemo(
     () => new Set(visibleMainTabs.map((tab) => tab.value)),
@@ -2700,14 +2734,32 @@ export default function GarbageFeeApp() {
           }}
           className="mt-5"
         >
-          <TabsList className="min-h-14 w-full max-w-none justify-start gap-2 overflow-x-auto rounded-2xl border border-primary/15 bg-gradient-to-b from-primary/12 to-background p-2 shadow-inner sm:w-fit sm:max-w-full">
+          <TabsList
+            className={`box-border min-h-13 w-full max-w-full justify-start gap-1.5 overflow-y-hidden rounded-xl border p-1.5 shadow-sm [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${state.settings.uiPreferences.mainMenuDisplay === 'wrap' ? 'flex-wrap overflow-x-hidden' : 'flex-nowrap overflow-x-auto overscroll-x-contain'}`}
+            style={{
+              backgroundColor: state.settings.uiPreferences.mainMenuBackgroundColor,
+              borderColor: state.settings.uiPreferences.primaryColor,
+            }}
+          >
             {visibleMainTabs.map((tab) => (
               <TabsTrigger
                 key={tab.value}
                 value={tab.value}
-                className={mainTabTriggerClass}
+                className={`${mainTabTriggerClass} ${state.settings.uiPreferences.mainMenuSize === 'small' ? 'min-h-9 px-3 text-xs' : state.settings.uiPreferences.mainMenuSize === 'large' ? 'min-h-12 px-5 text-base' : 'min-h-10 px-4 text-sm'}`}
+                style={
+                  tab.value === selectedMainTab
+                    ? {
+                        backgroundColor:
+                          state.settings.uiPreferences.mainMenuActiveBackgroundColor,
+                        color: state.settings.uiPreferences.mainMenuActiveTextColor,
+                      }
+                    : {
+                        color: state.settings.uiPreferences.mainMenuTextColor,
+                      }
+                }
               >
-                {tab.label}
+                {state.settings.uiPreferences.mainMenuLabels[tab.value] ||
+                  tab.label}
               </TabsTrigger>
             ))}
           </TabsList>
@@ -4304,6 +4356,23 @@ function CustomizationPanel({
     }
   };
 
+  const moveMainMenuItem = (fromIndex: number, offset: number) => {
+    const toIndex = fromIndex + offset;
+    if (toIndex < 0 || toIndex >= draft.uiPreferences.mainMenuOrder.length)
+      return;
+    setDraft((current) => {
+      const mainMenuOrder = [...current.uiPreferences.mainMenuOrder];
+      [mainMenuOrder[fromIndex], mainMenuOrder[toIndex]] = [
+        mainMenuOrder[toIndex],
+        mainMenuOrder[fromIndex],
+      ];
+      return {
+        ...current,
+        uiPreferences: { ...current.uiPreferences, mainMenuOrder },
+      };
+    });
+  };
+
   return (
     <section className="rounded-lg border bg-card p-3 sm:p-5">
       <div className="mb-4">
@@ -4425,6 +4494,154 @@ function CustomizationPanel({
             }))
           }
         />
+        <div className="space-y-3 border-y py-4 sm:col-span-2">
+          <div>
+            <h3 className="font-semibold">Menu chính</h3>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Đổi tên, thứ tự và cách hiển thị menu cho toàn bộ tài khoản.
+            </p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <ColorField
+              label="Nền menu"
+              value={draft.uiPreferences.mainMenuBackgroundColor}
+              onChange={(mainMenuBackgroundColor) =>
+                setDraft((current) => ({
+                  ...current,
+                  uiPreferences: {
+                    ...current.uiPreferences,
+                    mainMenuBackgroundColor,
+                  },
+                }))
+              }
+            />
+            <ColorField
+              label="Chữ menu"
+              value={draft.uiPreferences.mainMenuTextColor}
+              onChange={(mainMenuTextColor) =>
+                setDraft((current) => ({
+                  ...current,
+                  uiPreferences: { ...current.uiPreferences, mainMenuTextColor },
+                }))
+              }
+            />
+            <ColorField
+              label="Nền mục đang chọn"
+              value={draft.uiPreferences.mainMenuActiveBackgroundColor}
+              onChange={(mainMenuActiveBackgroundColor) =>
+                setDraft((current) => ({
+                  ...current,
+                  uiPreferences: {
+                    ...current.uiPreferences,
+                    mainMenuActiveBackgroundColor,
+                  },
+                }))
+              }
+            />
+            <ColorField
+              label="Chữ mục đang chọn"
+              value={draft.uiPreferences.mainMenuActiveTextColor}
+              onChange={(mainMenuActiveTextColor) =>
+                setDraft((current) => ({
+                  ...current,
+                  uiPreferences: {
+                    ...current.uiPreferences,
+                    mainMenuActiveTextColor,
+                  },
+                }))
+              }
+            />
+            <SelectPreference
+              label="Kích thước menu"
+              value={draft.uiPreferences.mainMenuSize}
+              onChange={(mainMenuSize) =>
+                setDraft((current) => ({
+                  ...current,
+                  uiPreferences: {
+                    ...current.uiPreferences,
+                    mainMenuSize: mainMenuSize as MainMenuSize,
+                  },
+                }))
+              }
+              options={[
+                ['small', 'Gọn'],
+                ['normal', 'Tiêu chuẩn'],
+                ['large', 'Lớn'],
+              ]}
+            />
+            <SelectPreference
+              label="Kiểu hiển thị menu"
+              value={draft.uiPreferences.mainMenuDisplay}
+              onChange={(mainMenuDisplay) =>
+                setDraft((current) => ({
+                  ...current,
+                  uiPreferences: {
+                    ...current.uiPreferences,
+                    mainMenuDisplay: mainMenuDisplay as MainMenuDisplay,
+                  },
+                }))
+              }
+              options={[
+                ['scroll', 'Vuốt ngang'],
+                ['wrap', 'Xuống dòng'],
+              ]}
+            />
+          </div>
+          <div className="space-y-2">
+            <p className="text-sm font-medium">Tên và thứ tự mục menu</p>
+            {draft.uiPreferences.mainMenuOrder.map((tabValue, index) => {
+              const tab = MAIN_TABS.find((item) => item.value === tabValue);
+              if (!tab) return null;
+              return (
+                <div
+                  key={tabValue}
+                  className="grid grid-cols-[1.75rem_minmax(0,1fr)_2.5rem_2.5rem] items-center gap-2 rounded-md border p-2"
+                >
+                  <span className="text-center text-xs font-semibold text-muted-foreground">
+                    {index + 1}
+                  </span>
+                  <Input
+                    value={draft.uiPreferences.mainMenuLabels[tabValue] ?? tab.label}
+                    maxLength={24}
+                    aria-label={`Tên menu ${tab.label}`}
+                    onChange={(event) =>
+                      setDraft((current) => ({
+                        ...current,
+                        uiPreferences: {
+                          ...current.uiPreferences,
+                          mainMenuLabels: {
+                            ...current.uiPreferences.mainMenuLabels,
+                            [tabValue]: event.target.value,
+                          },
+                        },
+                      }))
+                    }
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    aria-label={`Đưa ${tab.label} lên`}
+                    disabled={index === 0}
+                    onClick={() => moveMainMenuItem(index, -1)}
+                  >
+                    <ArrowUp className="size-4" />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    aria-label={`Đưa ${tab.label} xuống`}
+                    disabled={index === draft.uiPreferences.mainMenuOrder.length - 1}
+                    onClick={() => moveMainMenuItem(index, 1)}
+                  >
+                    <ArrowDown className="size-4" />
+                  </Button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
         <div className="space-y-3 border-y py-4 sm:col-span-2">
           <div>
             <h3 className="font-semibold">Hóa đơn thanh toán</h3>

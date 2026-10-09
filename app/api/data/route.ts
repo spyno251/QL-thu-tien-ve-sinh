@@ -64,6 +64,14 @@ type UiPreferences = {
   tableBorderColor: string;
   apartmentInfoBackgroundColor: string;
   tableTextAlign: 'left' | 'center' | 'right';
+  mainMenuOrder: string[];
+  mainMenuLabels: Record<string, string>;
+  mainMenuBackgroundColor: string;
+  mainMenuTextColor: string;
+  mainMenuActiveBackgroundColor: string;
+  mainMenuActiveTextColor: string;
+  mainMenuSize: 'small' | 'normal' | 'large';
+  mainMenuDisplay: 'scroll' | 'wrap';
   invoice: InvoicePreferences;
 };
 type InvoicePreferences = {
@@ -80,7 +88,7 @@ type InvoicePreferences = {
 };
 const defaultUiPreferences: UiPreferences = {
   primaryColor: '#007563', backgroundColor: '#f4fbfa', headerAlignment: 'left', fontScale: 'normal', density: 'comfortable', tableStyle: 'tinted', cornerStyle: 'soft', cardStyle: 'bordered', showSubtitle: true,
-  fontFamily: 'sans', fontSize: 16, headerBackgroundColor: '#f4fbfa', headerTextColor: '#102a30', tableHeaderBackgroundColor: '#007563', tableHeaderTextColor: '#ffffff', tableBorderColor: '#bdd9d5', apartmentInfoBackgroundColor: '#d9ece3', tableTextAlign: 'left',
+  fontFamily: 'sans', fontSize: 16, headerBackgroundColor: '#f4fbfa', headerTextColor: '#102a30', tableHeaderBackgroundColor: '#007563', tableHeaderTextColor: '#ffffff', tableBorderColor: '#bdd9d5', apartmentInfoBackgroundColor: '#d9ece3', tableTextAlign: 'left', mainMenuOrder: ['collect', 'stats', 'users', 'areas', 'debts', 'access-history', 'settings'], mainMenuLabels: {}, mainMenuBackgroundColor: '#eaf6f3', mainMenuTextColor: '#102a30', mainMenuActiveBackgroundColor: '#007563', mainMenuActiveTextColor: '#ffffff', mainMenuSize: 'normal', mainMenuDisplay: 'scroll',
   invoice: { showAppName: true, showApartment: true, showOwner: true, showPeriod: true, showPaidAt: true, showCollector: true, showAmount: true, showMethod: true, showNote: true, footer: 'Cảm ơn quý khách đã thanh toán.' },
 };
 const themeColors = { teal: '#007563', blue: '#1d5fd1', indigo: '#5d42c6', amber: '#b35d00', rose: '#b8325a' } as const;
@@ -119,6 +127,19 @@ function normalizeUiPreferences(value: unknown, theme: AppSettings['theme'] = 't
     typeof source[key] === 'string' && options.includes(source[key] as T) ? source[key] as T : fallback;
   const color = (key: string, fallback: string) =>
     typeof source[key] === 'string' && /^#[0-9a-fA-F]{6}$/.test(source[key] as string) ? source[key] as string : fallback;
+  const mainMenuValues = ['collect', 'stats', 'users', 'areas', 'debts', 'access-history', 'settings'];
+  const rawOrder = Array.isArray(source.mainMenuOrder)
+    ? source.mainMenuOrder.filter((item): item is string => typeof item === 'string' && mainMenuValues.includes(item))
+    : [];
+  const mainMenuOrder = [...new Set([...rawOrder, ...mainMenuValues])];
+  const rawLabels = source.mainMenuLabels && typeof source.mainMenuLabels === 'object'
+    ? source.mainMenuLabels as Record<string, unknown>
+    : {};
+  const mainMenuLabels = Object.fromEntries(
+    mainMenuValues.flatMap((key) =>
+      typeof rawLabels[key] === 'string' ? [[key, rawLabels[key].slice(0, 24)]] : [],
+    ),
+  );
   return {
     primaryColor: color('primaryColor', themeColors[theme]), backgroundColor: color('backgroundColor', defaultUiPreferences.backgroundColor),
     headerAlignment: pick('headerAlignment', ['left', 'center'], defaultUiPreferences.headerAlignment),
@@ -137,6 +158,14 @@ function normalizeUiPreferences(value: unknown, theme: AppSettings['theme'] = 't
     tableBorderColor: color('tableBorderColor', defaultUiPreferences.tableBorderColor),
     apartmentInfoBackgroundColor: color('apartmentInfoBackgroundColor', defaultUiPreferences.apartmentInfoBackgroundColor),
     tableTextAlign: pick('tableTextAlign', ['left', 'center', 'right'], defaultUiPreferences.tableTextAlign),
+    mainMenuOrder,
+    mainMenuLabels,
+    mainMenuBackgroundColor: color('mainMenuBackgroundColor', defaultUiPreferences.mainMenuBackgroundColor),
+    mainMenuTextColor: color('mainMenuTextColor', defaultUiPreferences.mainMenuTextColor),
+    mainMenuActiveBackgroundColor: color('mainMenuActiveBackgroundColor', defaultUiPreferences.mainMenuActiveBackgroundColor),
+    mainMenuActiveTextColor: color('mainMenuActiveTextColor', defaultUiPreferences.mainMenuActiveTextColor),
+    mainMenuSize: pick('mainMenuSize', ['small', 'normal', 'large'], defaultUiPreferences.mainMenuSize),
+    mainMenuDisplay: pick('mainMenuDisplay', ['scroll', 'wrap'], defaultUiPreferences.mainMenuDisplay),
     invoice: {
       showAppName: typeof invoiceSource.showAppName === 'boolean' ? invoiceSource.showAppName : defaultUiPreferences.invoice.showAppName,
       showApartment: typeof invoiceSource.showApartment === 'boolean' ? invoiceSource.showApartment : defaultUiPreferences.invoice.showApartment,
