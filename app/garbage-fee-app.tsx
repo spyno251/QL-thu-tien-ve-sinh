@@ -2488,6 +2488,15 @@ export default function GarbageFeeApp() {
           <p className="text-xl font-semibold leading-relaxed sm:text-2xl">
             {state.settings.uiPreferences.maintenanceMessage}
           </p>
+          <Button
+            type="button"
+            variant="outline"
+            className="min-w-40"
+            onClick={() => void handleLogout()}
+          >
+            <LogOut className="size-4" />
+            Quay lại đăng nhập
+          </Button>
         </div>
       </main>
     );
