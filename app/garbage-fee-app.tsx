@@ -3173,10 +3173,10 @@ export default function GarbageFeeApp() {
               <AccountInformationPanel
                 user={currentUser}
                 payments={accountPayments}
-                apartments={state.apartments}
-                blocks={state.blocks}
-                regions={state.regions}
                 total={accountTotal}
+                settlements={state.debtSettlements.filter(
+                  (settlement) => settlement.staffId === currentUser.id,
+                )}
               />
             </TabsContent>
           )}
@@ -3594,187 +3594,74 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 function AccountInformationPanel({
   user,
   payments,
-  apartments,
-  blocks,
-  regions,
   total,
+  settlements,
 }: {
   user: User;
   payments: Payment[];
-  apartments: Apartment[];
-  blocks: Block[];
-  regions: Region[];
   total: number;
+  settlements: DebtSettlement[];
 }) {
-  const [paymentMethodFilter, setPaymentMethodFilter] = useState<
-    'all' | Payment['method']
-  >('all');
-  const apartmentById = new Map(apartments.map((item) => [item.id, item]));
-  const blockById = new Map(blocks.map((item) => [item.id, item]));
-  const regionById = new Map(regions.map((item) => [item.id, item]));
-  const cashPayments = payments.filter((payment) => payment.method === 'cash');
-  const transferPayments = payments.filter(
-    (payment) => payment.method === 'transfer',
-  );
-  const cashTotal = cashPayments.reduce(
-    (sum, payment) => sum + payment.amount,
-    0,
-  );
-  const transferTotal = transferPayments.reduce(
-    (sum, payment) => sum + payment.amount,
-    0,
-  );
-  const filteredPaymentDetails = payments.filter(
-    (payment) =>
-      paymentMethodFilter === 'all' || payment.method === paymentMethodFilter,
-  );
+  const confirmedDebt = settlements
+    .filter((settlement) => settlement.status === 'confirmed')
+    .reduce((sum, settlement) => sum + settlement.amount, 0);
+  const outstandingDebt =
+    user.role === 'staff' ? Math.max(0, total - confirmedDebt) : 0;
 
   return (
     <section className="grid gap-4 rounded-lg border bg-card p-3 sm:p-5">
-        <div>
-          <h2 className="text-lg font-semibold">Thông tin tài khoản</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Thông tin cá nhân và các khoản thu do bạn thực hiện.
+      <div>
+        <h2 className="text-lg font-semibold">Thông tin tài khoản</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Thông tin cá nhân và tổng hợp kết quả thu của bạn.
+        </p>
+      </div>
+
+      <section className="grid gap-2 sm:grid-cols-2">
+        <div className="rounded-lg border bg-muted/30 p-3">
+          <p className="text-xs text-muted-foreground">Họ tên</p>
+          <p className="mt-1 font-semibold">{user.name}</p>
+        </div>
+        <div className="rounded-lg border bg-muted/30 p-3">
+          <p className="text-xs text-muted-foreground">Vai trò</p>
+          <p className="mt-1 font-semibold">
+            {user.role === 'admin'
+              ? 'Admin'
+              : user.role === 'manager'
+                ? 'Quản trị'
+                : 'Nhân viên'}
           </p>
         </div>
+        <div className="rounded-lg border bg-muted/30 p-3">
+          <p className="text-xs text-muted-foreground">Số điện thoại</p>
+          <p className="mt-1 font-semibold">{user.phone || '-'}</p>
+        </div>
+        <div className="rounded-lg border bg-muted/30 p-3">
+          <p className="text-xs text-muted-foreground">Email</p>
+          <p className="mt-1 break-all font-semibold">{user.email || '-'}</p>
+        </div>
+      </section>
 
-        <section className="grid gap-2 sm:grid-cols-2">
-          <div className="rounded-lg border bg-muted/30 p-3">
-            <p className="text-xs text-muted-foreground">Họ tên</p>
-            <p className="mt-1 font-semibold">{user.name}</p>
-          </div>
-          <div className="rounded-lg border bg-muted/30 p-3">
-            <p className="text-xs text-muted-foreground">Vai trò</p>
-            <p className="mt-1 font-semibold">
-              {user.role === 'admin'
-                ? 'Admin'
-                : user.role === 'manager'
-                  ? 'Quản trị'
-                  : 'Nhân viên'}
-            </p>
-          </div>
-          <div className="rounded-lg border bg-muted/30 p-3">
-            <p className="text-xs text-muted-foreground">Số điện thoại</p>
-            <p className="mt-1 font-semibold">{user.phone || '-'}</p>
-          </div>
-          <div className="rounded-lg border bg-muted/30 p-3">
-            <p className="text-xs text-muted-foreground">Email</p>
-            <p className="mt-1 break-all font-semibold">{user.email || '-'}</p>
-          </div>
-        </section>
-
-        <section className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <div className="rounded-lg border bg-card p-3">
-            <p className="text-xs text-muted-foreground">Căn đã thu</p>
-            <p className="mt-1 text-lg font-semibold tabular-nums">
-              {payments.length}
-            </p>
-          </div>
-          <div className="rounded-lg border bg-card p-3">
-            <p className="text-xs text-muted-foreground">Tiền mặt</p>
-            <p className="mt-1 text-lg font-semibold tabular-nums">
-              {money.format(cashTotal)}
-            </p>
-          </div>
-          <div className="rounded-lg border bg-card p-3">
-            <p className="text-xs text-muted-foreground">Chuyển khoản</p>
-            <p className="mt-1 text-lg font-semibold tabular-nums">
-              {money.format(transferTotal)}
-            </p>
-          </div>
-          <div className="rounded-lg border bg-primary/10 p-3">
-            <p className="text-xs text-muted-foreground">Tổng cuối</p>
-            <p className="mt-1 text-lg font-semibold tabular-nums text-primary">
-              {money.format(total)}
-            </p>
-          </div>
-        </section>
-        <section className="rounded-lg border bg-card p-3">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <h2 className="font-semibold">Chi tiết đã thu</h2>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                {filteredPaymentDetails.length}/{payments.length} giao dịch
-              </p>
-            </div>
-            <NativeSelect
-              className="w-40"
-              value={paymentMethodFilter}
-              onChange={(event) =>
-                setPaymentMethodFilter(
-                  event.target.value as 'all' | Payment['method'],
-                )
-              }
-              aria-label="Lọc hình thức thanh toán"
-            >
-              <NativeSelectOption value="all">
-                Tất cả hình thức
-              </NativeSelectOption>
-              <NativeSelectOption value="cash">Tiền mặt</NativeSelectOption>
-              <NativeSelectOption value="transfer">
-                Chuyển khoản
-              </NativeSelectOption>
-            </NativeSelect>
-          </div>
-
-          <div className="mt-3">
-            <Table className="min-w-[600px]">
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Căn hộ</TableHead>
-                  <TableHead>Khu vực</TableHead>
-                  <TableHead>Kỳ thu</TableHead>
-                  <TableHead>Ngày thu</TableHead>
-                  <TableHead>Số tiền</TableHead>
-                  <TableHead>Thanh toán</TableHead>
-                  <TableHead>Ghi chú</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredPaymentDetails.map((payment) => {
-                  const apartment = apartmentById.get(payment.apartmentId);
-                  const block = apartment
-                    ? blockById.get(apartment.blockId)
-                    : null;
-                  const region = block ? regionById.get(block.regionId) : null;
-                  return (
-                    <TableRow key={payment.id}>
-                      <TableCell>
-                        {fullApartmentLabel(apartment, blockById, regionById)}
-                      </TableCell>
-                      <TableCell>
-                        {region?.name ?? '-'} / {block?.name ?? '-'}
-                      </TableCell>
-                      <TableCell>
-                        {payment.month.slice(5, 7)}/{payment.month.slice(0, 4)}
-                      </TableCell>
-                      <TableCell>
-                        <PaymentDateTime value={payment.paidAt} />
-                      </TableCell>
-                      <TableCell>{money.format(payment.amount)}</TableCell>
-                      <TableCell>
-                        {payment.method === 'transfer'
-                          ? 'Chuyển khoản'
-                          : 'Tiền mặt'}
-                      </TableCell>
-                      <TableCell>{payment.note || '-'}</TableCell>
-                    </TableRow>
-                  );
-                })}
-                {!filteredPaymentDetails.length && (
-                  <TableRow>
-                    <TableCell
-                      colSpan={7}
-                      className="py-8 text-center text-muted-foreground"
-                    >
-                      Chưa có khoản thu nào.
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        </section>
+      <section className="grid gap-2 sm:grid-cols-3">
+        <div className="rounded-lg border bg-card p-3">
+          <p className="text-xs text-muted-foreground">Số căn đã thu</p>
+          <p className="mt-1 text-lg font-semibold tabular-nums">
+            {payments.length}
+          </p>
+        </div>
+        <div className="rounded-lg border bg-card p-3">
+          <p className="text-xs text-muted-foreground">Tổng số tiền thu</p>
+          <p className="mt-1 break-words text-lg font-semibold tabular-nums">
+            {money.format(total)}
+          </p>
+        </div>
+        <div className="rounded-lg border bg-primary/10 p-3">
+          <p className="text-xs text-muted-foreground">Công nợ hiện tại</p>
+          <p className="mt-1 break-words text-lg font-semibold tabular-nums text-primary">
+            {money.format(outstandingDebt)}
+          </p>
+        </div>
+      </section>
     </section>
   );
 }
@@ -5213,6 +5100,9 @@ function StatsView({
   const [selectedCollectorId, setSelectedCollectorId] = useState<string | null>(
     null,
   );
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<
+    'all' | Payment['method']
+  >('all');
   const [exportCollectorId, setExportCollectorId] = useState(
     currentUser.role === 'admin' ? 'all' : currentUser.id,
   );
@@ -5252,6 +5142,15 @@ function StatsView({
   );
   const selectedPayments = payments.filter(
     (payment) => payment.collectorId === selectedCollectorId,
+  );
+  const filteredSelectedPayments = selectedPayments.filter(
+    (payment) =>
+      selectedPaymentMethod === 'all' ||
+      payment.method === selectedPaymentMethod,
+  );
+  const selectedPaymentTotal = filteredSelectedPayments.reduce(
+    (sum, payment) => sum + payment.amount,
+    0,
   );
   const detailRows = payments.map((payment) => {
     const apartment = state.apartments.find(
@@ -5508,7 +5407,10 @@ function StatsView({
                     type="button"
                     variant="outline"
                     size="sm"
-                    onClick={() => setSelectedCollectorId(user.id)}
+                    onClick={() => {
+                      setSelectedCollectorId(user.id);
+                      setSelectedPaymentMethod('all');
+                    }}
                   >
                     Chi tiết
                   </Button>
@@ -5522,9 +5424,30 @@ function StatsView({
       {selectedUser && (
         <div className="rounded-lg border bg-card p-4 lg:col-span-2">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-base font-semibold">
-              Chi tiết thu: {selectedUser.name}
-            </h2>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+              <h2 className="text-base font-semibold">
+                Chi tiết thu: {selectedUser.name}
+              </h2>
+              <span className="text-sm font-semibold text-primary">
+                Tổng số tiền: {money.format(selectedPaymentTotal)}
+              </span>
+              <NativeSelect
+                className="w-40"
+                value={selectedPaymentMethod}
+                onChange={(event) =>
+                  setSelectedPaymentMethod(
+                    event.target.value as 'all' | Payment['method'],
+                  )
+                }
+                aria-label="Lọc hình thức thanh toán"
+              >
+                <NativeSelectOption value="all">Tất cả</NativeSelectOption>
+                <NativeSelectOption value="cash">Tiền mặt</NativeSelectOption>
+                <NativeSelectOption value="transfer">
+                  Chuyển khoản
+                </NativeSelectOption>
+              </NativeSelect>
+            </div>
             <Button
               type="button"
               variant="ghost"
@@ -5534,7 +5457,7 @@ function StatsView({
               Đóng
             </Button>
           </div>
-          {selectedPayments.length ? (
+          {filteredSelectedPayments.length ? (
             <Table>
               <TableHeader>
                 <TableRow>
@@ -5546,7 +5469,7 @@ function StatsView({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {selectedPayments.map((payment) => {
+                {filteredSelectedPayments.map((payment) => {
                   const apartment = state.apartments.find(
                     (item) => item.id === payment.apartmentId,
                   );
@@ -5576,7 +5499,7 @@ function StatsView({
             </Table>
           ) : (
             <p className="text-sm text-muted-foreground">
-              Nhân viên này chưa thu căn nào trong kỳ đã chọn.
+              Không có khoản thu phù hợp với bộ lọc.
             </p>
           )}
         </div>
