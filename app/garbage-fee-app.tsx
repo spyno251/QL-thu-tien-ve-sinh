@@ -194,6 +194,10 @@ type UiPreferences = {
   mainMenuActiveTextColor: string;
   mainMenuSize: MainMenuSize;
   mainMenuDisplay: MainMenuDisplay;
+  maintenanceEnabled: boolean;
+  maintenanceMessage: string;
+  maintenanceBackgroundColor: string;
+  maintenanceTextColor: string;
   invoice: InvoicePreferences;
 };
 
@@ -237,6 +241,11 @@ const defaultUiPreferences: UiPreferences = {
   mainMenuActiveTextColor: '#ffffff',
   mainMenuSize: 'normal',
   mainMenuDisplay: 'scroll',
+  maintenanceEnabled: false,
+  maintenanceMessage:
+    'App đang bảo trì để nâng cấp hệ thống, vui lòng quay lại sau.',
+  maintenanceBackgroundColor: '#f4fbfa',
+  maintenanceTextColor: '#102a30',
   invoice: {
     showAppName: true,
     showApartment: true,
@@ -2457,6 +2466,33 @@ export default function GarbageFeeApp() {
     );
   }
 
+  if (
+    state.settings.uiPreferences.maintenanceEnabled &&
+    currentUser.role !== 'admin'
+  ) {
+    return (
+      <main
+        className="grid min-h-screen place-items-center p-6 text-center"
+        style={{
+          backgroundColor:
+            state.settings.uiPreferences.maintenanceBackgroundColor,
+          color: state.settings.uiPreferences.maintenanceTextColor,
+        }}
+      >
+        <div className="flex max-w-md flex-col items-center gap-6">
+          <img
+            src={state.settings.logoUrl || '/app-icon.png'}
+            alt={state.settings.appName}
+            className="size-36 object-contain sm:size-44"
+          />
+          <p className="text-xl font-semibold leading-relaxed sm:text-2xl">
+            {state.settings.uiPreferences.maintenanceMessage}
+          </p>
+        </div>
+      </main>
+    );
+  }
+
   const canManage = currentUser.role !== 'staff';
   const accountPayments = state.payments
     .filter((payment) => payment.collectorId === currentUser.id)
@@ -4191,6 +4227,72 @@ function CustomizationPanel({
               Đã chọn logo. Bấm Lưu tùy chỉnh để áp dụng.
             </div>
           )}
+        </div>
+        <div className="space-y-3 rounded-lg border border-amber-300 bg-amber-50/60 p-3 sm:col-span-2">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h3 className="font-semibold">Chế độ bảo trì</h3>
+              <p className="text-sm text-muted-foreground">
+                Khi bật, tài khoản Quản trị và Nhân viên chỉ xem được trang thông báo.
+              </p>
+            </div>
+            <Checkbox
+              checked={draft.uiPreferences.maintenanceEnabled}
+              onCheckedChange={(maintenanceEnabled) =>
+                setDraft((current) => ({
+                  ...current,
+                  uiPreferences: {
+                    ...current.uiPreferences,
+                    maintenanceEnabled,
+                  },
+                }))
+              }
+              aria-label="Bật chế độ bảo trì"
+            />
+          </div>
+          <Field label="Thông báo bảo trì">
+            <Input
+              value={draft.uiPreferences.maintenanceMessage}
+              onChange={(event) =>
+                setDraft((current) => ({
+                  ...current,
+                  uiPreferences: {
+                    ...current.uiPreferences,
+                    maintenanceMessage: event.target.value,
+                  },
+                }))
+              }
+              maxLength={180}
+            />
+          </Field>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <ColorField
+              label="Màu nền trang bảo trì"
+              value={draft.uiPreferences.maintenanceBackgroundColor}
+              onChange={(maintenanceBackgroundColor) =>
+                setDraft((current) => ({
+                  ...current,
+                  uiPreferences: {
+                    ...current.uiPreferences,
+                    maintenanceBackgroundColor,
+                  },
+                }))
+              }
+            />
+            <ColorField
+              label="Màu chữ thông báo"
+              value={draft.uiPreferences.maintenanceTextColor}
+              onChange={(maintenanceTextColor) =>
+                setDraft((current) => ({
+                  ...current,
+                  uiPreferences: {
+                    ...current.uiPreferences,
+                    maintenanceTextColor,
+                  },
+                }))
+              }
+            />
+          </div>
         </div>
         <Field label="Màu chủ đạo (mã căn và nút)">
           <NativeSelect

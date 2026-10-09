@@ -72,6 +72,10 @@ type UiPreferences = {
   mainMenuActiveTextColor: string;
   mainMenuSize: 'small' | 'normal' | 'large';
   mainMenuDisplay: 'scroll' | 'wrap';
+  maintenanceEnabled: boolean;
+  maintenanceMessage: string;
+  maintenanceBackgroundColor: string;
+  maintenanceTextColor: string;
   invoice: InvoicePreferences;
 };
 type InvoicePreferences = {
@@ -88,7 +92,7 @@ type InvoicePreferences = {
 };
 const defaultUiPreferences: UiPreferences = {
   primaryColor: '#007563', backgroundColor: '#f4fbfa', headerAlignment: 'left', fontScale: 'normal', density: 'comfortable', tableStyle: 'tinted', cornerStyle: 'soft', cardStyle: 'bordered', showSubtitle: true,
-  fontFamily: 'sans', fontSize: 16, headerBackgroundColor: '#f4fbfa', headerTextColor: '#102a30', tableHeaderBackgroundColor: '#007563', tableHeaderTextColor: '#ffffff', tableBorderColor: '#bdd9d5', apartmentInfoBackgroundColor: '#d9ece3', tableTextAlign: 'left', mainMenuOrder: ['collect', 'account', 'stats', 'users', 'areas', 'debts', 'access-history', 'settings'], mainMenuLabels: {}, mainMenuBackgroundColor: '#eaf6f3', mainMenuTextColor: '#102a30', mainMenuActiveBackgroundColor: '#007563', mainMenuActiveTextColor: '#ffffff', mainMenuSize: 'normal', mainMenuDisplay: 'scroll',
+  fontFamily: 'sans', fontSize: 16, headerBackgroundColor: '#f4fbfa', headerTextColor: '#102a30', tableHeaderBackgroundColor: '#007563', tableHeaderTextColor: '#ffffff', tableBorderColor: '#bdd9d5', apartmentInfoBackgroundColor: '#d9ece3', tableTextAlign: 'left', mainMenuOrder: ['collect', 'account', 'stats', 'users', 'areas', 'debts', 'access-history', 'settings'], mainMenuLabels: {}, mainMenuBackgroundColor: '#eaf6f3', mainMenuTextColor: '#102a30', mainMenuActiveBackgroundColor: '#007563', mainMenuActiveTextColor: '#ffffff', mainMenuSize: 'normal', mainMenuDisplay: 'scroll', maintenanceEnabled: false, maintenanceMessage: 'App đang bảo trì để nâng cấp hệ thống, vui lòng quay lại sau.', maintenanceBackgroundColor: '#f4fbfa', maintenanceTextColor: '#102a30',
   invoice: { showAppName: true, showApartment: true, showOwner: true, showPeriod: true, showPaidAt: true, showCollector: true, showAmount: true, showMethod: true, showNote: true, footer: 'Cảm ơn quý khách đã thanh toán.' },
 };
 const themeColors = { teal: '#007563', blue: '#1d5fd1', indigo: '#5d42c6', amber: '#b35d00', rose: '#b8325a' } as const;
@@ -166,6 +170,10 @@ function normalizeUiPreferences(value: unknown, theme: AppSettings['theme'] = 't
     mainMenuActiveTextColor: color('mainMenuActiveTextColor', defaultUiPreferences.mainMenuActiveTextColor),
     mainMenuSize: pick('mainMenuSize', ['small', 'normal', 'large'], defaultUiPreferences.mainMenuSize),
     mainMenuDisplay: pick('mainMenuDisplay', ['scroll', 'wrap'], defaultUiPreferences.mainMenuDisplay),
+    maintenanceEnabled: typeof source.maintenanceEnabled === 'boolean' ? source.maintenanceEnabled : defaultUiPreferences.maintenanceEnabled,
+    maintenanceMessage: typeof source.maintenanceMessage === 'string' ? source.maintenanceMessage.slice(0, 180) : defaultUiPreferences.maintenanceMessage,
+    maintenanceBackgroundColor: color('maintenanceBackgroundColor', defaultUiPreferences.maintenanceBackgroundColor),
+    maintenanceTextColor: color('maintenanceTextColor', defaultUiPreferences.maintenanceTextColor),
     invoice: {
       showAppName: typeof invoiceSource.showAppName === 'boolean' ? invoiceSource.showAppName : defaultUiPreferences.invoice.showAppName,
       showApartment: typeof invoiceSource.showApartment === 'boolean' ? invoiceSource.showApartment : defaultUiPreferences.invoice.showApartment,
