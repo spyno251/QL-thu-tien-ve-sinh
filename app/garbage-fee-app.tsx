@@ -3226,6 +3226,8 @@ export default function GarbageFeeApp() {
                 addRegion={addRegion}
                 updateRegion={updateRegion}
                 deleteRegion={deleteRegion}
+                addNextApartmentForRegion={addNextApartmentForRegion}
+                addingNextApartmentForRegion={addingNextApartmentForRegion}
                 updateApartment={updateApartment}
                 deleteApartment={deleteApartment}
                 batchApartments={batchApartments}
@@ -6032,6 +6034,8 @@ function AdminAreas(props: {
   addRegion: (event: FormEvent<HTMLFormElement>) => void;
   updateRegion: (id: string, patch: Partial<Region>) => void;
   deleteRegion: (id: string) => void;
+  addNextApartmentForRegion: (regionId: string) => Promise<void>;
+  addingNextApartmentForRegion: string | null;
   updateApartment: (id: string, patch: Partial<Apartment>) => void;
   deleteApartment: (id: string) => void;
   batchApartments: {
@@ -6087,7 +6091,7 @@ function AdminAreas(props: {
     });
   }, [apartmentRegionFilter, apartmentSearch, apartmentStatusFilter, state.apartments, state.blocks]);
   const regionGridColumns =
-    'grid-cols-[minmax(0,1fr)_72px_58px_76px] sm:grid-cols-[minmax(0,1fr)_112px_76px_90px]';
+    'grid-cols-[minmax(0,1fr)_68px_82px_76px] sm:grid-cols-[minmax(0,1fr)_112px_96px_90px]';
   const toggleRegionStatus = (region: Region) => {
     if (region.isActive) {
       const apartmentCount = regionApartmentTotals.get(region.id) ?? 0;
@@ -6217,8 +6221,17 @@ function AdminAreas(props: {
                   })
                 }
               />
-              <span className="flex h-8 items-center justify-center rounded-md bg-muted px-2 text-xs text-foreground">
-                {regionApartmentTotals.get(region.id) ?? 0}
+              <span className="flex h-8 items-center justify-center gap-1 rounded-md bg-muted px-1 text-xs text-foreground">
+                <span>{regionApartmentTotals.get(region.id) ?? 0}</span>
+                <button
+                  type="button"
+                  className="font-bold text-red-600 disabled:text-muted-foreground"
+                  title={`Thêm một căn kế tiếp vào ${region.name}`}
+                  disabled={!region.isActive || props.addingNextApartmentForRegion !== null}
+                  onClick={() => void props.addNextApartmentForRegion(region.id)}
+                >
+                  {props.addingNextApartmentForRegion === region.id ? '...' : '+1'}
+                </button>
               </span>
               <Button type="button" variant={region.isActive ? 'outline' : 'secondary'} className="h-8 px-1.5 text-xs sm:px-2" onClick={() => toggleRegionStatus(region)}>
                 {region.isActive ? 'Ngừng' : 'Khôi phục'}
