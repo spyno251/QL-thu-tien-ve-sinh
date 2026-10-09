@@ -2735,7 +2735,7 @@ export default function GarbageFeeApp() {
           className="mt-5"
         >
           <TabsList
-            className={`box-border min-h-13 w-full max-w-full justify-start gap-1.5 overflow-y-hidden rounded-xl border p-1.5 shadow-sm [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${state.settings.uiPreferences.mainMenuDisplay === 'wrap' ? 'flex-wrap overflow-x-hidden' : 'flex-nowrap overflow-x-auto overscroll-x-contain'}`}
+            className={`box-border min-h-13 w-full max-w-full justify-start gap-1.5 rounded-xl border p-1.5 shadow-sm [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${state.settings.uiPreferences.mainMenuDisplay === 'wrap' ? '!h-auto flex-wrap overflow-x-hidden overflow-y-visible' : 'flex-nowrap overflow-x-auto overflow-y-hidden overscroll-x-contain'}`}
             style={{
               backgroundColor: state.settings.uiPreferences.mainMenuBackgroundColor,
               borderColor: state.settings.uiPreferences.primaryColor,
