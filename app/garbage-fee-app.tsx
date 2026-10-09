@@ -6086,6 +6086,35 @@ function AdminAreas(props: {
       return matchesRegion && matchesStatus && (!keyword || searchText.includes(keyword));
     });
   }, [apartmentRegionFilter, apartmentSearch, apartmentStatusFilter, state.apartments, state.blocks]);
+  const regionGridColumns =
+    'grid-cols-[minmax(0,1fr)_72px_58px_76px] sm:grid-cols-[minmax(0,1fr)_112px_76px_90px]';
+  const toggleRegionStatus = (region: Region) => {
+    if (region.isActive) {
+      const apartmentCount = regionApartmentTotals.get(region.id) ?? 0;
+      if (
+        !window.confirm(
+          `Ngừng khu vực ${region.name}? ${apartmentCount} căn thuộc khu vực này cũng sẽ ngừng. Dữ liệu đã nhập vẫn được giữ nguyên.`,
+        )
+      )
+        return;
+      props.deleteRegion(region.id);
+      return;
+    }
+    props.updateRegion(region.id, { isActive: true });
+  };
+  const toggleApartmentStatus = (apartment: Apartment) => {
+    if (apartment.isActive) {
+      if (
+        !window.confirm(
+          `Ngừng ${normalizeApartmentCode(apartment.code)}? Dữ liệu đã nhập vẫn được giữ nguyên.`,
+        )
+      )
+        return;
+      props.deleteApartment(apartment.id);
+      return;
+    }
+    props.updateApartment(apartment.id, { isActive: true });
+  };
 
   return (
     <section className="grid gap-3 xl:grid-cols-[minmax(310px,0.85fr)_minmax(0,1.85fr)]">
@@ -6125,10 +6154,11 @@ function AdminAreas(props: {
         )}
       </div>
       <div className="rounded-lg border bg-card p-2.5 sm:p-4">
-        <div className="mb-2 grid grid-cols-[minmax(0,1fr)_68px_68px_auto] items-center gap-1.5 text-xs font-semibold text-muted-foreground sm:grid-cols-[minmax(0,1fr)_76px_76px_auto]">
+        <div className={`mb-2 grid items-center gap-1.5 text-xs font-semibold text-muted-foreground ${regionGridColumns}`}>
           <h2 className="text-base font-semibold text-foreground">Khu vực</h2>
-          <span>Giá</span>
-          <span>Tổng căn</span>
+          <span className="text-center">Giá</span>
+          <span className="text-center leading-tight">Tổng căn</span>
+          <span aria-hidden="true" />
         </div>
         <form
           onSubmit={props.addRegion}
@@ -6165,7 +6195,7 @@ function AdminAreas(props: {
           {state.regions.map((region) => (
             <div
               key={region.id}
-              className="grid grid-cols-[minmax(0,1fr)_68px_68px_auto] gap-1.5 rounded-md border p-1.5 sm:grid-cols-[minmax(0,1fr)_76px_76px_auto]"
+              className={`grid gap-1.5 rounded-md border p-1.5 ${regionGridColumns}`}
             >
               <Input
                 className="h-8 min-w-0"
@@ -6190,7 +6220,7 @@ function AdminAreas(props: {
               <span className="flex h-8 items-center justify-center rounded-md bg-muted px-2 text-xs text-foreground">
                 {regionApartmentTotals.get(region.id) ?? 0}
               </span>
-              <Button type="button" variant={region.isActive ? 'outline' : 'secondary'} className="h-8 px-2 text-xs" onClick={() => region.isActive ? props.deleteRegion(region.id) : props.updateRegion(region.id, { isActive: true })}>
+              <Button type="button" variant={region.isActive ? 'outline' : 'secondary'} className="h-8 px-1.5 text-xs sm:px-2" onClick={() => toggleRegionStatus(region)}>
                 {region.isActive ? 'Ngừng' : 'Khôi phục'}
               </Button>
             </div>
@@ -6302,7 +6332,7 @@ function AdminAreas(props: {
                   })
                 }
               />
-              <Button type="button" variant={apartment.isActive ? 'outline' : 'secondary'} className="h-8 px-2 text-xs" onClick={() => apartment.isActive ? props.deleteApartment(apartment.id) : props.updateApartment(apartment.id, { isActive: true })}>
+              <Button type="button" variant={apartment.isActive ? 'outline' : 'secondary'} className="h-8 px-2 text-xs" onClick={() => toggleApartmentStatus(apartment)}>
                 {apartment.isActive ? 'Ngừng' : 'Khôi phục'}
               </Button>
             </div>
