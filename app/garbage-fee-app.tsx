@@ -72,6 +72,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 type Role = 'admin' | 'manager' | 'staff';
 type MainTabValue =
   | 'collect'
+  | 'account'
   | 'stats'
   | 'users'
   | 'areas'
@@ -94,6 +95,7 @@ const MAIN_TABS: readonly MainTabConfig[] = [
     label: 'Thu tháng',
     roles: ['staff', 'manager', 'admin'],
   },
+  { value: 'account', label: 'Tài khoản', roles: ['staff', 'manager', 'admin'] },
   { value: 'stats', label: 'Thống kê', roles: ['staff', 'manager', 'admin'] },
   { value: 'users', label: 'Nhân Viên', roles: ['manager', 'admin'] },
   { value: 'areas', label: 'Khu vực', roles: ['manager', 'admin'] },
@@ -682,7 +684,6 @@ export default function GarbageFeeApp() {
   const [forgotEmail, setForgotEmail] = useState('');
   const [forgotMessage, setForgotMessage] = useState('');
   const [showChangePassword, setShowChangePassword] = useState(false);
-  const [showAccountInfo, setShowAccountInfo] = useState(false);
   const [, setSyncStatus] = useState<'loading' | 'synced' | 'saving' | 'local'>(
     'loading',
   );
@@ -2204,7 +2205,6 @@ export default function GarbageFeeApp() {
     });
     setCurrentUser(null);
     setShowChangePassword(false);
-    setShowAccountInfo(false);
   };
 
   const resetUserPassword = async (userId: string) => {
@@ -2243,7 +2243,6 @@ export default function GarbageFeeApp() {
     }
     setCurrentUser(payload.user);
     setPaymentFilter('unpaid');
-    setShowAccountInfo(false);
     await loadState();
   };
 
@@ -2545,7 +2544,12 @@ export default function GarbageFeeApp() {
             <Button
               type="button"
               variant="outline"
-              onClick={() => setShowAccountInfo(true)}
+              onClick={() => {
+                setActiveMainTab('account');
+                setVisitedMainTabs((tabs) =>
+                  tabs.has('account') ? tabs : new Set([...tabs, 'account']),
+                );
+              }}
             >
               <UserRound className="size-4" />
               Thông tin tài khoản
@@ -2569,17 +2573,6 @@ export default function GarbageFeeApp() {
           </div>
         </div>
       </header>
-
-      <AccountInformationDialog
-        open={showAccountInfo}
-        onOpenChange={setShowAccountInfo}
-        user={currentUser}
-        payments={accountPayments}
-        apartments={state.apartments}
-        blocks={state.blocks}
-        regions={state.regions}
-        total={accountTotal}
-      />
 
       <Dialog
         open={Boolean(editingPayment)}
@@ -3175,6 +3168,19 @@ export default function GarbageFeeApp() {
             </section>
           </TabsContent>
 
+          {visitedMainTabs.has('account') && (
+            <TabsContent value="account" className="mt-4">
+              <AccountInformationPanel
+                user={currentUser}
+                payments={accountPayments}
+                apartments={state.apartments}
+                blocks={state.blocks}
+                regions={state.regions}
+                total={accountTotal}
+              />
+            </TabsContent>
+          )}
+
           {visitedMainTabs.has('stats') && <TabsContent value="stats" className="mt-4">
             <StatsView
               state={state}
@@ -3585,9 +3591,7 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-function AccountInformationDialog({
-  open,
-  onOpenChange,
+function AccountInformationPanel({
   user,
   payments,
   apartments,
@@ -3595,8 +3599,6 @@ function AccountInformationDialog({
   regions,
   total,
 }: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
   user: User;
   payments: Payment[];
   apartments: Apartment[];
@@ -3628,14 +3630,13 @@ function AccountInformationDialog({
   );
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85vh] max-w-[calc(100%-1rem)] overflow-y-auto sm:max-w-3xl">
-        <DialogHeader>
-          <DialogTitle>Thông tin tài khoản</DialogTitle>
-          <DialogDescription>
+    <section className="grid gap-4 rounded-lg border bg-card p-3 sm:p-5">
+        <div>
+          <h2 className="text-lg font-semibold">Thông tin tài khoản</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
             Thông tin cá nhân và các khoản thu do bạn thực hiện.
-          </DialogDescription>
-        </DialogHeader>
+          </p>
+        </div>
 
         <section className="grid gap-2 sm:grid-cols-2">
           <div className="rounded-lg border bg-muted/30 p-3">
@@ -3774,8 +3775,7 @@ function AccountInformationDialog({
             </Table>
           </div>
         </section>
-      </DialogContent>
-    </Dialog>
+    </section>
   );
 }
 

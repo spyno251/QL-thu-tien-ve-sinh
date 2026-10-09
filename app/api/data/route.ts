@@ -88,7 +88,7 @@ type InvoicePreferences = {
 };
 const defaultUiPreferences: UiPreferences = {
   primaryColor: '#007563', backgroundColor: '#f4fbfa', headerAlignment: 'left', fontScale: 'normal', density: 'comfortable', tableStyle: 'tinted', cornerStyle: 'soft', cardStyle: 'bordered', showSubtitle: true,
-  fontFamily: 'sans', fontSize: 16, headerBackgroundColor: '#f4fbfa', headerTextColor: '#102a30', tableHeaderBackgroundColor: '#007563', tableHeaderTextColor: '#ffffff', tableBorderColor: '#bdd9d5', apartmentInfoBackgroundColor: '#d9ece3', tableTextAlign: 'left', mainMenuOrder: ['collect', 'stats', 'users', 'areas', 'debts', 'access-history', 'settings'], mainMenuLabels: {}, mainMenuBackgroundColor: '#eaf6f3', mainMenuTextColor: '#102a30', mainMenuActiveBackgroundColor: '#007563', mainMenuActiveTextColor: '#ffffff', mainMenuSize: 'normal', mainMenuDisplay: 'scroll',
+  fontFamily: 'sans', fontSize: 16, headerBackgroundColor: '#f4fbfa', headerTextColor: '#102a30', tableHeaderBackgroundColor: '#007563', tableHeaderTextColor: '#ffffff', tableBorderColor: '#bdd9d5', apartmentInfoBackgroundColor: '#d9ece3', tableTextAlign: 'left', mainMenuOrder: ['collect', 'account', 'stats', 'users', 'areas', 'debts', 'access-history', 'settings'], mainMenuLabels: {}, mainMenuBackgroundColor: '#eaf6f3', mainMenuTextColor: '#102a30', mainMenuActiveBackgroundColor: '#007563', mainMenuActiveTextColor: '#ffffff', mainMenuSize: 'normal', mainMenuDisplay: 'scroll',
   invoice: { showAppName: true, showApartment: true, showOwner: true, showPeriod: true, showPaidAt: true, showCollector: true, showAmount: true, showMethod: true, showNote: true, footer: 'Cảm ơn quý khách đã thanh toán.' },
 };
 const themeColors = { teal: '#007563', blue: '#1d5fd1', indigo: '#5d42c6', amber: '#b35d00', rose: '#b8325a' } as const;
@@ -127,7 +127,7 @@ function normalizeUiPreferences(value: unknown, theme: AppSettings['theme'] = 't
     typeof source[key] === 'string' && options.includes(source[key] as T) ? source[key] as T : fallback;
   const color = (key: string, fallback: string) =>
     typeof source[key] === 'string' && /^#[0-9a-fA-F]{6}$/.test(source[key] as string) ? source[key] as string : fallback;
-  const mainMenuValues = ['collect', 'stats', 'users', 'areas', 'debts', 'access-history', 'settings'];
+  const mainMenuValues = ['collect', 'account', 'stats', 'users', 'areas', 'debts', 'access-history', 'settings'];
   const rawOrder = Array.isArray(source.mainMenuOrder)
     ? source.mainMenuOrder.filter((item): item is string => typeof item === 'string' && mainMenuValues.includes(item))
     : [];
