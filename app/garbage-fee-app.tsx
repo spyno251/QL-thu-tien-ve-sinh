@@ -670,7 +670,6 @@ function getBlockDefaultFee(
 export default function GarbageFeeApp() {
   const [state, setState] = useState<AppState>(initialState);
   const commitQueue = useRef(Promise.resolve());
-  const pendingApartmentKeys = useRef(new Set<string>());
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([]);
   const [loginPhone, setLoginPhone] = useState('');
@@ -721,6 +720,7 @@ export default function GarbageFeeApp() {
     Record<string, boolean>
   >({});
   const [paymentError, setPaymentError] = useState('');
+  const pendingApartmentKeys = useRef(new Set<string>());
   const [newRegion, setNewRegion] = useState({
     name: '',
     defaultFee: '300.000',
@@ -1814,14 +1814,22 @@ export default function GarbageFeeApp() {
   const addRegion = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!newRegion.name.trim()) return;
+    const regionId = uid('region');
     const item = {
-      id: uid('region'),
+      id: regionId,
       name: newRegion.name.trim(),
       defaultFee: parseAmount(newRegion.defaultFee, 50000),
       isActive: true,
     };
     setNewRegion({ name: '', defaultFee: '300.000' });
-    void commit({ ...state, regions: [...state.regions, item] });
+    void commit({
+      ...state,
+      regions: [...state.regions, item],
+      blocks: [
+        ...state.blocks,
+        { id: uid('block'), regionId, name: '', isActive: true },
+      ],
+    });
   };
 
   const addQuickSetup = async (event: FormEvent<HTMLFormElement>) => {
@@ -2103,7 +2111,7 @@ export default function GarbageFeeApp() {
     const end = Number.parseInt(batchApartments.end, 10);
     const block = state.blocks.find((item) => item.id === batchApartments.blockId && item.isActive);
     if (!block || !batchApartments.prefix.trim() || !Number.isInteger(start) || !Number.isInteger(end) || start < 1 || end < start || end - start > 199) {
-      setQuickSetupMessage('Chọn dãy và nhập khoảng căn hợp lệ (tối đa 200 căn).');
+      setQuickSetupMessage('Chọn khu vực và nhập khoảng căn hợp lệ (tối đa 200 căn).');
       return;
     }
     const width = Math.max(2, String(end).length);
@@ -2119,7 +2127,7 @@ export default function GarbageFeeApp() {
       if (!existing.has(apartmentCodeKey(code))) additions.push({ id: uid('apt'), blockId: block.id, code, owner: '', phone: '', note: '', monthlyFee, isActive: true });
     }
     if (!additions.length) {
-      setQuickSetupMessage('Các căn trong khoảng này đã tồn tại ở dãy đã chọn.');
+      setQuickSetupMessage('Các căn trong khoảng này đã tồn tại ở khu vực đã chọn.');
       return;
     }
     await commit({ ...state, apartments: [...state.apartments, ...additions] });
@@ -3218,26 +3226,12 @@ export default function GarbageFeeApp() {
                 addRegion={addRegion}
                 updateRegion={updateRegion}
                 deleteRegion={deleteRegion}
-                newBlock={newBlock}
-                setNewBlock={setNewBlock}
-                addBlock={addBlock}
-                updateBlock={updateBlock}
-                deleteBlock={deleteBlock}
-                newApartment={newApartment}
-                setNewApartment={setNewApartment}
-                addApartment={addApartment}
-                addingApartment={addingApartment}
-                addNextApartmentForRegion={addNextApartmentForRegion}
-                addingNextApartmentForRegion={addingNextApartmentForRegion}
                 updateApartment={updateApartment}
                 deleteApartment={deleteApartment}
-                quickSetup={quickSetup}
-                setQuickSetup={setQuickSetup}
-                addQuickSetup={addQuickSetup}
-                quickSetupMessage={quickSetupMessage}
                 batchApartments={batchApartments}
                 setBatchApartments={setBatchApartments}
                 addApartmentRange={addApartmentRange}
+                quickSetupMessage={quickSetupMessage}
               />
             </TabsContent>
           )}
@@ -6038,53 +6032,8 @@ function AdminAreas(props: {
   addRegion: (event: FormEvent<HTMLFormElement>) => void;
   updateRegion: (id: string, patch: Partial<Region>) => void;
   deleteRegion: (id: string) => void;
-  newBlock: { regionId: string; name: string };
-  setNewBlock: (value: { regionId: string; name: string }) => void;
-  addBlock: (event: FormEvent<HTMLFormElement>) => void;
-  updateBlock: (id: string, patch: Partial<Block>) => void;
-  deleteBlock: (id: string) => void;
-  newApartment: {
-    blockId: string;
-    code: string;
-    owner: string;
-    phone: string;
-    monthlyFee: string;
-  };
-  setNewApartment: (value: {
-    blockId: string;
-    code: string;
-    owner: string;
-    phone: string;
-    monthlyFee: string;
-  }) => void;
-  addApartment: (event: FormEvent<HTMLFormElement>) => Promise<void>;
-  addingApartment: boolean;
-  addNextApartmentForRegion: (regionId: string) => Promise<void>;
-  addingNextApartmentForRegion: string | null;
   updateApartment: (id: string, patch: Partial<Apartment>) => void;
   deleteApartment: (id: string) => void;
-  quickSetup: {
-    prefix: string;
-    suffix1: string;
-    regionStart: string;
-    regionEnd: string;
-    suffix2: string;
-    apartmentStart: string;
-    apartmentEnd: string;
-    defaultFee: string;
-  };
-  setQuickSetup: (value: {
-    prefix: string;
-    suffix1: string;
-    regionStart: string;
-    regionEnd: string;
-    suffix2: string;
-    apartmentStart: string;
-    apartmentEnd: string;
-    defaultFee: string;
-  }) => void;
-  addQuickSetup: (event: FormEvent<HTMLFormElement>) => Promise<void>;
-  quickSetupMessage: string;
   batchApartments: {
     blockId: string;
     prefix: string;
@@ -6100,6 +6049,7 @@ function AdminAreas(props: {
     monthlyFee: string;
   }) => void;
   addApartmentRange: (event: FormEvent<HTMLFormElement>) => Promise<void>;
+  quickSetupMessage: string;
 }) {
   const { state } = props;
   const [apartmentRegionFilter, setApartmentRegionFilter] = useState('all');
@@ -6140,8 +6090,8 @@ function AdminAreas(props: {
   return (
     <section className="grid gap-3 xl:grid-cols-[minmax(310px,0.85fr)_minmax(0,1.85fr)]">
       <div className="rounded-lg border border-primary/25 bg-primary/5 p-2.5 sm:p-4 xl:col-span-2">
-        <h2 className="text-base font-semibold">Thêm nhiều căn vào khu vực</h2>
-        <p className="mt-1 text-sm text-muted-foreground">Chọn khu/dãy, nhập khoảng số. Các căn đã có sẽ được giữ nguyên và tự bỏ qua.</p>
+        <h2 className="text-base font-semibold">Thêm nhanh nhiều căn</h2>
+        <p className="mt-1 text-sm text-muted-foreground">Chọn khu vực và nhập khoảng số căn. Các căn đã có sẽ được giữ nguyên và tự bỏ qua.</p>
         <form onSubmit={props.addApartmentRange} className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
           <Field label="Khu vực">
             <NativeSelect
@@ -6168,142 +6118,14 @@ function AdminAreas(props: {
           </Field>
           <div className="flex items-end"><Button type="submit" className="w-full"><Plus className="size-4" />Thêm dải căn</Button></div>
         </form>
-      </div>
-      <div className="rounded-lg border border-primary/25 bg-primary/5 p-2.5 sm:p-4 xl:col-span-2">
-        <div className="mb-3">
-          <h2 className="text-base font-semibold">Thêm nhanh khu và căn hộ</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Ví dụ: Vạn phúc + Galaxy 1 đến 8, mỗi khu có Căn 01 đến 40. Tên chủ
-            hộ có thể bổ sung sau.
-          </p>
-        </div>
-        <form
-          onSubmit={props.addQuickSetup}
-          className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4"
-        >
-          <Field label="Tiền tố (không bắt buộc)">
-            <Input
-              value={props.quickSetup.prefix}
-              onChange={(event) =>
-                props.setQuickSetup({
-                  ...props.quickSetup,
-                  prefix: event.target.value,
-                })
-              }
-              placeholder="Vạn phúc"
-            />
-          </Field>
-          <Field label="Hậu tố 1 / tên khu">
-            <Input
-              value={props.quickSetup.suffix1}
-              onChange={(event) =>
-                props.setQuickSetup({
-                  ...props.quickSetup,
-                  suffix1: event.target.value,
-                })
-              }
-              placeholder="Galaxy"
-              required
-            />
-          </Field>
-          <Field label="Khu từ - đến">
-            <div className="grid grid-cols-2 gap-2">
-              <Input
-                inputMode="numeric"
-                aria-label="Khu bắt đầu"
-                value={props.quickSetup.regionStart}
-                onChange={(event) =>
-                  props.setQuickSetup({
-                    ...props.quickSetup,
-                    regionStart: event.target.value,
-                  })
-                }
-                placeholder="1"
-              />
-              <Input
-                inputMode="numeric"
-                aria-label="Khu kết thúc"
-                value={props.quickSetup.regionEnd}
-                onChange={(event) =>
-                  props.setQuickSetup({
-                    ...props.quickSetup,
-                    regionEnd: event.target.value,
-                  })
-                }
-                placeholder="8"
-              />
-            </div>
-          </Field>
-          <Field label="Hậu tố 2">
-            <Input
-              value={props.quickSetup.suffix2}
-              onChange={(event) =>
-                props.setQuickSetup({
-                  ...props.quickSetup,
-                  suffix2: event.target.value,
-                })
-              }
-              placeholder="Căn"
-              required
-            />
-          </Field>
-          <Field label="Giá mặc định / căn">
-            <Input
-              inputMode="numeric"
-              value={props.quickSetup.defaultFee}
-              onChange={(event) =>
-                props.setQuickSetup({
-                  ...props.quickSetup,
-                  defaultFee: formatAmountInput(event.target.value),
-                })
-              }
-              placeholder="300.000"
-            />
-          </Field>
-          <Field label="Căn từ - đến">
-            <div className="grid grid-cols-2 gap-2">
-              <Input
-                inputMode="numeric"
-                aria-label="Căn bắt đầu"
-                value={props.quickSetup.apartmentStart}
-                onChange={(event) =>
-                  props.setQuickSetup({
-                    ...props.quickSetup,
-                    apartmentStart: event.target.value,
-                  })
-                }
-                placeholder="1"
-              />
-              <Input
-                inputMode="numeric"
-                aria-label="Căn kết thúc"
-                value={props.quickSetup.apartmentEnd}
-                onChange={(event) =>
-                  props.setQuickSetup({
-                    ...props.quickSetup,
-                    apartmentEnd: event.target.value,
-                  })
-                }
-                placeholder="40"
-              />
-            </div>
-          </Field>
-          <div className="flex items-end sm:col-span-2 lg:col-span-3">
-            <Button type="submit" className="w-full sm:w-auto">
-              <Plus className="size-4" />
-              Tạo hàng loạt
-            </Button>
-          </div>
-        </form>
         {props.quickSetupMessage && (
           <p className="mt-3 rounded-md bg-background/80 p-2 text-sm text-primary">
             {props.quickSetupMessage}
           </p>
         )}
       </div>
-
       <div className="rounded-lg border bg-card p-2.5 sm:p-4">
-        <div className="mb-2 grid grid-cols-[minmax(0,1fr)_68px_68px_38px] items-center gap-1.5 text-xs font-semibold text-muted-foreground sm:grid-cols-[minmax(0,1fr)_76px_76px_38px]">
+        <div className="mb-2 grid grid-cols-[minmax(0,1fr)_68px_68px_auto] items-center gap-1.5 text-xs font-semibold text-muted-foreground sm:grid-cols-[minmax(0,1fr)_76px_76px_auto]">
           <h2 className="text-base font-semibold text-foreground">Khu vực</h2>
           <span>Giá</span>
           <span>Tổng căn</span>
@@ -6343,7 +6165,7 @@ function AdminAreas(props: {
           {state.regions.map((region) => (
             <div
               key={region.id}
-              className="grid grid-cols-[minmax(0,1fr)_68px_68px_38px] gap-1.5 rounded-md border p-1.5 sm:grid-cols-[minmax(0,1fr)_76px_76px_38px]"
+              className="grid grid-cols-[minmax(0,1fr)_68px_68px_auto] gap-1.5 rounded-md border p-1.5 sm:grid-cols-[minmax(0,1fr)_76px_76px_auto]"
             >
               <Input
                 className="h-8 min-w-0"
@@ -6365,20 +6187,9 @@ function AdminAreas(props: {
                   })
                 }
               />
-              <Button
-                type="button"
-                variant="outline"
-                className="h-8 px-2 text-xs"
-                title={`Thêm căn kế tiếp vào ${region.name}`}
-                disabled={!region.isActive || props.addingNextApartmentForRegion !== null}
-                onClick={() => void props.addNextApartmentForRegion(region.id)}
-              >
-                {props.addingNextApartmentForRegion === region.id ? (
-                  '...'
-                ) : (
-                  <><Plus className="size-3" />{regionApartmentTotals.get(region.id) ?? 0}</>
-                )}
-              </Button>
+              <span className="flex h-8 items-center justify-center rounded-md bg-muted px-2 text-xs text-foreground">
+                {regionApartmentTotals.get(region.id) ?? 0}
+              </span>
               <Button type="button" variant={region.isActive ? 'outline' : 'secondary'} className="h-8 px-2 text-xs" onClick={() => region.isActive ? props.deleteRegion(region.id) : props.updateRegion(region.id, { isActive: true })}>
                 {region.isActive ? 'Ngừng' : 'Khôi phục'}
               </Button>
@@ -6421,89 +6232,6 @@ function AdminAreas(props: {
             <NativeSelectOption value="all">Tất cả trạng thái</NativeSelectOption>
           </NativeSelect>
         </div>
-        <form onSubmit={props.addApartment} className="mb-2 grid gap-1.5">
-          <div className="grid gap-1.5 sm:grid-cols-[minmax(150px,1fr)_minmax(54px,0.8fr)_minmax(0,1fr)_88px_auto]">
-            <NativeSelect
-              className="h-9 min-w-0"
-              value={props.newApartment.blockId}
-              onChange={(event) =>
-                props.setNewApartment({
-                  ...props.newApartment,
-                  blockId: event.target.value,
-                  monthlyFee: formatNumber(
-                    defaultFeeForBlock(event.target.value),
-                  ),
-                })
-              }
-            >
-              {state.blocks
-                .filter(
-                  (block) =>
-                    block.isActive &&
-                    state.regions.some(
-                      (region) => region.id === block.regionId && region.isActive,
-                    ),
-                )
-                .map((block) => (
-                <NativeSelectOption key={block.id} value={block.id}>
-                  {blockLabel(block)}
-                </NativeSelectOption>
-              ))}
-            </NativeSelect>
-            <Input
-              className="h-9 min-w-0"
-              placeholder="Căn"
-              value={props.newApartment.code}
-              onChange={(event) =>
-                props.setNewApartment({
-                  ...props.newApartment,
-                  code: event.target.value,
-                })
-              }
-            />
-            <div className="space-y-1.5">
-              <Input
-                className="h-9 min-w-0"
-                placeholder="Chủ hộ"
-                value={props.newApartment.owner}
-                onChange={(event) =>
-                  props.setNewApartment({
-                    ...props.newApartment,
-                    owner: event.target.value,
-                  })
-                }
-              />
-              <Input
-                className="h-9 min-w-0"
-                placeholder="SĐT"
-                inputMode="tel"
-                value={props.newApartment.phone}
-                onChange={(event) =>
-                  props.setNewApartment({
-                    ...props.newApartment,
-                    phone: event.target.value,
-                  })
-                }
-              />
-            </div>
-            <Input
-              className="h-9 min-w-0"
-              placeholder="Giá"
-              inputMode="numeric"
-              value={props.newApartment.monthlyFee}
-              onChange={(event) =>
-                props.setNewApartment({
-                  ...props.newApartment,
-                  monthlyFee: formatAmountInput(event.target.value),
-                })
-              }
-            />
-            <Button type="submit" className="h-9 px-2.5 sm:px-4" disabled={props.addingApartment}>
-              <Plus className="size-4" />
-              {props.addingApartment ? 'Đang thêm' : 'Thêm'}
-            </Button>
-          </div>
-        </form>
         <div className="max-h-[420px] space-y-1.5 overflow-auto pr-1">
           {filteredApartments.map((apartment) => (
             <div
