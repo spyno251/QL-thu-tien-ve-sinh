@@ -477,13 +477,7 @@ export async function POST(request: Request) {
           (sum, settlement) => sum + settlement.amount,
           0,
         );
-      const totalCommitted = (settlementsResult.data ?? []).reduce(
-        (sum, settlement) => sum + settlement.amount,
-        0,
-      );
-      const debtAtSubmission = Math.max(0, totalCollected - confirmedSettled);
-      if (amount > totalCollected - totalCommitted)
-        return json({ error: 'Số tiền nộp vượt quá công nợ hiện có.' }, 400);
+      const debtAtSubmission = totalCollected - confirmedSettled;
       const settlementId = crypto.randomUUID();
       const submittedAt = new Date().toISOString();
       const { data: insertedSettlement, error } = await db.from('debt_settlements').insert({
@@ -551,16 +545,36 @@ export async function POST(request: Request) {
         .maybeSingle();
       if (error) throw error;
       if (!data) return json({ error: 'Yêu cầu đã được xử lý.' }, 409);
+      const [paymentsResult, settlementsResult] = await Promise.all([
+        db.from('payments').select('amount').eq('collector_id', settlement.staff_id),
+        db
+          .from('debt_settlements')
+          .select('amount, status')
+          .eq('staff_id', settlement.staff_id),
+      ]);
+      if (paymentsResult.error || settlementsResult.error)
+        throw new Error('Read failed');
+      const balanceAfter =
+        (paymentsResult.data ?? []).reduce(
+          (sum, payment) => sum + payment.amount,
+          0,
+        ) -
+        (settlementsResult.data ?? [])
+          .filter((item) => item.status === 'confirmed')
+          .reduce((sum, item) => sum + item.amount, 0);
       await recordChange(
         currentUser.id,
         'debt_settlement',
         settlementId,
         'Đã xác nhận nộp công nợ',
-        await debtSettlementAuditDetails({
-          staffId: settlement.staff_id,
-          amount: settlement.amount,
-          method: settlement.method as DebtSettlement['method'],
-        }),
+        {
+          ...(await debtSettlementAuditDetails({
+            staffId: settlement.staff_id,
+            amount: settlement.amount,
+            method: settlement.method as DebtSettlement['method'],
+          })),
+          balanceAfter,
+        },
       );
       return json({ ok: true, settlementId, confirmedAt, confirmedBy: currentUser.id });
     }
@@ -595,21 +609,15 @@ export async function POST(request: Request) {
       const otherSettlements = (settlementsResult.data ?? []).filter(
         (item) => item.id !== settlementId,
       );
-      const otherCommitted = otherSettlements.reduce(
-        (sum, item) => sum + item.amount,
-        0,
-      );
       const otherConfirmed = otherSettlements
         .filter((item) => item.status === 'confirmed')
         .reduce((sum, item) => sum + item.amount, 0);
-      if (amount > totalCollected - otherCommitted)
-        return json({ error: 'Số tiền vượt quá khoản công nợ có thể đối soát.' }, 400);
       const { error } = await db
         .from('debt_settlements')
         .update({
           amount,
           method: payload.method === 'transfer' ? 'transfer' : 'cash',
-          debt_at_submission: Math.max(0, totalCollected - otherConfirmed),
+          debt_at_submission: totalCollected - otherConfirmed,
         })
         .eq('id', settlementId);
       if (error) throw error;

@@ -3646,8 +3646,7 @@ function AccountInformationPanel({
   const confirmedDebt = settlements
     .filter((settlement) => settlement.status === 'confirmed')
     .reduce((sum, settlement) => sum + settlement.amount, 0);
-  const outstandingDebt =
-    user.role === 'staff' ? Math.max(0, total - confirmedDebt) : 0;
+  const debtBalance = user.role === 'staff' ? total - confirmedDebt : 0;
 
   return (
     <section className="grid gap-4 rounded-lg border bg-card p-3 sm:p-5">
@@ -3697,14 +3696,22 @@ function AccountInformationPanel({
           </p>
         </div>
         <div className="rounded-lg border bg-primary/10 p-3">
-          <p className="text-xs text-muted-foreground">Công nợ hiện tại</p>
+          <p className="text-xs text-muted-foreground">
+            {debtBalance < 0 ? 'Dư có hiện tại' : 'Công nợ hiện tại'}
+          </p>
           <p className="mt-1 break-words text-lg font-semibold tabular-nums text-primary">
-            {money.format(outstandingDebt)}
+            <DebtBalance balance={debtBalance} />
           </p>
         </div>
       </section>
     </section>
   );
+}
+
+function DebtBalance({ balance }: { balance: number }) {
+  if (balance < 0)
+    return <span className="text-emerald-700">Dư có {money.format(-balance)}</span>;
+  return <>{money.format(balance)}</>;
 }
 
 function Metric({
@@ -3820,12 +3827,20 @@ function AccessHistoryPanel() {
           ? details.amount
           : Number(details.amount);
       const method = typeof details.method === 'string' ? details.method : '';
+      const balanceAfter =
+        typeof details.balanceAfter === 'number'
+          ? details.balanceAfter
+          : Number(details.balanceAfter);
       const parts = [
         staffName && `Nhân viên: ${staffName}`,
         Number.isFinite(amount) &&
           amount > 0 &&
           `Số tiền: ${formatShortAmount(amount)}`,
         method && `Hình thức: ${method}`,
+        Number.isFinite(balanceAfter) &&
+          (balanceAfter < 0
+            ? `Dư có: ${formatShortAmount(-balanceAfter)}`
+            : `Còn nợ: ${formatShortAmount(balanceAfter)}`),
       ].filter(Boolean);
       return parts.length
         ? `${parts.join('; ')}.`
@@ -5238,10 +5253,8 @@ function StatsView({
         count: userPayments.length,
         total: userPayments.reduce((sum, item) => sum + item.amount, 0),
         settled,
-        outstanding: Math.max(
-          0,
+        balance:
           allUserPayments.reduce((sum, item) => sum + item.amount, 0) - settled,
-        ),
       };
     });
   const selectedUser = state.users.find(
@@ -5497,18 +5510,18 @@ function StatsView({
               <TableHead>Số căn</TableHead>
               <TableHead>Tổng tiền</TableHead>
               <TableHead>Đã nộp</TableHead>
-              <TableHead>Còn nợ</TableHead>
+              <TableHead>Còn nợ / Dư có</TableHead>
               <TableHead>Chi tiết</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {byUser.map(({ user, count, total, settled, outstanding }) => (
+            {byUser.map(({ user, count, total, settled, balance }) => (
               <TableRow key={user.id}>
                 <TableCell>{user.name}</TableCell>
                 <TableCell>{formatNumber(count)}</TableCell>
                 <TableCell>{money.format(total)}</TableCell>
                 <TableCell>{money.format(settled)}</TableCell>
-                <TableCell>{money.format(outstanding)}</TableCell>
+                <TableCell><DebtBalance balance={balance} /></TableCell>
                 <TableCell>
                   <Button
                     type="button"
@@ -5688,8 +5701,7 @@ function StaffDebtPanel({
   const pendingDebt = settlements
     .filter((item) => item.status === 'pending')
     .reduce((sum, item) => sum + item.amount, 0);
-  const outstandingDebt = Math.max(0, total - confirmedDebt);
-  const availableDebt = Math.max(0, outstandingDebt - pendingDebt);
+  const debtBalance = total - confirmedDebt;
   const cashTotal = payments
     .filter((payment) => payment.method === 'cash')
     .reduce((sum, payment) => sum + payment.amount, 0);
@@ -5702,9 +5714,9 @@ function StaffDebtPanel({
       setDebtError('Nhập số tiền muốn trả.');
       return;
     }
-    const amount = parseAmount(debtAmount, availableDebt);
-    if (!amount || amount > availableDebt) {
-      setDebtError('Nhập số tiền không vượt quá công nợ có thể nộp.');
+    const amount = parseAmount(debtAmount, 0);
+    if (!amount) {
+      setDebtError('Nhập số tiền hợp lệ.');
       return;
     }
     setSubmittingDebt(true);
@@ -5727,9 +5739,11 @@ function StaffDebtPanel({
         </p>
         <div className="mt-4 grid grid-cols-2 gap-2">
           <div className="rounded-md border bg-muted/30 p-3">
-            <p className="text-xs text-muted-foreground">Còn nợ</p>
+            <p className="text-xs text-muted-foreground">
+              {debtBalance < 0 ? 'Dư có' : 'Còn nợ'}
+            </p>
             <p className="mt-1 font-semibold text-primary">
-              {money.format(outstandingDebt)}
+              <DebtBalance balance={debtBalance} />
             </p>
           </div>
           <div className="rounded-md border bg-muted/30 p-3">
@@ -5750,7 +5764,7 @@ function StaffDebtPanel({
       <div className="rounded-lg border bg-card p-4">
         <h2 className="font-semibold">Thanh toán công nợ</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Có thể nộp: {money.format(availableDebt)}
+          Số dư hiện tại: <DebtBalance balance={debtBalance} />
         </p>
         <div className="mt-4 grid gap-2 sm:grid-cols-[minmax(0,1fr)_10rem_auto]">
           <Input
@@ -5774,7 +5788,7 @@ function StaffDebtPanel({
           </NativeSelect>
           <Button
             type="button"
-            disabled={!availableDebt || submittingDebt}
+            disabled={submittingDebt}
             onClick={() => void submitDebt()}
           >
             {submittingDebt ? 'Đang gửi...' : 'Trả tiền'}
@@ -5783,6 +5797,9 @@ function StaffDebtPanel({
         {debtError && (
           <p className="mt-2 text-sm text-destructive">{debtError}</p>
         )}
+        <p className="mt-2 text-xs text-muted-foreground">
+          Số tiền nộp vượt sẽ được ghi nhận là dư có và tự trừ vào lần thu sau.
+        </p>
       </div>
 
       <div className="rounded-lg border bg-card p-4 lg:col-span-2">
@@ -5796,7 +5813,7 @@ function StaffDebtPanel({
                   <TableHead>Thời điểm gửi</TableHead>
                   <TableHead>Số tiền trả</TableHead>
                   <TableHead>Hình thức</TableHead>
-                  <TableHead>Còn nợ</TableHead>
+                  <TableHead>Số dư sau nộp</TableHead>
                   <TableHead>Trạng thái</TableHead>
                 </TableRow>
               </TableHeader>
@@ -5814,9 +5831,9 @@ function StaffDebtPanel({
                         : 'Tiền mặt'}
                     </TableCell>
                     <TableCell>
-                      {money.format(
-                        Math.max(0, settlement.debtAtSubmission - settlement.amount),
-                      )}
+                      <DebtBalance
+                        balance={settlement.debtAtSubmission - settlement.amount}
+                      />
                     </TableCell>
                     <TableCell>
                       {settlement.status === 'confirmed'
@@ -5956,7 +5973,7 @@ function DebtManagement({
               <TableHead>Người thu</TableHead>
               <TableHead>Đã thu</TableHead>
               <TableHead>Đã nộp</TableHead>
-              <TableHead>Còn nợ</TableHead>
+              <TableHead>Còn nợ / Dư có</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -5992,9 +6009,7 @@ function DebtManagement({
                       </span>
                     )}
                   </TableCell>
-                  <TableCell>
-                    {money.format(Math.max(0, collected - paidBack))}
-                  </TableCell>
+                  <TableCell><DebtBalance balance={collected - paidBack} /></TableCell>
                 </TableRow>
               );
             })}
