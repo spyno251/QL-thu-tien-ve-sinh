@@ -1,5 +1,6 @@
 import { DEFAULT_PASSWORD, getSessionUser, hashPassword } from '@/lib/app-auth';
 import { configurationError, getSupabaseAdmin } from '@/lib/supabase-admin';
+import { findLegacyDebtCorrections } from '@/lib/debt-balance.js';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -779,43 +780,49 @@ function sameUser(left: User, right: User) {
 
 async function reconcileConfirmedDebtSettlementAmounts(db: ReturnType<typeof getSupabaseAdmin>) {
   if (!db) return;
-  const [settlementsResult, changesResult] = await Promise.all([
+  const [settlementsResult, changesResult, usersResult] = await Promise.all([
     db
       .from('debt_settlements')
-      .select('id, amount, status')
+      .select('id, staff_id, amount, status, submitted_at, confirmed_at')
       .eq('status', 'confirmed'),
     db
       .from('record_changes')
       .select('record_id, action, details, created_at')
       .eq('record_type', 'debt_settlement')
       .order('created_at', { ascending: false }),
+    db.from('users').select('id, name'),
   ]);
-  if (settlementsResult.error || changesResult.error)
+  if (settlementsResult.error || changesResult.error || usersResult.error)
     throw new Error('Read failed');
-
-  const confirmedAmountBySettlement = new Map<string, number>();
-  for (const change of changesResult.data ?? []) {
-    if (change.action !== 'Đã xác nhận nộp công nợ') continue;
-    const details =
-      change.details && typeof change.details === 'object'
+  const staffNameById = new Map((usersResult.data ?? []).map((user) => [user.id, user.name]));
+  const corrections = findLegacyDebtCorrections(
+    (settlementsResult.data ?? []).map((settlement: {
+      id: string;
+      staff_id: string;
+      amount: number;
+      status: string;
+      submitted_at: string;
+      confirmed_at: string | null;
+    }) => ({
+      id: settlement.id,
+      staffName: staffNameById.get(settlement.staff_id) ?? '',
+      amount: settlement.amount,
+      status: settlement.status,
+      submittedAt: settlement.submitted_at,
+      confirmedAt: settlement.confirmed_at,
+    })),
+    (changesResult.data ?? []).map((change) => ({
+      recordId: change.record_id,
+      action: change.action,
+      details: change.details && typeof change.details === 'object'
         ? change.details as Record<string, unknown>
-        : {};
-    const amount = Number(details.amount);
-    if (!Number.isInteger(amount) || amount <= 0) continue;
-    confirmedAmountBySettlement.set(
-      change.record_id,
-      Math.max(confirmedAmountBySettlement.get(change.record_id) ?? 0, amount),
-    );
-  }
-  const corrections = (settlementsResult.data ?? []).flatMap((settlement) => {
-    const confirmedAmount = confirmedAmountBySettlement.get(settlement.id) ?? 0;
-    return confirmedAmount > settlement.amount
-      ? [{ id: settlement.id, amount: confirmedAmount }]
-      : [];
-  });
+        : {},
+      createdAt: change.created_at,
+    })),
+  );
   if (!corrections.length) return;
   const results = await Promise.all(
-    corrections.map((settlement) =>
+    corrections.map((settlement: { id: string; amount: number }) =>
       db
         .from('debt_settlements')
         .update({ amount: settlement.amount })

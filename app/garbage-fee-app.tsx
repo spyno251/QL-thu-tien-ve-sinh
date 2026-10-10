@@ -68,6 +68,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { debtBalanceLabel } from '@/lib/debt-balance.js';
 
 type Role = 'admin' | 'manager' | 'staff';
 type MainTabValue =
@@ -3710,7 +3711,7 @@ function AccountInformationPanel({
 
 function DebtBalance({ balance }: { balance: number }) {
   if (balance < 0)
-    return <span className="text-emerald-700">Dư có {money.format(-balance)}</span>;
+    return <span className="text-emerald-700">{debtBalanceLabel(balance)} {money.format(-balance)}</span>;
   return <>{money.format(balance)}</>;
 }
 
