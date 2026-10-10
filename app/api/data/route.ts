@@ -777,9 +777,62 @@ function sameUser(left: User, right: User) {
   );
 }
 
+async function reconcileConfirmedDebtSettlementAmounts(db: ReturnType<typeof getSupabaseAdmin>) {
+  if (!db) return;
+  const [settlementsResult, changesResult] = await Promise.all([
+    db
+      .from('debt_settlements')
+      .select('id, amount, status')
+      .eq('status', 'confirmed'),
+    db
+      .from('record_changes')
+      .select('record_id, action, details, created_at')
+      .eq('record_type', 'debt_settlement')
+      .order('created_at', { ascending: false }),
+  ]);
+  if (settlementsResult.error || changesResult.error)
+    throw new Error('Read failed');
+
+  const latestChangeBySettlement = new Map<string, {
+    action: string;
+    details: Record<string, unknown>;
+  }>();
+  for (const change of changesResult.data ?? []) {
+    if (latestChangeBySettlement.has(change.record_id)) continue;
+    latestChangeBySettlement.set(change.record_id, {
+      action: change.action,
+      details:
+        change.details && typeof change.details === 'object'
+          ? change.details as Record<string, unknown>
+          : {},
+    });
+  }
+  const corrections = (settlementsResult.data ?? []).flatMap((settlement) => {
+    const change = latestChangeBySettlement.get(settlement.id);
+    const confirmedAmount = Number(change?.details.amount);
+    return change?.action === 'Đã xác nhận nộp công nợ' &&
+      Number.isInteger(confirmedAmount) &&
+      confirmedAmount > settlement.amount
+      ? [{ id: settlement.id, amount: confirmedAmount }]
+      : [];
+  });
+  if (!corrections.length) return;
+  const results = await Promise.all(
+    corrections.map((settlement) =>
+      db
+        .from('debt_settlements')
+        .update({ amount: settlement.amount })
+        .eq('id', settlement.id),
+    ),
+  );
+  if (results.some((result) => result.error))
+    throw new Error('Write failed');
+}
+
 async function readState(): Promise<AppState> {
   const db = getSupabaseAdmin();
   if (!db) throw new Error(configurationError());
+  await reconcileConfirmedDebtSettlementAmounts(db);
   const [
     usersResult,
     regionsResult,
