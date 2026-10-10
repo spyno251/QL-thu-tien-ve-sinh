@@ -793,26 +793,23 @@ async function reconcileConfirmedDebtSettlementAmounts(db: ReturnType<typeof get
   if (settlementsResult.error || changesResult.error)
     throw new Error('Read failed');
 
-  const latestChangeBySettlement = new Map<string, {
-    action: string;
-    details: Record<string, unknown>;
-  }>();
+  const confirmedAmountBySettlement = new Map<string, number>();
   for (const change of changesResult.data ?? []) {
-    if (latestChangeBySettlement.has(change.record_id)) continue;
-    latestChangeBySettlement.set(change.record_id, {
-      action: change.action,
-      details:
-        change.details && typeof change.details === 'object'
-          ? change.details as Record<string, unknown>
-          : {},
-    });
+    if (change.action !== 'Đã xác nhận nộp công nợ') continue;
+    const details =
+      change.details && typeof change.details === 'object'
+        ? change.details as Record<string, unknown>
+        : {};
+    const amount = Number(details.amount);
+    if (!Number.isInteger(amount) || amount <= 0) continue;
+    confirmedAmountBySettlement.set(
+      change.record_id,
+      Math.max(confirmedAmountBySettlement.get(change.record_id) ?? 0, amount),
+    );
   }
   const corrections = (settlementsResult.data ?? []).flatMap((settlement) => {
-    const change = latestChangeBySettlement.get(settlement.id);
-    const confirmedAmount = Number(change?.details.amount);
-    return change?.action === 'Đã xác nhận nộp công nợ' &&
-      Number.isInteger(confirmedAmount) &&
-      confirmedAmount > settlement.amount
+    const confirmedAmount = confirmedAmountBySettlement.get(settlement.id) ?? 0;
+    return confirmedAmount > settlement.amount
       ? [{ id: settlement.id, amount: confirmedAmount }]
       : [];
   });
