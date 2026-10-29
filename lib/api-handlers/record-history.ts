@@ -1,9 +1,6 @@
 import { getSessionUser } from '@/lib/app-auth';
 import { configurationError, getSupabaseAdmin } from '@/lib/supabase-admin';
 
-export const dynamic = 'force-dynamic';
-export const runtime = 'nodejs';
-
 export async function GET(request: Request) {
   const db = getSupabaseAdmin();
   if (!db) return Response.json({ error: configurationError() }, { status: 503 });

@@ -1,9 +1,6 @@
 import { getSessionUser } from '@/lib/app-auth';
 import { configurationError, getSupabaseAdmin } from '@/lib/supabase-admin';
 
-export const dynamic = 'force-dynamic';
-export const runtime = 'nodejs';
-
 const VERCEL_PROJECT_ID =
   process.env.VERCEL_PROJECT_ID ?? 'prj_8iGNAP63ibPNdGtkE9zWnj1wN9rO';
 const VERCEL_TEAM_ID =

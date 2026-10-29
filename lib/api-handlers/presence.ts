@@ -1,9 +1,6 @@
 import { getSessionUser, parseCookie, SESSION_COOKIE } from '@/lib/app-auth';
 import { configurationError, getSupabaseAdmin } from '@/lib/supabase-admin';
 
-export const dynamic = 'force-dynamic';
-export const runtime = 'nodejs';
-
 const ONLINE_WINDOW_MS = 3 * 60 * 1000;
 
 export async function POST(request: Request) {

@@ -11,9 +11,6 @@ import {
 } from '@/lib/app-auth';
 import { configurationError, getSupabaseAdmin } from '@/lib/supabase-admin';
 
-export const dynamic = 'force-dynamic';
-export const runtime = 'nodejs';
-
 type StoredUser = {
   id: string;
   phone: string;

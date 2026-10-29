@@ -1,9 +1,6 @@
 import { getSessionUser } from '@/lib/app-auth';
 import { configurationError, getSupabaseAdmin } from '@/lib/supabase-admin';
 
-export const dynamic = 'force-dynamic';
-export const runtime = 'nodejs';
-
 const MIME_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
 
 export async function POST(request: Request) {

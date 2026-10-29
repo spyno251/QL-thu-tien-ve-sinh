@@ -1,9 +1,6 @@
 import { getSessionUser } from '@/lib/app-auth';
 import { configurationError, getSupabaseAdmin } from '@/lib/supabase-admin';
 
-export const dynamic = 'force-dynamic';
-export const runtime = 'nodejs';
-
 type BackupSource = 'automatic' | 'manual';
 type Snapshot = Record<string, unknown>;
 const MAX_BACKUPS = 10;

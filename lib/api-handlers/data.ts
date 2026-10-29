@@ -2,9 +2,6 @@ import { DEFAULT_PASSWORD, getSessionUser, hashPassword } from '@/lib/app-auth';
 import { configurationError, getSupabaseAdmin } from '@/lib/supabase-admin';
 import { findLegacyDebtCorrections } from '@/lib/debt-balance.js';
 
-export const dynamic = 'force-dynamic';
-export const runtime = 'nodejs';
-
 type User = {
   id: string;
   phone: string;
