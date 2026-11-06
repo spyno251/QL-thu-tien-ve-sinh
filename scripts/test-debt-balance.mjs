@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {
   calculateDebtBalance,
+  confirmedSettlementsForCollectionMonth,
   debtBalanceLabel,
   findLegacyDebtCorrections,
 } from '../lib/debt-balance.js';
@@ -29,6 +30,17 @@ assert.deepEqual(
 const correctedSettlement = { ...legacySettlement, amount: 18_000_000 };
 assert.equal(calculateDebtBalance(17_950_000, [correctedSettlement]), -50_000);
 assert.equal(debtBalanceLabel(-50_000), 'Dư có');
+
+const settlementsByMonth = [
+  { id: 'sep', amount: 21_150_000, status: 'confirmed', collectionMonth: '2026-09' },
+  { id: 'oct', amount: 1_900_000, status: 'confirmed', collectionMonth: '2026-10' },
+  { id: 'pending', amount: 500_000, status: 'pending', collectionMonth: '2026-10' },
+];
+assert.deepEqual(
+  confirmedSettlementsForCollectionMonth(settlementsByMonth, '2026-10').map((item) => item.id),
+  ['oct'],
+);
+assert.deepEqual(confirmedSettlementsForCollectionMonth(settlementsByMonth, ''), []);
 
 // A legacy audit record without the original record id is recovered only when
 // its staff and confirmation time point to one unambiguous settlement.

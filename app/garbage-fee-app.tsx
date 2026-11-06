@@ -68,7 +68,10 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { debtBalanceLabel } from '@/lib/debt-balance.js';
+import {
+  confirmedSettlementsForCollectionMonth,
+  debtBalanceLabel,
+} from '@/lib/debt-balance.js';
 
 type Role = 'admin' | 'manager' | 'staff';
 type MainTabValue =
@@ -160,6 +163,7 @@ type DebtSettlement = {
   id: string;
   staffId: string;
   amount: number;
+  collectionMonth: string | null;
   debtAtSubmission: number;
   method: 'cash' | 'transfer';
   submittedAt: string;
@@ -1496,6 +1500,7 @@ export default function GarbageFeeApp() {
         action: 'submit-debt-settlement',
         amount,
         method,
+        collectionMonth: selectedMonth,
       }),
     });
     const payload = (await response.json()) as {
@@ -5226,10 +5231,22 @@ function StatsView({
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<
     'all' | Payment['method']
   >('all');
+  const [settlementMonthFilter, setSettlementMonthFilter] = useState('');
   const [exportCollectorId, setExportCollectorId] = useState(
     currentUser.role === 'admin' ? 'all' : currentUser.id,
   );
   const payments = state.payments.filter((item) => item.month === month);
+  const settlementMonthOptions = [...new Set([
+    ...state.payments.map((payment) => payment.month),
+    ...settlements.flatMap((settlement) =>
+      settlement.collectionMonth ? [settlement.collectionMonth] : [],
+    ),
+  ])].sort().reverse();
+  const filteredSettlements: DebtSettlement[] =
+    confirmedSettlementsForCollectionMonth(
+      settlements,
+      settlementMonthFilter,
+    ) as DebtSettlement[];
   const byUser = state.users
     .filter(
       (user) =>
@@ -5241,21 +5258,18 @@ function StatsView({
       const userPayments = payments.filter(
         (item) => item.collectorId === user.id,
       );
-      const allUserPayments = state.payments.filter(
-        (item) => item.collectorId === user.id,
-      );
-      const settled = settlements
-        .filter(
-          (item) => item.staffId === user.id && item.status === 'confirmed',
-        )
-        .reduce((sum, item) => sum + item.amount, 0);
+      const settled = settlementMonthFilter
+        ? filteredSettlements
+          .filter((item) => item.staffId === user.id)
+          .reduce((sum, item) => sum + item.amount, 0)
+        : null;
+      const total = userPayments.reduce((sum, item) => sum + item.amount, 0);
       return {
         user,
         count: userPayments.length,
-        total: userPayments.reduce((sum, item) => sum + item.amount, 0),
+        total,
         settled,
-        balance:
-          allUserPayments.reduce((sum, item) => sum + item.amount, 0) - settled,
+        balance: settled === null ? null : total - settled,
       };
     });
   const selectedUser = state.users.find(
@@ -5503,7 +5517,22 @@ function StatsView({
       </div>
 
       <div className="rounded-lg border bg-card p-4">
-        <h2 className="mb-3 text-base font-semibold">Theo nhân viên</h2>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-base font-semibold">Theo nhân viên</h2>
+          <NativeSelect
+            aria-label="Lọc số tiền đã nộp theo kỳ thu"
+            className="w-full sm:w-52"
+            value={settlementMonthFilter}
+            onChange={(event) => setSettlementMonthFilter(event.target.value)}
+          >
+            <NativeSelectOption value="">Chọn kỳ nộp công nợ</NativeSelectOption>
+            {settlementMonthOptions.map((value) => (
+              <NativeSelectOption key={value} value={value}>
+                Kỳ {value.slice(5, 7)}/{value.slice(0, 4)}
+              </NativeSelectOption>
+            ))}
+          </NativeSelect>
+        </div>
         <Table>
           <TableHeader>
             <TableRow>
@@ -5521,8 +5550,10 @@ function StatsView({
                 <TableCell>{user.name}</TableCell>
                 <TableCell>{formatNumber(count)}</TableCell>
                 <TableCell>{money.format(total)}</TableCell>
-                <TableCell>{money.format(settled)}</TableCell>
-                <TableCell><DebtBalance balance={balance} /></TableCell>
+                <TableCell>{settled === null ? '-' : money.format(settled)}</TableCell>
+                <TableCell>
+                  {balance === null ? '-' : <DebtBalance balance={balance} />}
+                </TableCell>
                 <TableCell>
                   <Button
                     type="button"

@@ -36,6 +36,7 @@ type DebtSettlement = {
   id: string;
   staffId: string;
   amount: number;
+  collectionMonth: string | null;
   debtAtSubmission: number;
   method: 'cash' | 'transfer';
   submittedAt: string;
@@ -276,6 +277,7 @@ export async function POST(request: Request) {
       note?: string;
       amount?: number;
       method?: 'cash' | 'transfer';
+      collectionMonth?: string;
       paidAt?: string;
       settlementId?: string;
     };
@@ -455,8 +457,11 @@ export async function POST(request: Request) {
       if (currentUser.role !== 'staff')
         return json({ error: 'Chỉ nhân viên mới có thể gửi yêu cầu trả tiền.' }, 403);
       const amount = Number(payload.amount);
+      const collectionMonth = String(payload.collectionMonth ?? '');
       if (!Number.isInteger(amount) || amount <= 0)
         return json({ error: 'Số tiền nộp không hợp lệ.' }, 400);
+      if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(collectionMonth))
+        return json({ error: 'Vui lòng chọn kỳ thu hợp lệ.' }, 400);
       const [paymentsResult, settlementsResult] = await Promise.all([
         db.from('payments').select('amount').eq('collector_id', currentUser.id),
         db
@@ -482,11 +487,12 @@ export async function POST(request: Request) {
         id: settlementId,
         staff_id: currentUser.id,
         amount,
+        collection_month: collectionMonth,
         debt_at_submission: debtAtSubmission,
         method: payload.method === 'transfer' ? 'transfer' : 'cash',
         submitted_at: submittedAt,
         status: 'pending',
-      }).select('id, staff_id, amount, debt_at_submission, method, submitted_at, confirmed_at, confirmed_by, status').maybeSingle();
+      }).select('id, staff_id, amount, collection_month, debt_at_submission, method, submitted_at, confirmed_at, confirmed_by, status').maybeSingle();
       if (error) throw error;
       if (!insertedSettlement) return json({ error: 'Chưa thể xác nhận yêu cầu vừa gửi.' }, 503);
       await recordChange(
@@ -506,6 +512,7 @@ export async function POST(request: Request) {
           id: insertedSettlement.id,
           staffId: insertedSettlement.staff_id,
           amount: insertedSettlement.amount,
+          collectionMonth: insertedSettlement.collection_month,
           debtAtSubmission: insertedSettlement.debt_at_submission,
           method: insertedSettlement.method,
           submittedAt: insertedSettlement.submitted_at,
@@ -859,7 +866,7 @@ async function readState(): Promise<AppState> {
       .order('paid_at', { ascending: false }),
     db
       .from('debt_settlements')
-      .select('id, staff_id, amount, debt_at_submission, method, submitted_at, confirmed_at, confirmed_by, status')
+      .select('id, staff_id, amount, collection_month, debt_at_submission, method, submitted_at, confirmed_at, confirmed_by, status')
       .order('submitted_at', { ascending: false }),
     db
       .from('app_settings')
@@ -922,6 +929,7 @@ async function readState(): Promise<AppState> {
       id: item.id,
       staffId: item.staff_id,
       amount: item.amount,
+      collectionMonth: item.collection_month,
       debtAtSubmission: item.debt_at_submission,
       method: item.method as DebtSettlement['method'],
       submittedAt: item.submitted_at,
