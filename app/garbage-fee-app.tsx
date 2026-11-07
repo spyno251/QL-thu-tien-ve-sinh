@@ -71,6 +71,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   confirmedSettlementsForCollectionMonth,
   debtBalanceLabel,
+  paymentsForCollectionMonth,
 } from '@/lib/debt-balance.js';
 
 type Role = 'admin' | 'manager' | 'staff';
@@ -5236,6 +5237,11 @@ function StatsView({
     currentUser.role === 'admin' ? 'all' : currentUser.id,
   );
   const payments = state.payments.filter((item) => item.month === month);
+  const staffStatsMonth = settlementMonthFilter || month;
+  const staffPayments: Payment[] = paymentsForCollectionMonth(
+    state.payments,
+    staffStatsMonth,
+  ) as Payment[];
   const settlementMonthOptions = [...new Set([
     ...state.payments.map((payment) => payment.month),
     ...settlements.flatMap((settlement) =>
@@ -5255,7 +5261,7 @@ function StatsView({
         state.settings.showAdminInStats,
     )
     .map((user) => {
-      const userPayments = payments.filter(
+      const userPayments = staffPayments.filter(
         (item) => item.collectorId === user.id,
       );
       const settled = settlementMonthFilter
@@ -5275,7 +5281,7 @@ function StatsView({
   const selectedUser = state.users.find(
     (user) => user.id === selectedCollectorId,
   );
-  const selectedPayments = payments.filter(
+  const selectedPayments = staffPayments.filter(
     (payment) => payment.collectorId === selectedCollectorId,
   );
   const filteredSelectedPayments = selectedPayments.filter(
@@ -5520,12 +5526,12 @@ function StatsView({
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-base font-semibold">Theo nhân viên</h2>
           <NativeSelect
-            aria-label="Lọc số tiền đã nộp theo kỳ thu"
+            aria-label="Lọc bảng theo kỳ thu"
             className="w-full sm:w-52"
             value={settlementMonthFilter}
             onChange={(event) => setSettlementMonthFilter(event.target.value)}
           >
-            <NativeSelectOption value="">Chọn kỳ nộp công nợ</NativeSelectOption>
+            <NativeSelectOption value="">Kỳ đang xem</NativeSelectOption>
             {settlementMonthOptions.map((value) => (
               <NativeSelectOption key={value} value={value}>
                 Kỳ {value.slice(5, 7)}/{value.slice(0, 4)}
