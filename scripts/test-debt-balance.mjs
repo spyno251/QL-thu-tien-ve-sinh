@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {
   calculateDebtBalance,
+  collectionBalanceThroughMonth,
   confirmedSettlementsForCollectionMonth,
   debtBalanceLabel,
   findLegacyDebtCorrections,
@@ -54,6 +55,28 @@ assert.deepEqual(
 assert.deepEqual(
   paymentsForCollectionMonth(paymentsByMonth, '2026-10').map((item) => item.id),
   ['payment-oct'],
+);
+
+const rollingPayments = [
+  { collectorId: 'la-dang', month: '2026-09', amount: 21_150_000 },
+  { collectorId: 'la-dang', month: '2026-10', amount: 5_500_000 },
+  { collectorId: 'cao-minh-hieu', month: '2026-09', amount: 41_050_000 },
+  { collectorId: 'cao-minh-hieu', month: '2026-10', amount: 27_950_000 },
+];
+const rollingSettlements = [
+  { staffId: 'la-dang', amount: 21_150_000, status: 'confirmed', collectionMonth: '2026-09' },
+];
+assert.equal(
+  collectionBalanceThroughMonth(rollingPayments, rollingSettlements, 'la-dang', '2026-09'),
+  0,
+);
+assert.equal(
+  collectionBalanceThroughMonth(rollingPayments, rollingSettlements, 'la-dang', '2026-10'),
+  5_500_000,
+);
+assert.equal(
+  collectionBalanceThroughMonth(rollingPayments, rollingSettlements, 'cao-minh-hieu', '2026-10'),
+  69_000_000,
 );
 
 // A legacy audit record without the original record id is recovered only when

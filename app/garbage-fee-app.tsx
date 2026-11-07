@@ -69,6 +69,7 @@ import {
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
+  collectionBalanceThroughMonth,
   confirmedSettlementsForCollectionMonth,
   debtBalanceLabel,
   paymentsForCollectionMonth,
@@ -5275,7 +5276,14 @@ function StatsView({
         count: userPayments.length,
         total,
         settled,
-        balance: settled === null ? null : total - settled,
+        balance: settled === null
+          ? null
+          : collectionBalanceThroughMonth(
+            state.payments,
+            settlements,
+            user.id,
+            settlementMonthFilter,
+          ),
       };
     });
   const selectedUser = state.users.find(
